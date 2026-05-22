@@ -225,32 +225,16 @@ func (s *ProgressQueryService) calculateStreakDays(userID string) int {
 
 func (s *ProgressQueryService) GetWeeklyAnalytics(userID string) (*WeeklyAnalyticsReadModel, error) {
 	// Try L1 cache first
-	if val, ok := l1WeeklyCache.Load(userID); ok {
-		entry := val.(*l1WeeklyEntry)
-		if time.Now().Before(entry.expiresAt) {
-			return entry.analytics, nil
-		}
-		l1WeeklyCache.Delete(userID)
+	if val, ok := s.tryL1WeeklyCache(userID); ok {
+		return val, nil
 	}
 
-	ctx := context.Background()
 	cacheKey := fmt.Sprintf("weekly_analytics:%s", userID)
 
 	// Try Redis cache next
 	if db.Redis != nil {
-		redisCtx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
-		cachedVal, err := db.Redis.Get(redisCtx, cacheKey).Result()
-		cancel()
-		if err == nil {
-			var cachedAnalytics WeeklyAnalyticsReadModel
-			if json.Unmarshal([]byte(cachedVal), &cachedAnalytics) == nil {
-				// Warm L1 cache
-				l1WeeklyCache.Store(userID, &l1WeeklyEntry{
-					analytics: &cachedAnalytics,
-					expiresAt: time.Now().Add(15 * time.Second),
-				})
-				return &cachedAnalytics, nil
-			}
+		if val, ok := s.tryRedisWeeklyCache(userID, cacheKey); ok {
+			return val, nil
 		}
 	}
 
@@ -267,51 +251,101 @@ func (s *ProgressQueryService) GetWeeklyAnalytics(userID string) (*WeeklyAnalyti
 	if err = rdb.Where(whereUserID, userID).Take(&mv).Error; err != nil {
 		summary, err = s.getWeeklyAnalyticsFallback(userID)
 	} else {
-		progressRate := 0
-		if mv.TotalStudyMinutes > 0 {
-			targetMinutes := 210
-			progressRate = int(float64(mv.TotalStudyMinutes) / float64(targetMinutes) * 100)
-			if progressRate > 100 {
-				progressRate = 100
-			}
-		}
-
-		var dailyArr []DailyProgress
-		if mv.ActiveDays > 0 {
-			dailyArr = []DailyProgress{
-				{Day: "Tue", Progress: mv.TotalStudyMinutes / mv.ActiveDays},
-			}
-		}
-
-		summary = &WeeklyAnalyticsReadModel{
-			ProgressRate:   progressRate,
-			SkillsAcquired: mv.CompletedTasks,
-			StudyHours:     mv.TotalStudyMinutes / 60,
-			DailyProgress:  dailyArr,
-			Timestamp:      mv.ComputedAt,
-		}
+		summary = weeklyAnalyticsFromView(mv)
 	}
 
 	if err == nil && summary != nil {
-		// Populate L1 cache
-		l1WeeklyCache.Store(userID, &l1WeeklyEntry{
-			analytics: summary,
-			expiresAt: time.Now().Add(15 * time.Second),
-		})
-
-		// Cache in Redis asynchronously
-		if db.Redis != nil {
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer cancel()
-				if cacheBytes, err := json.Marshal(summary); err == nil {
-					db.Redis.Set(ctx, cacheKey, cacheBytes, 3*time.Minute)
-				}
-			}()
-		}
+		s.warmWeeklyCache(userID, cacheKey, summary)
 	}
 
 	return summary, err
+}
+
+// tryL1WeeklyCache attempts to fetch weekly analytics from the in-memory L1 cache.
+// Returns the cached value and true if found and not expired.
+func (s *ProgressQueryService) tryL1WeeklyCache(userID string) (*WeeklyAnalyticsReadModel, bool) {
+	if val, ok := l1WeeklyCache.Load(userID); ok {
+		entry := val.(*l1WeeklyEntry)
+		if time.Now().Before(entry.expiresAt) {
+			return entry.analytics, true
+		}
+		l1WeeklyCache.Delete(userID)
+	}
+	return nil, false
+}
+
+// tryRedisWeeklyCache attempts to fetch weekly analytics from Redis.
+// Returns the cached value and true if found; also warms the L1 cache.
+func (s *ProgressQueryService) tryRedisWeeklyCache(userID, cacheKey string) (*WeeklyAnalyticsReadModel, bool) {
+	redisCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	cachedVal, err := db.Redis.Get(redisCtx, cacheKey).Result()
+	cancel()
+	if err != nil {
+		return nil, false
+	}
+
+	var cachedAnalytics WeeklyAnalyticsReadModel
+	if json.Unmarshal([]byte(cachedVal), &cachedAnalytics) != nil {
+		return nil, false
+	}
+
+	storeWeeklyAnalyticsInL1(userID, &cachedAnalytics)
+	return &cachedAnalytics, true
+}
+
+func weeklyAnalyticsFromView(mv WeeklyAnalyticsReadModelV2) *WeeklyAnalyticsReadModel {
+	return &WeeklyAnalyticsReadModel{
+		ProgressRate:   weeklyProgressRate(mv.TotalStudyMinutes),
+		SkillsAcquired: mv.CompletedTasks,
+		StudyHours:     mv.TotalStudyMinutes / 60,
+		DailyProgress:  weeklyDailyProgress(mv.TotalStudyMinutes, mv.ActiveDays),
+		Timestamp:      mv.ComputedAt,
+	}
+}
+
+func weeklyProgressRate(totalStudyMinutes int) int {
+	if totalStudyMinutes <= 0 {
+		return 0
+	}
+
+	targetMinutes := 210
+	progressRate := int(float64(totalStudyMinutes) / float64(targetMinutes) * 100)
+	if progressRate > 100 {
+		return 100
+	}
+	return progressRate
+}
+
+func weeklyDailyProgress(totalStudyMinutes, activeDays int) []DailyProgress {
+	if activeDays <= 0 {
+		return nil
+	}
+
+	return []DailyProgress{
+		{Day: "Tue", Progress: totalStudyMinutes / activeDays},
+	}
+}
+
+// warmWeeklyCache populates both L1 cache and Redis asynchronously.
+func (s *ProgressQueryService) warmWeeklyCache(userID, cacheKey string, analytics *WeeklyAnalyticsReadModel) {
+	storeWeeklyAnalyticsInL1(userID, analytics)
+
+	if db.Redis != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if cacheBytes, err := json.Marshal(analytics); err == nil {
+				db.Redis.Set(ctx, cacheKey, cacheBytes, 3*time.Minute)
+			}
+		}()
+	}
+}
+
+func storeWeeklyAnalyticsInL1(userID string, analytics *WeeklyAnalyticsReadModel) {
+	l1WeeklyCache.Store(userID, &l1WeeklyEntry{
+		analytics: analytics,
+		expiresAt: time.Now().Add(15 * time.Second),
+	})
 }
 
 func (s *ProgressQueryService) getWeeklyAnalyticsFallback(userID string) (*WeeklyAnalyticsReadModel, error) {

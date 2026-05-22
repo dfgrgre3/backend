@@ -8,6 +8,9 @@
 DROP MATERIALIZED VIEW IF EXISTS mv_user_progress_summary;
 
 CREATE MATERIALIZED VIEW mv_user_progress_summary AS
+WITH week_interval AS (
+    SELECT INTERVAL '7 days' AS value
+)
 SELECT
     u.id AS user_id,
     u.total_xp AS "totalXP",
@@ -52,8 +55,8 @@ LEFT JOIN LATERAL (
         COUNT(*) AS weekly_sessions,
         COALESCE(AVG(ss.focus_score), 0) AS weekly_avg_focus
     FROM "StudySession" ss
-    WHERE ss.user_id = u.id AND ss.start_time >= NOW() - INTERVAL '7 days'
-) ss ON true
+    WHERE ss.user_id = u.id AND ss.start_time >= NOW() - wi.value
+) ss ON true, week_interval wi
 LEFT JOIN LATERAL (
     SELECT
         COUNT(*) AS total_exams_taken,
@@ -76,6 +79,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_progress_user_id ON mv_user_progress_su
 DROP MATERIALIZED VIEW IF EXISTS mv_user_weekly_analytics;
 
 CREATE MATERIALIZED VIEW mv_user_weekly_analytics AS
+WITH week_interval AS (
+    SELECT INTERVAL '7 days' AS value
+)
 SELECT
     u.id AS user_id,
 
@@ -98,19 +104,19 @@ SELECT
         SELECT COALESCE(SUM(amount), 0) FROM "WalletTransaction" wt
         WHERE wt.user_id = u.id
         AND wt.type = 'xp_earned'
-        AND wt.created_at >= NOW() - INTERVAL '7 days'
+        AND wt.created_at >= NOW() - wi.value
     ), 0) AS weekly_xp_earned,
 
     NOW() AS computed_at
-FROM "User" u
-LEFT JOIN "StudySession" ss ON ss.user_id = u.id AND ss.start_time >= NOW() - INTERVAL '7 days'
+FROM "User" u, week_interval wi
+LEFT JOIN "StudySession" ss ON ss.user_id = u.id AND ss.start_time >= NOW() - wi.value
 LEFT JOIN LATERAL (
     SELECT
         COUNT(*) AS total_tasks,
         COUNT(*) FILTER (WHERE t.status = 'COMPLETED') AS completed_tasks
     FROM "Task" t
     WHERE t.user_id = u.id
-      AND (t.created_at >= NOW() - INTERVAL '7 days' OR t.updated_at >= NOW() - INTERVAL '7 days')
+      AND (t.created_at >= NOW() - wi.value OR t.updated_at >= NOW() - wi.value)
 ) tsk ON true
 WHERE u.deleted_at IS NULL
 GROUP BY u.id, tsk.total_tasks, tsk.completed_tasks;

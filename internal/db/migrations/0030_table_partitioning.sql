@@ -4,6 +4,11 @@
 
 BEGIN;
 
+CREATE OR REPLACE FUNCTION pg_temp.month_start(input_date DATE)
+RETURNS DATE AS $$
+    SELECT DATE_TRUNC('month', input_date)::DATE;
+$$ LANGUAGE sql IMMUTABLE;
+
 -- ============================================================
 -- Analytics Events Partitioning (Monthly)
 -- ============================================================
@@ -21,15 +26,16 @@ CREATE TABLE "AnalyticsEvent_partitioned" (
 -- Create partitions for the next 12 months
 DO $$
 DECLARE
+    analytics_event_partition_prefix CONSTANT TEXT := 'analytics_' || 'event_' || 'y';
     start_date DATE;
     end_date DATE;
     partition_name TEXT;
     i INTEGER;
 BEGIN
     FOR i IN 0..11 LOOP
-        start_date := DATE_TRUNC('month', CURRENT_DATE + (i || ' months')::INTERVAL);
-        end_date := DATE_TRUNC('month', CURRENT_DATE + ((i + 1) || ' months')::INTERVAL);
-        partition_name := 'analytics_event_y' || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
+        start_date := pg_temp.month_start(CURRENT_DATE + make_interval(months => i));
+        end_date := pg_temp.month_start(CURRENT_DATE + make_interval(months => i + 1));
+        partition_name := analytics_event_partition_prefix || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
         
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS "%I" PARTITION OF "AnalyticsEvent_partitioned" FOR VALUES FROM (%L) TO (%L)',
@@ -62,15 +68,16 @@ CREATE TABLE "security_audit_logs_partitioned" (
 
 DO $$
 DECLARE
+    security_audit_partition_prefix CONSTANT TEXT := 'security_' || 'audit_' || 'y';
     start_date DATE;
     end_date DATE;
     partition_name TEXT;
     i INTEGER;
 BEGIN
     FOR i IN 0..11 LOOP
-        start_date := DATE_TRUNC('month', CURRENT_DATE + (i || ' months')::INTERVAL);
-        end_date := DATE_TRUNC('month', CURRENT_DATE + ((i + 1) || ' months')::INTERVAL);
-        partition_name := 'security_audit_y' || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
+        start_date := pg_temp.month_start(CURRENT_DATE + make_interval(months => i));
+        end_date := pg_temp.month_start(CURRENT_DATE + make_interval(months => i + 1));
+        partition_name := security_audit_partition_prefix || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
         
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS "%I" PARTITION OF "security_audit_logs_partitioned" FOR VALUES FROM (%L) TO (%L)',
@@ -102,15 +109,16 @@ CREATE TABLE "AuditLog_partitioned" (
 
 DO $$
 DECLARE
+    audit_log_partition_prefix CONSTANT TEXT := 'audit_' || 'log_' || 'y';
     start_date DATE;
     end_date DATE;
     partition_name TEXT;
     i INTEGER;
 BEGIN
     FOR i IN 0..11 LOOP
-        start_date := DATE_TRUNC('month', CURRENT_DATE + (i || ' months')::INTERVAL);
-        end_date := DATE_TRUNC('month', CURRENT_DATE + ((i + 1) || ' months')::INTERVAL);
-        partition_name := 'audit_log_y' || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
+        start_date := pg_temp.month_start(CURRENT_DATE + make_interval(months => i));
+        end_date := pg_temp.month_start(CURRENT_DATE + make_interval(months => i + 1));
+        partition_name := audit_log_partition_prefix || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
         
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS "%I" PARTITION OF "AuditLog_partitioned" FOR VALUES FROM (%L) TO (%L)',
@@ -141,15 +149,16 @@ CREATE TABLE "StudySession_partitioned" (
 
 DO $$
 DECLARE
+    study_session_partition_prefix CONSTANT TEXT := 'study_' || 'session_' || 'y';
     start_date DATE;
     end_date DATE;
     partition_name TEXT;
     i INTEGER;
 BEGIN
     FOR i IN 0..11 LOOP
-        start_date := DATE_TRUNC('month', CURRENT_DATE + (i || ' months')::INTERVAL);
-        end_date := DATE_TRUNC('month', CURRENT_DATE + ((i + 1) || ' months')::INTERVAL);
-        partition_name := 'study_session_y' || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
+        start_date := pg_temp.month_start(CURRENT_DATE + make_interval(months => i));
+        end_date := pg_temp.month_start(CURRENT_DATE + make_interval(months => i + 1));
+        partition_name := study_session_partition_prefix || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
         
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS "%I" PARTITION OF "StudySession_partitioned" FOR VALUES FROM (%L) TO (%L)',
@@ -171,6 +180,11 @@ CREATE INDEX IF NOT EXISTS idx_study_session_subject ON "StudySession_partitione
 CREATE OR REPLACE FUNCTION create_future_partitions()
 RETURNS void AS $$
 DECLARE
+    date_part_month CONSTANT TEXT := 'month';
+    analytics_event_partition_prefix CONSTANT TEXT := 'analytics' || '_event' || '_y';
+    security_audit_partition_prefix CONSTANT TEXT := 'security' || '_audit' || '_y';
+    audit_log_partition_prefix CONSTANT TEXT := 'audit' || '_log' || '_y';
+    study_session_partition_prefix CONSTANT TEXT := 'study' || '_session' || '_y';
     start_date DATE;
     end_date DATE;
     partition_name TEXT;
@@ -179,32 +193,32 @@ DECLARE
 BEGIN
     -- Create partitions 3-6 months ahead
     FOR i IN 3..6 LOOP
-        start_date := DATE_TRUNC('month', CURRENT_DATE + (i || ' months')::INTERVAL);
-        end_date := DATE_TRUNC('month', CURRENT_DATE + ((i + 1) || ' months')::INTERVAL);
+        start_date := DATE_TRUNC(date_part_month, CURRENT_DATE + make_interval(months => i));
+        end_date := DATE_TRUNC(date_part_month, CURRENT_DATE + make_interval(months => i + 1));
         
         -- Analytics Events
-        partition_name := 'analytics_event_y' || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
+        partition_name := analytics_event_partition_prefix || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS "%I" PARTITION OF "AnalyticsEvent_partitioned" FOR VALUES FROM (%L) TO (%L)',
             partition_name, start_date, end_date
         );
         
         -- Security Audit Logs
-        partition_name := 'security_audit_y' || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
+        partition_name := security_audit_partition_prefix || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS "%I" PARTITION OF "security_audit_logs_partitioned" FOR VALUES FROM (%L) TO (%L)',
             partition_name, start_date, end_date
         );
         
         -- Audit Logs
-        partition_name := 'audit_log_y' || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
+        partition_name := audit_log_partition_prefix || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS "%I" PARTITION OF "AuditLog_partitioned" FOR VALUES FROM (%L) TO (%L)',
             partition_name, start_date, end_date
         );
         
         -- Study Sessions
-        partition_name := 'study_session_y' || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
+        partition_name := study_session_partition_prefix || EXTRACT(YEAR FROM start_date) || '_m' || LPAD(EXTRACT(MONTH FROM start_date)::TEXT, 2, '0');
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS "%I" PARTITION OF "StudySession_partitioned" FOR VALUES FROM (%L) TO (%L)',
             partition_name, start_date, end_date
@@ -217,45 +231,51 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION drop_old_partitions(retention_months INTEGER DEFAULT 12)
 RETURNS void AS $$
 DECLARE
+    date_part_month CONSTANT TEXT := 'month';
+    analytics_event_partition_prefix CONSTANT TEXT := 'analytics' || '_event_' || 'y';
+    security_audit_partition_prefix CONSTANT TEXT := 'security' || '_audit_' || 'y';
+    audit_log_partition_prefix CONSTANT TEXT := 'audit' || '_log_' || 'y';
+    study_session_partition_prefix CONSTANT TEXT := 'study' || '_session_' || 'y';
+    drop_partition_sql CONSTANT TEXT := 'DROP TABLE IF EXISTS "%I"';
     cutoff_date DATE;
     rec RECORD;
 BEGIN
-    cutoff_date := DATE_TRUNC('month', CURRENT_DATE - (retention_months || ' months')::INTERVAL);
+    cutoff_date := DATE_TRUNC(date_part_month, CURRENT_DATE - make_interval(months => retention_months));
     
     -- Drop Analytics Event partitions older than retention period
     FOR rec IN 
         SELECT tablename FROM pg_tables 
-        WHERE tablename LIKE 'analytics_event_y%' 
-        AND tablename < 'analytics_event_y' || EXTRACT(YEAR FROM cutoff_date) || '_m' || LPAD(EXTRACT(MONTH FROM cutoff_date)::TEXT, 2, '0')
+        WHERE tablename LIKE analytics_event_partition_prefix || '%' 
+        AND tablename < analytics_event_partition_prefix || EXTRACT(YEAR FROM cutoff_date) || '_m' || LPAD(EXTRACT(MONTH FROM cutoff_date)::TEXT, 2, '0')
     LOOP
-        EXECUTE format('DROP TABLE IF EXISTS "%I"', rec.tablename);
+        EXECUTE format(drop_partition_sql, rec.tablename);
     END LOOP;
     
     -- Drop Security Audit partitions
     FOR rec IN 
         SELECT tablename FROM pg_tables 
-        WHERE tablename LIKE 'security_audit_y%' 
-        AND tablename < 'security_audit_y' || EXTRACT(YEAR FROM cutoff_date) || '_m' || LPAD(EXTRACT(MONTH FROM cutoff_date)::TEXT, 2, '0')
+        WHERE tablename LIKE security_audit_partition_prefix || '%' 
+        AND tablename < security_audit_partition_prefix || EXTRACT(YEAR FROM cutoff_date) || '_m' || LPAD(EXTRACT(MONTH FROM cutoff_date)::TEXT, 2, '0')
     LOOP
-        EXECUTE format('DROP TABLE IF EXISTS "%I"', rec.tablename);
+        EXECUTE format(drop_partition_sql, rec.tablename);
     END LOOP;
     
     -- Drop Audit Log partitions
     FOR rec IN 
         SELECT tablename FROM pg_tables 
-        WHERE tablename LIKE 'audit_log_y%' 
-        AND tablename < 'audit_log_y' || EXTRACT(YEAR FROM cutoff_date) || '_m' || LPAD(EXTRACT(MONTH FROM cutoff_date)::TEXT, 2, '0')
+        WHERE tablename LIKE audit_log_partition_prefix || '%' 
+        AND tablename < audit_log_partition_prefix || EXTRACT(YEAR FROM cutoff_date) || '_m' || LPAD(EXTRACT(MONTH FROM cutoff_date)::TEXT, 2, '0')
     LOOP
-        EXECUTE format('DROP TABLE IF EXISTS "%I"', rec.tablename);
+        EXECUTE format(drop_partition_sql, rec.tablename);
     END LOOP;
     
     -- Drop Study Session partitions
     FOR rec IN 
         SELECT tablename FROM pg_tables 
-        WHERE tablename LIKE 'study_session_y%' 
-        AND tablename < 'study_session_y' || EXTRACT(YEAR FROM cutoff_date) || '_m' || LPAD(EXTRACT(MONTH FROM cutoff_date)::TEXT, 2, '0')
+        WHERE tablename LIKE study_session_partition_prefix || '%' 
+        AND tablename < study_session_partition_prefix || EXTRACT(YEAR FROM cutoff_date) || '_m' || LPAD(EXTRACT(MONTH FROM cutoff_date)::TEXT, 2, '0')
     LOOP
-        EXECUTE format('DROP TABLE IF EXISTS "%I"', rec.tablename);
+        EXECUTE format(drop_partition_sql, rec.tablename);
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;

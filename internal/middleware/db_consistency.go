@@ -20,10 +20,28 @@ func DBConsistencyMiddleware(gormDB *gorm.DB) gin.HandlerFunc {
 }
 
 func dbConsistencyMiddleware(ctx context.Context, gormDB *gorm.DB, consistencyWindow, cleanupInterval time.Duration) gin.HandlerFunc {
-	// Fallback local map
 	writeTracker := &sync.Map{}
+	startWriteTrackerCleanup(ctx, writeTracker, consistencyWindow, cleanupInterval)
 
-	// Eviction loop to prevent memory leak in local fallback map
+	return func(c *gin.Context) {
+		method := c.Request.Method
+		userID := dbConsistencyUserID(c)
+
+		if isWriteMethod(method) {
+			recordDBConsistencyWrite(c.Request.Context(), writeTracker, userID, consistencyWindow)
+			c.Next()
+			return
+		}
+
+		if shouldForceSourceDB(c, method, writeTracker, userID, consistencyWindow) {
+			forceSourceDB(c, gormDB)
+		}
+
+		c.Next()
+	}
+}
+
+func startWriteTrackerCleanup(ctx context.Context, writeTracker *sync.Map, consistencyWindow, cleanupInterval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(cleanupInterval)
 		defer ticker.Stop()
@@ -33,69 +51,82 @@ func dbConsistencyMiddleware(ctx context.Context, gormDB *gorm.DB, consistencyWi
 			case <-ctx.Done():
 				return
 			case now := <-ticker.C:
-				writeTracker.Range(func(key, value interface{}) bool {
-					if lastWrite, ok := value.(time.Time); ok {
-						if now.Sub(lastWrite) > consistencyWindow {
-							writeTracker.Delete(key)
-						}
-					}
-					return true
-				})
+				deleteExpiredWrites(writeTracker, now, consistencyWindow)
 			}
 		}
 	}()
+}
 
-	return func(c *gin.Context) {
-		method := c.Request.Method
-		userID := c.GetString("userId")
-		if userID == "" {
-			userID = c.GetString("user_id")
-		}
-		if userID == "" {
-			userID = c.ClientIP()
+func deleteExpiredWrites(writeTracker *sync.Map, now time.Time, consistencyWindow time.Duration) {
+	writeTracker.Range(func(key, value interface{}) bool {
+		lastWrite, ok := value.(time.Time)
+		if ok && now.Sub(lastWrite) > consistencyWindow {
+			writeTracker.Delete(key)
 		}
 
-		ctx := c.Request.Context()
+		return true
+	})
+}
 
-		// If it's a write operation, record the timestamp
-		if isWriteMethod(method) {
-			if db.Redis != nil {
-				// Set write flag in Redis with TTL matching consistency window
-				_ = db.Redis.Set(ctx, "db_consistency:write:"+userID, "1", consistencyWindow).Err()
-			} else {
-				writeTracker.Store(userID, time.Now())
-			}
-			c.Next()
-			return
-		}
-
-		// For GET/HEAD requests, check if we should force Source
-		shouldForceSource := false
-		if isReadMethod(method) && db.Redis != nil {
-			val, err := db.Redis.Exists(ctx, "db_consistency:write:"+userID).Result()
-			if err == nil && val > 0 {
-				shouldForceSource = true
-			}
-		} else if isReadMethod(method) {
-			if lastWrite, ok := writeTracker.Load(userID); ok {
-				if time.Since(lastWrite.(time.Time)) < consistencyWindow {
-					shouldForceSource = true
-				}
-			}
-		}
-
-		if shouldForceSource {
-			// Force read from Source to ensure consistency
-			c.Set("db", gormDB.Session(&gorm.Session{}).Clauses(dbresolver.Write))
-		}
-
-		// Also check for explicit consistency header
-		if c.GetHeader("X-Consistency-Level") == "strong" {
-			c.Set("db", gormDB.Session(&gorm.Session{}).Clauses(dbresolver.Write))
-		}
-
-		c.Next()
+func dbConsistencyUserID(c *gin.Context) string {
+	if userID := c.GetString("userId"); userID != "" {
+		return userID
 	}
+
+	if userID := c.GetString("user_id"); userID != "" {
+		return userID
+	}
+
+	return c.ClientIP()
+}
+
+func recordDBConsistencyWrite(ctx context.Context, writeTracker *sync.Map, userID string, consistencyWindow time.Duration) {
+	if db.Redis != nil {
+		_ = db.Redis.Set(ctx, dbConsistencyWriteKey(userID), "1", consistencyWindow).Err()
+		return
+	}
+
+	writeTracker.Store(userID, time.Now())
+}
+
+func shouldForceSourceDB(c *gin.Context, method string, writeTracker *sync.Map, userID string, consistencyWindow time.Duration) bool {
+	return c.GetHeader("X-Consistency-Level") == "strong" ||
+		shouldForceSourceAfterWrite(c.Request.Context(), method, writeTracker, userID, consistencyWindow)
+}
+
+func shouldForceSourceAfterWrite(ctx context.Context, method string, writeTracker *sync.Map, userID string, consistencyWindow time.Duration) bool {
+	if !isReadMethod(method) {
+		return false
+	}
+
+	if db.Redis != nil {
+		return hasRecentRedisWrite(ctx, userID)
+	}
+
+	return hasRecentTrackedWrite(writeTracker, userID, consistencyWindow)
+}
+
+func hasRecentRedisWrite(ctx context.Context, userID string) bool {
+	val, err := db.Redis.Exists(ctx, dbConsistencyWriteKey(userID)).Result()
+	return err == nil && val > 0
+}
+
+func hasRecentTrackedWrite(writeTracker *sync.Map, userID string, consistencyWindow time.Duration) bool {
+	lastWrite, ok := writeTracker.Load(userID)
+	if !ok {
+		return false
+	}
+
+	writtenAt, ok := lastWrite.(time.Time)
+	return ok && time.Since(writtenAt) < consistencyWindow
+}
+
+func dbConsistencyWriteKey(userID string) string {
+	return "db_consistency:write:" + userID
+}
+
+func forceSourceDB(c *gin.Context, gormDB *gorm.DB) {
+	c.Set("db", gormDB.Session(&gorm.Session{}).Clauses(dbresolver.Write))
 }
 
 func isWriteMethod(method string) bool {

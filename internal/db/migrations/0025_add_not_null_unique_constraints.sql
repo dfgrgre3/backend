@@ -7,303 +7,259 @@ BEGIN;
 -- User: ensure critical fields are never null
 -- ============================================================
 
--- Email is already uniqueIndex; ensure NOT NULL if not already
 DO $$
+DECLARE
+  schema_name CONSTANT TEXT := 'public';
+  subject_id_column CONSTANT TEXT := 'subjectId';
+  user_table CONSTANT TEXT := 'User';
+  subject_table CONSTANT TEXT := 'Subject';
+  topic_table CONSTANT TEXT := 'Topic';
+  subtopic_table CONSTANT TEXT := 'SubTopic';
+  exam_table CONSTANT TEXT := 'Exam';
+  question_table CONSTANT TEXT := 'Question';
+  exam_result_table CONSTANT TEXT := 'ExamResult';
+  enrollment_table CONSTANT TEXT := 'SubjectEnrollment';
+  progress_table CONSTANT TEXT := 'TopicProgress';
+  payment_table CONSTANT TEXT := 'Payment';
+  notification_table CONSTANT TEXT := 'Notification';
+  task_table CONSTANT TEXT := 'Task';
+  study_session_table CONSTANT TEXT := 'StudySession';
 BEGIN
+  -- Email is already uniqueIndex; ensure NOT NULL if not already
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'User'
+    WHERE table_schema = schema_name AND table_name = user_table
     AND column_name = 'email' AND is_nullable = 'YES'
   ) THEN
     -- First set any null emails to a placeholder (should not exist but safety first)
     UPDATE "User" SET "email" = CONCAT('deleted_', id, '@placeholder.local') WHERE "email" IS NULL;
     ALTER TABLE "User" ALTER COLUMN "email" SET NOT NULL;
   END IF;
-END $$;
 
--- Password hash must never be null
-DO $$
-BEGIN
+  -- Password hash must never be null
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'User'
+    WHERE table_schema = schema_name AND table_name = user_table
     AND column_name = 'passwordHash' AND is_nullable = 'YES'
   ) THEN
     UPDATE "User" SET "passwordHash" = '' WHERE "passwordHash" IS NULL;
     ALTER TABLE "User" ALTER COLUMN "passwordHash" SET NOT NULL;
   END IF;
-END $$;
 
--- ============================================================
--- Subject: ensure name is never null
--- ============================================================
+  -- ============================================================
+  -- Subject: ensure name is never null
+  -- ============================================================
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'Subject'
+    WHERE table_schema = schema_name AND table_name = subject_table
     AND column_name = 'name' AND is_nullable = 'YES'
   ) THEN
     UPDATE "Subject" SET "name" = CONCAT('Untitled_', id) WHERE "name" IS NULL;
     ALTER TABLE "Subject" ALTER COLUMN "name" SET NOT NULL;
   END IF;
-END $$;
 
--- ============================================================
--- Topic: ensure subjectId and title are never null
--- ============================================================
+  -- ============================================================
+  -- Topic: ensure subjectId and title are never null
+  -- ============================================================
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'Topic'
-    AND column_name = 'subjectId' AND is_nullable = 'YES'
+    WHERE table_schema = schema_name AND table_name = topic_table
+    AND column_name = subject_id_column AND is_nullable = 'YES'
   ) THEN
     -- Cannot fix orphaned topics; they should have been deleted by FK cascade
     DELETE FROM "Topic" WHERE "subjectId" IS NULL;
     ALTER TABLE "Topic" ALTER COLUMN "subjectId" SET NOT NULL;
   END IF;
-END $$;
 
--- ============================================================
--- SubTopic: ensure topicId and title are never null
--- ============================================================
+  -- ============================================================
+  -- SubTopic: ensure topicId and title are never null
+  -- ============================================================
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'SubTopic'
+    WHERE table_schema = schema_name AND table_name = subtopic_table
     AND column_name = 'topicId' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "SubTopic" WHERE "topicId" IS NULL;
     ALTER TABLE "SubTopic" ALTER COLUMN "topicId" SET NOT NULL;
   END IF;
-END $$;
 
--- ============================================================
--- Exam: ensure subjectId, title, duration are never null
--- ============================================================
+  -- ============================================================
+  -- Exam: ensure subjectId, title, duration are never null
+  -- ============================================================
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'Exam'
-    AND column_name = 'subjectId' AND is_nullable = 'YES'
+    WHERE table_schema = schema_name AND table_name = exam_table
+    AND column_name = subject_id_column AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "Exam" WHERE "subjectId" IS NULL;
     ALTER TABLE "Exam" ALTER COLUMN "subjectId" SET NOT NULL;
   END IF;
-END $$;
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'Exam'
+    WHERE table_schema = schema_name AND table_name = exam_table
     AND column_name = 'title' AND is_nullable = 'YES'
   ) THEN
     UPDATE "Exam" SET "title" = CONCAT('Untitled_', id) WHERE "title" IS NULL;
     ALTER TABLE "Exam" ALTER COLUMN "title" SET NOT NULL;
   END IF;
-END $$;
 
--- ============================================================
--- Question: ensure examId, text, answer are never null
--- ============================================================
+  -- ============================================================
+  -- Question: ensure examId, text, answer are never null
+  -- ============================================================
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'Question'
+    WHERE table_schema = schema_name AND table_name = question_table
     AND column_name = 'examId' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "Question" WHERE "examId" IS NULL;
     ALTER TABLE "Question" ALTER COLUMN "examId" SET NOT NULL;
   END IF;
-END $$;
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'Question'
+    WHERE table_schema = schema_name AND table_name = question_table
     AND column_name = 'text' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "Question" WHERE "text" IS NULL;
     ALTER TABLE "Question" ALTER COLUMN "text" SET NOT NULL;
   END IF;
-END $$;
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'Question'
+    WHERE table_schema = schema_name AND table_name = question_table
     AND column_name = 'answer' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "Question" WHERE "answer" IS NULL;
     ALTER TABLE "Question" ALTER COLUMN "answer" SET NOT NULL;
   END IF;
-END $$;
 
--- ============================================================
--- ExamResult: ensure examId, userId, score are never null
--- ============================================================
+  -- ============================================================
+  -- ExamResult: ensure examId, userId, score are never null
+  -- ============================================================
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'ExamResult'
+    WHERE table_schema = schema_name AND table_name = exam_result_table
     AND column_name = 'exam_id' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "ExamResult" WHERE "exam_id" IS NULL;
     ALTER TABLE "ExamResult" ALTER COLUMN "exam_id" SET NOT NULL;
   END IF;
-END $$;
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'ExamResult'
+    WHERE table_schema = schema_name AND table_name = exam_result_table
     AND column_name = 'user_id' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "ExamResult" WHERE "user_id" IS NULL;
     ALTER TABLE "ExamResult" ALTER COLUMN "user_id" SET NOT NULL;
   END IF;
-END $$;
 
--- ============================================================
--- Enrollment (SubjectEnrollment): ensure userId, subjectId never null
--- ============================================================
+  -- ============================================================
+  -- Enrollment (SubjectEnrollment): ensure userId, subjectId never null
+  -- ============================================================
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'SubjectEnrollment'
+    WHERE table_schema = schema_name AND table_name = enrollment_table
     AND column_name = 'userId' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "SubjectEnrollment" WHERE "userId" IS NULL;
     ALTER TABLE "SubjectEnrollment" ALTER COLUMN "userId" SET NOT NULL;
   END IF;
-END $$;
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'SubjectEnrollment'
-    AND column_name = 'subjectId' AND is_nullable = 'YES'
+    WHERE table_schema = schema_name AND table_name = enrollment_table
+    AND column_name = subject_id_column AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "SubjectEnrollment" WHERE "subjectId" IS NULL;
     ALTER TABLE "SubjectEnrollment" ALTER COLUMN "subjectId" SET NOT NULL;
   END IF;
-END $$;
 
--- ============================================================
--- LessonProgress (TopicProgress): ensure userId, sub_topic_id never null
--- ============================================================
+  -- ============================================================
+  -- LessonProgress (TopicProgress): ensure userId, sub_topic_id never null
+  -- ============================================================
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'TopicProgress'
+    WHERE table_schema = schema_name AND table_name = progress_table
     AND column_name = 'userId' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "TopicProgress" WHERE "userId" IS NULL;
     ALTER TABLE "TopicProgress" ALTER COLUMN "userId" SET NOT NULL;
   END IF;
-END $$;
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'TopicProgress'
+    WHERE table_schema = schema_name AND table_name = progress_table
     AND column_name = 'sub_topic_id' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "TopicProgress" WHERE "sub_topic_id" IS NULL;
     ALTER TABLE "TopicProgress" ALTER COLUMN "sub_topic_id" SET NOT NULL;
   END IF;
-END $$;
 
--- ============================================================
--- Payment: ensure userId, amount, status never null
--- ============================================================
+  -- ============================================================
+  -- Payment: ensure userId, amount, status never null
+  -- ============================================================
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'Payment'
+    WHERE table_schema = schema_name AND table_name = payment_table
     AND column_name = 'userId' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "Payment" WHERE "userId" IS NULL;
     ALTER TABLE "Payment" ALTER COLUMN "userId" SET NOT NULL;
   END IF;
-END $$;
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'Payment'
+    WHERE table_schema = schema_name AND table_name = payment_table
     AND column_name = 'amount' AND is_nullable = 'YES'
   ) THEN
     UPDATE "Payment" SET "amount" = 0 WHERE "amount" IS NULL;
     ALTER TABLE "Payment" ALTER COLUMN "amount" SET NOT NULL;
   END IF;
-END $$;
 
--- ============================================================
--- Notification: ensure userId, title never null
--- ============================================================
+  -- ============================================================
+  -- Notification: ensure userId, title never null
+  -- ============================================================
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'Notification'
+    WHERE table_schema = schema_name AND table_name = notification_table
     AND column_name = 'userId' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "Notification" WHERE "userId" IS NULL;
     ALTER TABLE "Notification" ALTER COLUMN "userId" SET NOT NULL;
   END IF;
-END $$;
 
--- ============================================================
--- Task: ensure userId, title never null
--- ============================================================
+  -- ============================================================
+  -- Task: ensure userId, title never null
+  -- ============================================================
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'Task'
+    WHERE table_schema = schema_name AND table_name = task_table
     AND column_name = 'userId' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "Task" WHERE "userId" IS NULL;
     ALTER TABLE "Task" ALTER COLUMN "userId" SET NOT NULL;
   END IF;
-END $$;
 
--- ============================================================
--- StudySession: ensure userId never null
--- ============================================================
+  -- ============================================================
+  -- StudySession: ensure userId never null
+  -- ============================================================
 
-DO $$
-BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'StudySession'
+    WHERE table_schema = schema_name AND table_name = study_session_table
     AND column_name = 'userId' AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "StudySession" WHERE "userId" IS NULL;
@@ -315,49 +271,39 @@ END $$;
 -- UNIQUE constraints for data that must be unique
 -- ============================================================
 
--- UserSettings: one settings record per user (if not already enforced)
 DO $$
+DECLARE
+  schema_name CONSTANT TEXT := 'public';
 BEGIN
+  -- UserSettings: one settings record per user (if not already enforced)
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_user_settings_user_id'
   ) THEN
     ALTER TABLE "UserSettings" ADD CONSTRAINT uq_user_settings_user_id UNIQUE ("userId");
   END IF;
-END $$;
 
--- TwoFactorSettings: one 2FA record per user
-DO $$
-BEGIN
+  -- TwoFactorSettings: one 2FA record per user
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_2fa_settings_user_id'
   ) THEN
     ALTER TABLE "TwoFactorSettings" ADD CONSTRAINT uq_2fa_settings_user_id UNIQUE ("userId");
   END IF;
-END $$;
 
--- Schedule: one schedule per user
-DO $$
-BEGIN
+  -- Schedule: one schedule per user
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_schedule_user_id'
   ) THEN
     ALTER TABLE "Schedule" ADD CONSTRAINT uq_schedule_user_id UNIQUE ("userId");
   END IF;
-END $$;
 
--- Invoice: payment_id must be unique (one invoice per payment)
-DO $$
-BEGIN
+  -- Invoice: payment_id must be unique (one invoice per payment)
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_invoice_payment_id'
   ) THEN
     ALTER TABLE "Invoice" ADD CONSTRAINT uq_invoice_payment_id UNIQUE ("paymentId");
   END IF;
-END $$;
 
--- PushToken: token must be unique globally
-DO $$
-BEGIN
+  -- PushToken: token must be unique globally
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_push_token_token'
   ) THEN
@@ -370,31 +316,22 @@ BEGIN
     WHERE a.token = b.token AND a.ctid <> b.ctid;
     ALTER TABLE "PushToken" ADD CONSTRAINT uq_push_token_token UNIQUE ("token");
   END IF;
-END $$;
 
--- Coupon: code must be unique (should already be, but enforce)
-DO $$
-BEGIN
+  -- Coupon: code must be unique (should already be, but enforce)
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_coupon_code'
   ) THEN
     ALTER TABLE "Coupon" ADD CONSTRAINT uq_coupon_code UNIQUE ("code");
   END IF;
-END $$;
 
--- Category: slug + type must be unique
-DO $$
-BEGIN
+  -- Category: slug + type must be unique
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_category_slug_type'
   ) THEN
     ALTER TABLE "Category" ADD CONSTRAINT uq_category_slug_type UNIQUE ("slug", "type");
   END IF;
-END $$;
 
--- UserAchievement: user can only unlock an achievement once
-DO $$
-BEGIN
+  -- UserAchievement: user can only unlock an achievement once
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_user_achievement_user_achievement'
   ) THEN
@@ -407,11 +344,8 @@ BEGIN
     WHERE a."userId" = b."userId" AND a."achievementId" = b."achievementId" AND a.ctid <> b.ctid;
     ALTER TABLE "UserAchievement" ADD CONSTRAINT uq_user_achievement_user_achievement UNIQUE ("userId", "achievementId");
   END IF;
-END $$;
 
--- UserChallenge: user can only have one entry per challenge
-DO $$
-BEGIN
+  -- UserChallenge: user can only have one entry per challenge
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_user_challenge_user_challenge'
   ) THEN
@@ -423,71 +357,50 @@ BEGIN
     WHERE a."userId" = b."userId" AND a."challengeId" = b."challengeId" AND a.ctid <> b.ctid;
     ALTER TABLE "UserChallenge" ADD CONSTRAINT uq_user_challenge_user_challenge UNIQUE ("userId", "challengeId");
   END IF;
-END $$;
 
--- BlogPost: slug must be unique (should already be uniqueIndex, but enforce at DB level)
-DO $$
-BEGIN
+  -- BlogPost: slug must be unique (should already be uniqueIndex, but enforce at DB level)
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_blog_post_slug'
   ) THEN
     ALTER TABLE "BlogPost" ADD CONSTRAINT uq_blog_post_slug UNIQUE ("slug");
   END IF;
-END $$;
 
--- SystemSetting: key must be unique
-DO $$
-BEGIN
+  -- SystemSetting: key must be unique
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_system_setting_key'
   ) THEN
     ALTER TABLE "SystemSetting" ADD CONSTRAINT uq_system_setting_key UNIQUE ("key");
   END IF;
-END $$;
 
--- SupportTicket: ticket_number must be unique
-DO $$
-BEGIN
+  -- SupportTicket: ticket_number must be unique
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_support_ticket_number'
   ) THEN
     ALTER TABLE "SupportTicket" ADD CONSTRAINT uq_support_ticket_number UNIQUE ("ticket_number");
   END IF;
-END $$;
 
--- Payment: reference must be unique
-DO $$
-BEGIN
+  -- Payment: reference must be unique
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_payment_reference'
   ) THEN
     ALTER TABLE "Payment" ADD CONSTRAINT uq_payment_reference UNIQUE ("reference");
   END IF;
-END $$;
 
--- Invoice: invoice_number must be unique
-DO $$
-BEGIN
+  -- Invoice: invoice_number must be unique
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_invoice_number'
   ) THEN
     ALTER TABLE "Invoice" ADD CONSTRAINT uq_invoice_number UNIQUE ("invoice_number");
   END IF;
-END $$;
 
--- Achievement: key must be unique
-DO $$
-BEGIN
+  -- Achievement: key must be unique
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_achievement_key'
   ) THEN
     ALTER TABLE "Achievement" ADD CONSTRAINT uq_achievement_key UNIQUE ("key");
   END IF;
-END $$;
 
--- Subject: code must be unique (if not already)
-DO $$
-BEGIN
+  -- Subject: code must be unique (if not already)
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'uq_subject_code'
   ) THEN
@@ -495,21 +408,15 @@ BEGIN
     -- Use a partial unique index instead
     CREATE UNIQUE INDEX idx_subject_code_unique ON "Subject" ("code") WHERE "code" IS NOT NULL;
   END IF;
-END $$;
 
--- Subject: slug must be unique (partial for nulls)
-DO $$
-BEGIN
+  -- Subject: slug must be unique (partial for nulls)
   IF NOT EXISTS (
     SELECT 1 FROM pg_indexes WHERE indexname = 'idx_subject_slug_unique'
   ) THEN
     CREATE UNIQUE INDEX idx_subject_slug_unique ON "Subject" ("slug") WHERE "slug" IS NOT NULL;
   END IF;
-END $$;
 
--- Username must be unique (partial for nulls)
-DO $$
-BEGIN
+  -- Username must be unique (partial for nulls)
   IF NOT EXISTS (
     SELECT 1 FROM pg_indexes WHERE indexname = 'idx_user_username_unique'
   ) THEN

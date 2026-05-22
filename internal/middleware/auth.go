@@ -184,6 +184,119 @@ func setContextPermissions(c *gin.Context, permissions models.JSONStringArray) {
 	}
 }
 
+// fetchCachedRolePerms checks local in-memory cache for user role/permissions.
+// Returns the cached context and true if found and not expired.
+func fetchCachedRolePerms(userID string) (*userAuthContext, bool) {
+	val, ok := localRolePermsCache.Load(userID)
+	if !ok {
+		return nil, false
+	}
+
+	cached := val.(InMemoryRolePerms)
+	if time.Now().Before(cached.ExpiresAt) {
+		return &userAuthContext{Role: cached.Role, Permissions: cached.Permissions}, true
+	}
+
+	localRolePermsCache.Delete(userID)
+	return nil, false
+}
+
+// fetchRedisRolePerms attempts to retrieve user role/permissions from Redis cache.
+// Returns the cached context and true if found and parsed successfully.
+func fetchRedisRolePerms(cacheKey string) (*userAuthContext, bool) {
+	if db.Redis == nil {
+		return nil, false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	cachedVal, err := db.Redis.Get(ctx, cacheKey).Result()
+	if err != nil {
+		return nil, false
+	}
+
+	parts := strings.SplitN(cachedVal, "|", 2)
+	if len(parts) != 2 {
+		return nil, false
+	}
+
+	permsVal := strings.Split(parts[1], ",")
+	if len(permsVal) == 1 && permsVal[0] == "" {
+		permsVal = []string{}
+	}
+
+	return &userAuthContext{Role: parts[0], Permissions: permsVal}, true
+}
+
+// storeInLocalCache populates the in-memory cache for the given user.
+func storeInLocalCache(userID string, ctx *userAuthContext) {
+	localRolePermsCache.Store(userID, InMemoryRolePerms{
+		Role:        ctx.Role,
+		Permissions: ctx.Permissions,
+		ExpiresAt:   time.Now().Add(localRolePermsTTL),
+	})
+}
+
+// fetchDatabaseRolePerms retrieves user role/permissions from the database.
+// Caches the result in Redis (async) and local in-memory cache.
+// Returns nil if the user is not found in the database.
+func fetchDatabaseRolePerms(userID string, cacheKey string) *userAuthContext {
+	var user models.User
+	if err := db.DB.Unscoped().
+		Select("role", "permissions").
+		Where("id = ?", userID).
+		Take(&user).Error; err != nil {
+		return nil
+	}
+
+	roleVal := string(user.Role)
+	permsVal := []string(user.Permissions)
+	if permsVal == nil {
+		permsVal = []string{}
+	}
+
+	// Cache in Redis asynchronously
+	if db.Redis != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			permsStr := strings.Join(permsVal, ",")
+			db.Redis.Set(ctx, cacheKey, roleVal+"|"+permsStr, rolePermsRedisTTL)
+		}()
+	}
+
+	authCtx := &userAuthContext{Role: roleVal, Permissions: permsVal}
+	storeInLocalCache(userID, authCtx)
+	return authCtx
+}
+
+// buildSingleFlightCallback creates the function used inside singleflight.Do
+// to fetch user role/permissions from cache layers and finally database.
+func buildSingleFlightCallback(userID string, fallbackRole string) func() (interface{}, error) {
+	return func() (interface{}, error) {
+		// Re-check local cache inside singleflight (avoid duplicate work)
+		if cached, ok := fetchCachedRolePerms(userID); ok {
+			return cached, nil
+		}
+
+		cacheKey := fmt.Sprintf("user_role_perms:%s", userID)
+
+		// Try Redis cache next
+		if redisCtx, ok := fetchRedisRolePerms(cacheKey); ok {
+			storeInLocalCache(userID, redisCtx)
+			return redisCtx, nil
+		}
+
+		// Fallback to database
+		if dbCtx := fetchDatabaseRolePerms(userID, cacheKey); dbCtx != nil {
+			return dbCtx, nil
+		}
+
+		return &userAuthContext{Role: strings.ToUpper(fallbackRole), Permissions: []string{}}, nil
+	}
+}
+
 // Helper to fetch and set user role/permissions in context from database or fallback
 func hydrateUserContext(c *gin.Context, userID string, fallbackRole string) {
 	if db.DB == nil {
@@ -194,95 +307,17 @@ func hydrateUserContext(c *gin.Context, userID string, fallbackRole string) {
 	}
 
 	// 1. Try local in-memory cache first to bypass Redis cloud network latency
-	if val, ok := localRolePermsCache.Load(userID); ok {
-		cached := val.(InMemoryRolePerms)
-		if time.Now().Before(cached.ExpiresAt) {
-			c.Set("role", cached.Role)
-			c.Set("permissions", cached.Permissions)
-			return
-		}
-		localRolePermsCache.Delete(userID)
+	if cached, ok := fetchCachedRolePerms(userID); ok {
+		c.Set("role", cached.Role)
+		c.Set("permissions", cached.Permissions)
+		return
 	}
 
 	// 2. Use singleflight to collapse concurrent calls for the same user
-	res, err, _ := userContextSF.Do(userID, func() (interface{}, error) {
-		// Double check local cache inside singleflight
-		if val, ok := localRolePermsCache.Load(userID); ok {
-			cached := val.(InMemoryRolePerms)
-			if time.Now().Before(cached.ExpiresAt) {
-				return userAuthContext{Role: cached.Role, Permissions: cached.Permissions}, nil
-			}
-		}
-
-		cacheKey := fmt.Sprintf("user_role_perms:%s", userID)
-		var roleVal string
-		var permsVal []string
-		redisHit := false
-
-		// Try Redis cache next
-		if db.Redis != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-			cachedVal, err := db.Redis.Get(ctx, cacheKey).Result()
-			cancel()
-			if err == nil {
-				parts := strings.SplitN(cachedVal, "|", 2)
-				if len(parts) == 2 {
-					roleVal = parts[0]
-					permsVal = strings.Split(parts[1], ",")
-					if len(permsVal) == 1 && permsVal[0] == "" {
-						permsVal = []string{}
-					}
-					redisHit = true
-				}
-			}
-		}
-
-		if redisHit {
-			// Populate local cache
-			localRolePermsCache.Store(userID, InMemoryRolePerms{
-				Role:        roleVal,
-				Permissions: permsVal,
-				ExpiresAt:   time.Now().Add(localRolePermsTTL),
-			})
-			return userAuthContext{Role: roleVal, Permissions: permsVal}, nil
-		}
-
-		var user models.User
-		// IMPORTANT: Use Select to ONLY fetch needed columns, and direct WHERE clause for index usage
-		if err := db.DB.Unscoped().
-			Select("role", "permissions").
-			Where("id = ?", userID).
-			Take(&user).Error; err == nil {
-			roleVal = string(user.Role)
-			permsVal = []string(user.Permissions)
-			if permsVal == nil {
-				permsVal = []string{}
-			}
-
-			// Cache in Redis asynchronously
-			if db.Redis != nil {
-				go func() {
-					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-					defer cancel()
-					permsStr := strings.Join(permsVal, ",")
-					db.Redis.Set(ctx, cacheKey, roleVal+"|"+permsStr, rolePermsRedisTTL)
-				}()
-			}
-
-			// Populate local cache
-			localRolePermsCache.Store(userID, InMemoryRolePerms{
-				Role:        roleVal,
-				Permissions: permsVal,
-				ExpiresAt:   time.Now().Add(localRolePermsTTL),
-			})
-			return userAuthContext{Role: roleVal, Permissions: permsVal}, nil
-		}
-
-		return userAuthContext{Role: strings.ToUpper(fallbackRole), Permissions: []string{}}, nil
-	})
+	res, err, _ := userContextSF.Do(userID, buildSingleFlightCallback(userID, fallbackRole))
 
 	if err == nil {
-		authCtx := res.(userAuthContext)
+		authCtx := res.(*userAuthContext)
 		c.Set("role", authCtx.Role)
 		c.Set("permissions", authCtx.Permissions)
 	} else {

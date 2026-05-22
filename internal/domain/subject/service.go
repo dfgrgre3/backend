@@ -184,79 +184,49 @@ func (s *Service) publishEvent(ctx context.Context, event SubjectEvent) {
 }
 
 func applySubjectUpdates(subject *Subject, input UpdateSubjectInput) {
-	if input.Name != nil {
-		subject.Name = *input.Name
+	assignValueIfPresent(&subject.Name, input.Name)
+	assignValueIfPresent(&subject.Type, input.Type)
+	assignValueIfPresent(&subject.Price, input.Price)
+	assignValueIfPresent(&subject.IsFree, input.IsFree)
+	assignValueIfPresent(&subject.IsPublished, input.IsPublished)
+	assignValueIfPresent(&subject.IsActive, input.IsActive)
+	assignValueIfPresent(&subject.IsFeatured, input.IsFeatured)
+
+	assignIfPresent(&subject.NameAr, input.NameAr)
+	assignIfPresent(&subject.Description, input.Description)
+	assignIfPresent(&subject.Icon, input.Icon)
+	assignIfPresent(&subject.Color, input.Color)
+	assignIfPresent(&subject.Level, input.Level)
+	assignIfPresent(&subject.Slug, input.Slug)
+	assignIfPresent(&subject.ThumbnailUrl, input.ThumbnailUrl)
+	assignIfPresent(&subject.TrailerUrl, input.TrailerUrl)
+	assignIfPresent(&subject.SeoTitle, input.SeoTitle)
+	assignIfPresent(&subject.SeoDescription, input.SeoDescription)
+	assignIfPresent(&subject.InstructorName, input.InstructorName)
+	assignIfPresent(&subject.InstructorId, input.InstructorId)
+	assignIfPresent(&subject.CategoryId, input.CategoryId)
+	assignIfPresent(&subject.Language, input.Language)
+	assignIfPresent(&subject.DurationHours, input.DurationHours)
+	assignIfPresent(&subject.TrailerDurationMinutes, input.TrailerDurationMinutes)
+
+	assignSliceIfPresent(&subject.Requirements, input.Requirements)
+	assignSliceIfPresent(&subject.LearningObjectives, input.LearningObjectives)
+}
+
+func assignValueIfPresent[T any](target *T, value *T) {
+	if value != nil {
+		*target = *value
 	}
-	if input.NameAr != nil {
-		subject.NameAr = input.NameAr
+}
+
+func assignIfPresent[T any](target **T, value *T) {
+	if value != nil {
+		*target = value
 	}
-	if input.Description != nil {
-		subject.Description = input.Description
-	}
-	if input.Icon != nil {
-		subject.Icon = input.Icon
-	}
-	if input.Color != nil {
-		subject.Color = input.Color
-	}
-	if input.Type != nil {
-		subject.Type = *input.Type
-	}
-	if input.Level != nil {
-		subject.Level = input.Level
-	}
-	if input.Slug != nil {
-		subject.Slug = input.Slug
-	}
-	if input.ThumbnailUrl != nil {
-		subject.ThumbnailUrl = input.ThumbnailUrl
-	}
-	if input.TrailerUrl != nil {
-		subject.TrailerUrl = input.TrailerUrl
-	}
-	if input.SeoTitle != nil {
-		subject.SeoTitle = input.SeoTitle
-	}
-	if input.SeoDescription != nil {
-		subject.SeoDescription = input.SeoDescription
-	}
-	if input.InstructorName != nil {
-		subject.InstructorName = input.InstructorName
-	}
-	if input.InstructorId != nil {
-		subject.InstructorId = input.InstructorId
-	}
-	if input.CategoryId != nil {
-		subject.CategoryId = input.CategoryId
-	}
-	if input.Price != nil {
-		subject.Price = *input.Price
-	}
-	if input.IsFree != nil {
-		subject.IsFree = *input.IsFree
-	}
-	if input.IsPublished != nil {
-		subject.IsPublished = *input.IsPublished
-	}
-	if input.IsActive != nil {
-		subject.IsActive = *input.IsActive
-	}
-	if input.IsFeatured != nil {
-		subject.IsFeatured = *input.IsFeatured
-	}
-	if input.Language != nil {
-		subject.Language = input.Language
-	}
-	if input.Requirements != nil {
-		subject.Requirements = input.Requirements
-	}
-	if input.LearningObjectives != nil {
-		subject.LearningObjectives = input.LearningObjectives
-	}
-	if input.DurationHours != nil {
-		subject.DurationHours = input.DurationHours
-	}
-	if input.TrailerDurationMinutes != nil {
-		subject.TrailerDurationMinutes = input.TrailerDurationMinutes
+}
+
+func assignSliceIfPresent[T any](target *[]T, value []T) {
+	if value != nil {
+		*target = value
 	}
 }

@@ -299,29 +299,13 @@ func (s *GamificationQueryService) GetUserProgress(userID string) (*UserProgress
 }
 
 func (s *GamificationQueryService) GetUserAchievements(userID string) ([]UserAchievementReadModel, error) {
-	if val, ok := l1AchievementsCache.Load(userID); ok {
-		entry := val.(*l1AchievementsEntry)
-		if time.Now().Before(entry.expiresAt) {
-			return entry.entries, nil
-		}
-		l1AchievementsCache.Delete(userID)
-	}
-
 	cacheKey := fmt.Sprintf("achievements:%s", userID)
-	if db.Redis != nil {
-		redisCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-		cachedVal, err := db.Redis.Get(redisCtx, cacheKey).Result()
-		cancel()
-		if err == nil {
-			var cachedAchievements []UserAchievementReadModel
-			if json.Unmarshal([]byte(cachedVal), &cachedAchievements) == nil {
-				l1AchievementsCache.Store(userID, &l1AchievementsEntry{
-					entries:   cachedAchievements,
-					expiresAt: time.Now().Add(achievementsL1TTL),
-				})
-				return cachedAchievements, nil
-			}
-		}
+
+	if achievements, ok := getAchievementsFromL1(userID); ok {
+		return achievements, nil
+	}
+	if achievements, ok := getAchievementsFromRedis(userID, cacheKey); ok {
+		return achievements, nil
 	}
 
 	rdb := s.readDBOrFallback()
@@ -334,25 +318,72 @@ func (s *GamificationQueryService) GetUserAchievements(userID string) ([]UserAch
 		return nil, err
 	}
 
+	achievements := buildUserAchievementEntries(userAchievements)
+	cacheAchievements(userID, cacheKey, achievements)
+
+	return achievements, nil
+}
+
+func getAchievementsFromL1(userID string) ([]UserAchievementReadModel, bool) {
+	val, ok := l1AchievementsCache.Load(userID)
+	if !ok {
+		return nil, false
+	}
+
+	entry := val.(*l1AchievementsEntry)
+	if time.Now().Before(entry.expiresAt) {
+		return entry.entries, true
+	}
+
+	l1AchievementsCache.Delete(userID)
+	return nil, false
+}
+
+func getAchievementsFromRedis(userID, cacheKey string) ([]UserAchievementReadModel, bool) {
+	if db.Redis == nil {
+		return nil, false
+	}
+
+	redisCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	cachedVal, err := db.Redis.Get(redisCtx, cacheKey).Result()
+	cancel()
+	if err != nil {
+		return nil, false
+	}
+
+	var cachedAchievements []UserAchievementReadModel
+	if json.Unmarshal([]byte(cachedVal), &cachedAchievements) != nil {
+		return nil, false
+	}
+
+	storeAchievementsInL1(userID, cachedAchievements)
+	return cachedAchievements, true
+}
+
+func buildUserAchievementEntries(userAchievements []models.UserAchievement) []UserAchievementReadModel {
 	achievements := make([]UserAchievementReadModel, 0, len(userAchievements))
 	for _, ua := range userAchievements {
-		if ua.Achievement != nil {
-			achievements = append(achievements, UserAchievementReadModel{
-				ID:          ua.Achievement.ID,
-				Key:         ua.Achievement.Key,
-				Title:       ua.Achievement.Title,
-				Description: ua.Achievement.Description,
-				Icon:        ua.Achievement.Icon,
-				UnlockedAt:  ua.UnlockedAt,
-				Rarity:      ua.Achievement.Rarity,
-				XpReward:    ua.Achievement.XpReward,
-			})
+		if ua.Achievement == nil {
+			continue
 		}
+
+		achievements = append(achievements, UserAchievementReadModel{
+			ID:          ua.Achievement.ID,
+			Key:         ua.Achievement.Key,
+			Title:       ua.Achievement.Title,
+			Description: ua.Achievement.Description,
+			Icon:        ua.Achievement.Icon,
+			UnlockedAt:  ua.UnlockedAt,
+			Rarity:      ua.Achievement.Rarity,
+			XpReward:    ua.Achievement.XpReward,
+		})
 	}
-	l1AchievementsCache.Store(userID, &l1AchievementsEntry{
-		entries:   achievements,
-		expiresAt: time.Now().Add(achievementsL1TTL),
-	})
+	return achievements
+}
+
+func cacheAchievements(userID, cacheKey string, achievements []UserAchievementReadModel) {
+	storeAchievementsInL1(userID, achievements)
+
 	if db.Redis != nil {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -362,5 +393,11 @@ func (s *GamificationQueryService) GetUserAchievements(userID string) ([]UserAch
 			}
 		}()
 	}
-	return achievements, nil
+}
+
+func storeAchievementsInL1(userID string, achievements []UserAchievementReadModel) {
+	l1AchievementsCache.Store(userID, &l1AchievementsEntry{
+		entries:   achievements,
+		expiresAt: time.Now().Add(achievementsL1TTL),
+	})
 }
