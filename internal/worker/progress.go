@@ -22,6 +22,7 @@ const (
 	TypeProgressUpdate     = "progress:update"
 	TypeGamificationSync   = "gamification:sync"
 	TypeBatchProgressFlush = "progress:batch_flush"
+	jsonUnmarshalFailedFmt = "json.Unmarshal failed: %v: %w"
 )
 
 type ProgressUpdatePayload struct {
@@ -79,7 +80,7 @@ type ProgressHandler struct{}
 func (h *ProgressHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	var p ProgressUpdatePayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
-		return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
+		return fmt.Errorf(jsonUnmarshalFailedFmt, err, asynq.SkipRetry)
 	}
 
 	log.Printf("[ProgressWorker] Processing progress update for user %s: %s", p.UserID, p.EventType)
@@ -217,7 +218,7 @@ type GamificationHandler struct{}
 func (h *GamificationHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	var p GamificationSyncPayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
-		return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
+		return fmt.Errorf(jsonUnmarshalFailedFmt, err, asynq.SkipRetry)
 	}
 
 	log.Printf("[GamificationWorker] Syncing gamification for user %s: +%d %s XP (%s)",
@@ -272,7 +273,7 @@ type BatchProgressFlushHandler struct{}
 func (h *BatchProgressFlushHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	var p BatchProgressFlushPayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
-		return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
+		return fmt.Errorf(jsonUnmarshalFailedFmt, err, asynq.SkipRetry)
 	}
 
 	log.Printf("[BatchFlushWorker] Flushing aggregated progress for user %s", p.UserID)

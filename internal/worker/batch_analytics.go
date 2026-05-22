@@ -67,85 +67,15 @@ func hasPrefix(s, prefix string) bool {
 func processBatch() error {
 	ctx := context.Background()
 
-	// 1. Try to read pending messages first (using ID "0")
-	var messages []redis.XMessage
-	entries, err := readAnalyticsGroupWithRetry(ctx, &redis.XReadGroupArgs{
-		Group:    analyticsConsumerGroup,
-		Consumer: analyticsConsumerID,
-		Streams:  []string{analyticsStream, "0"},
-		Count:    int64(analyticsBatchSize),
-		Block:    0,
-		NoAck:    false,
-	})
-
-	if err == nil && len(entries) > 0 && len(entries[0].Messages) > 0 {
-		messages = entries[0].Messages
-		log.Printf("[AnalyticsWorker] Processing batch of %d pending (unacknowledged) events", len(messages))
-	} else if err != nil && err != redis.Nil {
+	messages, err := readBatchMessages(ctx)
+	if err != nil {
 		return err
 	}
-
-	// 2. If no pending messages, read new messages using ">"
-	if len(messages) == 0 {
-		entries, err = readAnalyticsGroupWithRetry(ctx, &redis.XReadGroupArgs{
-			Group:    analyticsConsumerGroup,
-			Consumer: analyticsConsumerID,
-			Streams:  []string{analyticsStream, ">"},
-			Count:    int64(analyticsBatchSize),
-			Block:    analyticsBlockTime,
-			NoAck:    false,
-		})
-		if err != nil {
-			if err == redis.Nil {
-				return nil
-			}
-			return err
-		}
-		if len(entries) > 0 && len(entries[0].Messages) > 0 {
-			messages = entries[0].Messages
-			log.Printf("[AnalyticsWorker] Processing batch of %d new events", len(messages))
-		}
-	}
-
 	if len(messages) == 0 {
 		return nil
 	}
 
-	records := make([]map[string]interface{}, 0, len(messages))
-	ids := make([]string, 0, len(messages))
-
-	for _, msg := range messages {
-		rawData, ok := msg.Values["data"].(string)
-		if !ok {
-			ids = append(ids, msg.ID)
-			continue
-		}
-
-		var event events.AnalyticsEvent
-		if err := json.Unmarshal([]byte(rawData), &event); err != nil {
-			log.Printf("[AnalyticsWorker] Skipping malformed event %s: %v", msg.ID, err)
-			ids = append(ids, msg.ID)
-			continue
-		}
-
-		var payload map[string]interface{}
-		json.Unmarshal(event.Payload, &payload)
-		if payload == nil {
-			payload = make(map[string]interface{})
-		}
-
-		records = append(records, map[string]interface{}{
-			"event_id":    event.ID,
-			"event_type":  string(event.Type),
-			"user_id":     event.UserID,
-			"payload":     payload,
-			"source":      "frontend",
-			"received_at": time.UnixMilli(event.Timestamp),
-			"created_at":  time.Now(),
-		})
-		ids = append(ids, msg.ID)
-	}
-
+	records, ids := buildAnalyticsRecords(messages)
 	if len(records) > 0 {
 		if err := batchInsert(ctx, records); err != nil {
 			return err
@@ -158,6 +88,113 @@ func processBatch() error {
 	}
 
 	return nil
+}
+
+func readBatchMessages(ctx context.Context) ([]redis.XMessage, error) {
+	messages, err := readPendingAnalyticsMessages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(messages) > 0 {
+		return messages, nil
+	}
+	return readNewAnalyticsMessages(ctx)
+}
+
+func readPendingAnalyticsMessages(ctx context.Context) ([]redis.XMessage, error) {
+	entries, err := readAnalyticsGroupWithRetry(ctx, &redis.XReadGroupArgs{
+		Group:    analyticsConsumerGroup,
+		Consumer: analyticsConsumerID,
+		Streams:  []string{analyticsStream, "0"},
+		Count:    int64(analyticsBatchSize),
+		Block:    0,
+		NoAck:    false,
+	})
+	if err != nil {
+		if err == redis.Nil {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	messages := streamMessages(entries)
+	if len(messages) > 0 {
+		log.Printf("[AnalyticsWorker] Processing batch of %d pending (unacknowledged) events", len(messages))
+	}
+	return messages, nil
+}
+
+func readNewAnalyticsMessages(ctx context.Context) ([]redis.XMessage, error) {
+	entries, err := readAnalyticsGroupWithRetry(ctx, &redis.XReadGroupArgs{
+		Group:    analyticsConsumerGroup,
+		Consumer: analyticsConsumerID,
+		Streams:  []string{analyticsStream, ">"},
+		Count:    int64(analyticsBatchSize),
+		Block:    analyticsBlockTime,
+		NoAck:    false,
+	})
+	if err != nil {
+		if err == redis.Nil {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	messages := streamMessages(entries)
+	if len(messages) > 0 {
+		log.Printf("[AnalyticsWorker] Processing batch of %d new events", len(messages))
+	}
+	return messages, nil
+}
+
+func streamMessages(entries []redis.XStream) []redis.XMessage {
+	if len(entries) == 0 || len(entries[0].Messages) == 0 {
+		return nil
+	}
+	return entries[0].Messages
+}
+
+func buildAnalyticsRecords(messages []redis.XMessage) ([]map[string]interface{}, []string) {
+	records := make([]map[string]interface{}, 0, len(messages))
+	ids := make([]string, 0, len(messages))
+
+	for _, msg := range messages {
+		if record, ok := analyticsRecordFromMessage(msg); ok {
+			records = append(records, record)
+		}
+		ids = append(ids, msg.ID)
+	}
+
+	return records, ids
+}
+
+func analyticsRecordFromMessage(msg redis.XMessage) (map[string]interface{}, bool) {
+	rawData, ok := msg.Values["data"].(string)
+	if !ok {
+		return nil, false
+	}
+
+	var event events.AnalyticsEvent
+	if err := json.Unmarshal([]byte(rawData), &event); err != nil {
+		log.Printf("[AnalyticsWorker] Skipping malformed event %s: %v", msg.ID, err)
+		return nil, false
+	}
+
+	var payload map[string]interface{}
+	json.Unmarshal(event.Payload, &payload)
+	if payload == nil {
+		payload = make(map[string]interface{})
+	}
+
+	return map[string]interface{}{
+		"event_id":    event.ID,
+		"event_type":  string(event.Type),
+		"user_id":     event.UserID,
+		"payload":     payload,
+		"source":      "frontend",
+		"received_at": time.UnixMilli(event.Timestamp),
+		"created_at":  time.Now(),
+	}, true
 }
 
 func readAnalyticsGroupWithRetry(ctx context.Context, args *redis.XReadGroupArgs) ([]redis.XStream, error) {

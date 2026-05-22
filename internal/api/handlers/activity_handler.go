@@ -148,7 +148,7 @@ func GetStudySessions(c *gin.Context) {
 	limit := parseStudySessionsLimit(c)
 	cacheKey := fmt.Sprintf("study_sessions:%s:%d", userId, limit)
 
-	if ok := tryL1StudySessionsCache(c, cacheKey); ok {
+	if tryL1StudySessionsCache(c, cacheKey) {
 		return
 	}
 

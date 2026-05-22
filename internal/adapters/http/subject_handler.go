@@ -112,17 +112,14 @@ func (h *SubjectHandler) ListSubjects(c *gin.Context) {
 	if level := c.Query("level"); level != "" {
 		filter.Level = &level
 	}
-	if isPublished := c.Query("isPublished"); isPublished == "true" {
-		b := true
-		filter.IsPublished = &b
+	if c.Query("isPublished") == "true" {
+		filter.IsPublished = boolPtr(true)
 	}
-	if isActive := c.Query("isActive"); isActive == "true" {
-		b := true
-		filter.IsActive = &b
+	if c.Query("isActive") == "true" {
+		filter.IsActive = boolPtr(true)
 	}
-	if isFeatured := c.Query("isFeatured"); isFeatured == "true" {
-		b := true
-		filter.IsFeatured = &b
+	if c.Query("isFeatured") == "true" {
+		filter.IsFeatured = boolPtr(true)
 	}
 	if search := c.Query("search"); search != "" {
 		filter.Search = &search
@@ -183,6 +180,10 @@ func (h *SubjectHandler) GetCurriculum(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"curriculum": curriculum})
+}
+
+func boolPtr(b bool) *bool {
+	return &b
 }
 
 func (h *SubjectHandler) GetDashboardStats(c *gin.Context) {

@@ -326,42 +326,7 @@ func splitSQL(content string) []string {
 	for !p.done() {
 		ch := p.peek()
 
-		if processCommentState(p, ch) {
-			continue
-		}
-
-		if !p.inSingle && !p.inDouble && !p.inDollar {
-			if p.handleLineComment() {
-				continue
-			}
-			if p.handleBlockComment() {
-				continue
-			}
-			if p.handleDollarQuote() {
-				cur.WriteString(p.dollarTag)
-				p.skip(len([]rune(p.dollarTag)))
-				continue
-			}
-			if ch == ';' {
-				cur.WriteRune(ch)
-				if stmt := strings.TrimSpace(cur.String()); stmt != "" {
-					stmts = append(stmts, stmt)
-				}
-				cur.Reset()
-				p.skip(1)
-				continue
-			}
-		}
-
-		if processQuoteStates(p, &cur, ch) {
-			continue
-		}
-
-		if p.inDollar && strings.HasPrefix(string(p.content[p.pos:]), p.dollarTag) {
-			cur.WriteString(p.dollarTag)
-			p.skip(len([]rune(p.dollarTag)))
-			p.inDollar = false
-			p.dollarTag = ""
+		if p.tryProcessToken(&cur, &stmts, ch) {
 			continue
 		}
 
@@ -373,6 +338,63 @@ func splitSQL(content string) []string {
 		stmts = append(stmts, stmt)
 	}
 	return stmts
+}
+
+// tryProcessToken attempts to handle the current character with one of the
+// token-processing strategies (comments, quotes, dollar-quotes, semicolons).
+// Returns true if the token was consumed and the caller should continue the loop.
+func (p *sqlParser) tryProcessToken(cur *strings.Builder, stmts *[]string, ch rune) bool {
+	if processCommentState(p, ch) {
+		return true
+	}
+	if p.handleUnquotedState(cur, stmts, ch) {
+		return true
+	}
+	if processQuoteStates(p, cur, ch) {
+		return true
+	}
+	if p.handleDollarQuoteClose(cur) {
+		return true
+	}
+	return false
+}
+
+func (p *sqlParser) handleUnquotedState(cur *strings.Builder, stmts *[]string, ch rune) bool {
+	if p.inSingle || p.inDouble || p.inDollar {
+		return false
+	}
+	if p.handleLineComment() {
+		return true
+	}
+	if p.handleBlockComment() {
+		return true
+	}
+	if p.handleDollarQuote() {
+		cur.WriteString(p.dollarTag)
+		p.skip(len([]rune(p.dollarTag)))
+		return true
+	}
+	if ch == ';' {
+		cur.WriteRune(ch)
+		if stmt := strings.TrimSpace(cur.String()); stmt != "" {
+			*stmts = append(*stmts, stmt)
+		}
+		cur.Reset()
+		p.skip(1)
+		return true
+	}
+	return false
+}
+
+func (p *sqlParser) handleDollarQuoteClose(cur *strings.Builder) bool {
+	if p.inDollar && strings.HasPrefix(string(p.content[p.pos:]), p.dollarTag) {
+		cur.WriteString(p.dollarTag)
+		p.skip(len([]rune(p.dollarTag)))
+		p.inDollar = false
+		p.dollarTag = ""
+		return true
+	}
+	return false
 }
 
 // processCommentState handles inline and block comment advancement.

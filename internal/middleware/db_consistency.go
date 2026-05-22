@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"context"
+	"net/http"
 	"sync"
 	"time"
 
@@ -14,23 +16,32 @@ import (
 // subsequent reads for a short period (e.g., 5 seconds) are forced to the Source database
 // to avoid replication lag issues (Read-After-Write inconsistency).
 func DBConsistencyMiddleware(gormDB *gorm.DB) gin.HandlerFunc {
+	return dbConsistencyMiddleware(context.Background(), gormDB, 5*time.Second, time.Minute)
+}
+
+func dbConsistencyMiddleware(ctx context.Context, gormDB *gorm.DB, consistencyWindow, cleanupInterval time.Duration) gin.HandlerFunc {
 	// Fallback local map
 	writeTracker := &sync.Map{}
-	consistencyWindow := 5 * time.Second
 
 	// Eviction loop to prevent memory leak in local fallback map
 	go func() {
+		ticker := time.NewTicker(cleanupInterval)
+		defer ticker.Stop()
+
 		for {
-			time.Sleep(1 * time.Minute)
-			now := time.Now()
-			writeTracker.Range(func(key, value interface{}) bool {
-				if lastWrite, ok := value.(time.Time); ok {
-					if now.Sub(lastWrite) > consistencyWindow {
-						writeTracker.Delete(key)
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-ticker.C:
+				writeTracker.Range(func(key, value interface{}) bool {
+					if lastWrite, ok := value.(time.Time); ok {
+						if now.Sub(lastWrite) > consistencyWindow {
+							writeTracker.Delete(key)
+						}
 					}
-				}
-				return true
-			})
+					return true
+				})
+			}
 		}
 	}()
 
@@ -47,7 +58,7 @@ func DBConsistencyMiddleware(gormDB *gorm.DB) gin.HandlerFunc {
 		ctx := c.Request.Context()
 
 		// If it's a write operation, record the timestamp
-		if method == "POST" || method == "PUT" || method == "DELETE" || method == "PATCH" {
+		if isWriteMethod(method) {
 			if db.Redis != nil {
 				// Set write flag in Redis with TTL matching consistency window
 				_ = db.Redis.Set(ctx, "db_consistency:write:"+userID, "1", consistencyWindow).Err()
@@ -60,12 +71,12 @@ func DBConsistencyMiddleware(gormDB *gorm.DB) gin.HandlerFunc {
 
 		// For GET/HEAD requests, check if we should force Source
 		shouldForceSource := false
-		if db.Redis != nil {
+		if isReadMethod(method) && db.Redis != nil {
 			val, err := db.Redis.Exists(ctx, "db_consistency:write:"+userID).Result()
 			if err == nil && val > 0 {
 				shouldForceSource = true
 			}
-		} else {
+		} else if isReadMethod(method) {
 			if lastWrite, ok := writeTracker.Load(userID); ok {
 				if time.Since(lastWrite.(time.Time)) < consistencyWindow {
 					shouldForceSource = true
@@ -84,5 +95,23 @@ func DBConsistencyMiddleware(gormDB *gorm.DB) gin.HandlerFunc {
 		}
 
 		c.Next()
+	}
+}
+
+func isWriteMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
+		return true
+	default:
+		return false
+	}
+}
+
+func isReadMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead:
+		return true
+	default:
+		return false
 	}
 }

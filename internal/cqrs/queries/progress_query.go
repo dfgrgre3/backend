@@ -63,32 +63,16 @@ func (s *ProgressQueryService) readDBOrFallback() *gorm.DB {
 
 func (s *ProgressQueryService) GetSummary(userID string) (*ProgressSummaryReadModel, error) {
 	// Try L1 cache first
-	if val, ok := l1SummaryCache.Load(userID); ok {
-		entry := val.(*l1ProgressEntry)
-		if time.Now().Before(entry.expiresAt) {
-			return entry.summary, nil
-		}
-		l1SummaryCache.Delete(userID)
+	if val, ok := s.tryL1SummaryCache(userID); ok {
+		return val, nil
 	}
 
-	ctx := context.Background()
 	cacheKey := fmt.Sprintf("user_summary:%s", userID)
 
 	// Try Redis cache next
 	if db.Redis != nil {
-		redisCtx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
-		cachedVal, err := db.Redis.Get(redisCtx, cacheKey).Result()
-		cancel()
-		if err == nil {
-			var cachedSummary ProgressSummaryReadModel
-			if json.Unmarshal([]byte(cachedVal), &cachedSummary) == nil {
-				// Warm L1 cache
-				l1SummaryCache.Store(userID, &l1ProgressEntry{
-					summary:   &cachedSummary,
-					expiresAt: time.Now().Add(15 * time.Second),
-				})
-				return &cachedSummary, nil
-			}
+		if val, ok := s.tryRedisSummaryCache(userID, cacheKey); ok {
+			return val, nil
 		}
 	}
 
@@ -114,25 +98,60 @@ func (s *ProgressQueryService) GetSummary(userID string) (*ProgressSummaryReadMo
 	}
 
 	if err == nil && summary != nil {
-		// Populate L1 cache
-		l1SummaryCache.Store(userID, &l1ProgressEntry{
-			summary:   summary,
-			expiresAt: time.Now().Add(15 * time.Second),
-		})
-
-		// Cache in Redis asynchronously
-		if db.Redis != nil {
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer cancel()
-				if cacheBytes, err := json.Marshal(summary); err == nil {
-					db.Redis.Set(ctx, cacheKey, cacheBytes, 3*time.Minute)
-				}
-			}()
-		}
+		s.warmSummaryCache(userID, cacheKey, summary)
 	}
 
 	return summary, err
+}
+
+// tryL1SummaryCache attempts to fetch the summary from the in-memory L1 cache.
+// Returns the cached value and true if found and not expired.
+func (s *ProgressQueryService) tryL1SummaryCache(userID string) (*ProgressSummaryReadModel, bool) {
+	if val, ok := l1SummaryCache.Load(userID); ok {
+		entry := val.(*l1ProgressEntry)
+		if time.Now().Before(entry.expiresAt) {
+			return entry.summary, true
+		}
+		l1SummaryCache.Delete(userID)
+	}
+	return nil, false
+}
+
+// tryRedisSummaryCache attempts to fetch the summary from Redis.
+// Returns the cached value and true if found; also warms the L1 cache.
+func (s *ProgressQueryService) tryRedisSummaryCache(userID, cacheKey string) (*ProgressSummaryReadModel, bool) {
+	redisCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	cachedVal, err := db.Redis.Get(redisCtx, cacheKey).Result()
+	cancel()
+	if err == nil {
+		var cachedSummary ProgressSummaryReadModel
+		if json.Unmarshal([]byte(cachedVal), &cachedSummary) == nil {
+			l1SummaryCache.Store(userID, &l1ProgressEntry{
+				summary:   &cachedSummary,
+				expiresAt: time.Now().Add(15 * time.Second),
+			})
+			return &cachedSummary, true
+		}
+	}
+	return nil, false
+}
+
+// warmSummaryCache populates both L1 cache and Redis asynchronously.
+func (s *ProgressQueryService) warmSummaryCache(userID, cacheKey string, summary *ProgressSummaryReadModel) {
+	l1SummaryCache.Store(userID, &l1ProgressEntry{
+		summary:   summary,
+		expiresAt: time.Now().Add(15 * time.Second),
+	})
+
+	if db.Redis != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if cacheBytes, err := json.Marshal(summary); err == nil {
+				db.Redis.Set(ctx, cacheKey, cacheBytes, 3*time.Minute)
+			}
+		}()
+	}
 }
 
 func (s *ProgressQueryService) getSummaryFallback(userID string) (*ProgressSummaryReadModel, error) {

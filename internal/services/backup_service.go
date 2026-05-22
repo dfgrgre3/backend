@@ -63,7 +63,35 @@ func (s *BackupService) PerformBackup(backupID string) error {
 		return err
 	}
 
-	// Initialize progress
+	s.initBackupProgress(backupID)
+	defer s.cleanupProgress(backupID)
+
+	s.simulateProgressSteps(backupID)
+	backupData, backupErr := s.runPgDump()
+	s.updateBackupProgress(backupID, "Compressing backup...", 70)
+	time.Sleep(200 * time.Millisecond)
+
+	if len(backupData) == 0 {
+		backupData = s.generateFallbackData(backupID, backupErr)
+	}
+
+	s.updateBackupProgress(backupID, "Writing compressed file...", 90)
+	backupPath := s.compressAndWriteBackup(backupID, backupData, &backup)
+
+	s.updateBackupProgress(backupID, "Finalizing...", 100)
+	time.Sleep(100 * time.Millisecond)
+
+	backup.Status = "completed"
+	backup.Checksum = s.generateChecksum(backupID)
+	backup.DownloadURL = backupPath
+	now := time.Now()
+	backup.CompletedAt = &now
+
+	return db.DB.Save(&backup).Error
+}
+
+// initBackupProgress initializes the progress tracking for a backup.
+func (s *BackupService) initBackupProgress(backupID string) {
 	s.mu.Lock()
 	s.progress[backupID] = &BackupProgress{
 		BackupID: backupID,
@@ -72,14 +100,27 @@ func (s *BackupService) PerformBackup(backupID string) error {
 		ETA:      300,
 	}
 	s.mu.Unlock()
+}
 
-	defer func() {
-		s.mu.Lock()
-		delete(s.progress, backupID)
-		s.mu.Unlock()
-	}()
+// cleanupProgress removes the progress entry for a backup.
+func (s *BackupService) cleanupProgress(backupID string) {
+	s.mu.Lock()
+	delete(s.progress, backupID)
+	s.mu.Unlock()
+}
 
-	// Simulate progress steps (the actual work happens next)
+// updateBackupProgress sets the message and percent for a backup in progress.
+func (s *BackupService) updateBackupProgress(backupID, message string, percent int) {
+	s.mu.Lock()
+	if p, ok := s.progress[backupID]; ok {
+		p.Message = message
+		p.Percent = percent
+	}
+	s.mu.Unlock()
+}
+
+// simulateProgressSteps runs the initial progress simulation steps.
+func (s *BackupService) simulateProgressSteps(backupID string) {
 	steps := []struct {
 		message string
 		percent int
@@ -88,53 +129,36 @@ func (s *BackupService) PerformBackup(backupID string) error {
 		{"Preparing backup...", 10, 500 * time.Millisecond},
 		{"Dumping database...", 40, 500 * time.Millisecond},
 	}
-
 	for _, step := range steps {
-		s.mu.Lock()
-		if p, ok := s.progress[backupID]; ok {
-			p.Message = step.message
-			p.Percent = step.percent
-		}
-		s.mu.Unlock()
+		s.updateBackupProgress(backupID, step.message, step.percent)
 		time.Sleep(step.delay)
 	}
+}
 
-	var backupData []byte
-	var backupErr error
-
-	// Retrieve DSN from environment or global config
+// runPgDump executes pg_dump and returns the backup data and any error.
+func (s *BackupService) runPgDump() ([]byte, error) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		dsn = config.Load().DatabaseURL
 	}
-
-	if dsn != "" {
-		// Run pg_dump passing DSN directly (requires pg_dump in system path)
-		cmd := exec.Command("pg_dump", "-d", dsn, "--no-owner", "--no-acl")
-		var outBuf, errBuf bytes.Buffer
-		cmd.Stdout = &outBuf
-		cmd.Stderr = &errBuf
-		
-		if err := cmd.Run(); err == nil {
-			backupData = outBuf.Bytes()
-		} else {
-			backupErr = fmt.Errorf("pg_dump failed: %v (stderr: %s)", err, errBuf.String())
-		}
-	} else {
-		backupErr = fmt.Errorf("no database connection URL configured")
+	if dsn == "" {
+		return nil, fmt.Errorf("no database connection URL configured")
 	}
 
-	s.mu.Lock()
-	if p, ok := s.progress[backupID]; ok {
-		p.Message = "Compressing backup..."
-		p.Percent = 70
-	}
-	s.mu.Unlock()
-	time.Sleep(200 * time.Millisecond)
+	cmd := exec.Command("pg_dump", "-d", dsn, "--no-owner", "--no-acl")
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
 
-	if len(backupData) == 0 {
-		// Fallback: Generate mock database SQL script
-		backupData = []byte(fmt.Sprintf(`-- Thanawy Platform Database Backup Fallback
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("pg_dump failed: %v (stderr: %s)", err, errBuf.String())
+	}
+	return outBuf.Bytes(), nil
+}
+
+// generateFallbackData creates a fallback SQL script when pg_dump fails.
+func (s *BackupService) generateFallbackData(backupID string, backupErr error) []byte {
+	return []byte(fmt.Sprintf(`-- Thanawy Platform Database Backup Fallback
 -- Backup ID: %s
 -- Timestamp: %s
 -- Error during pg_dump: %v
@@ -146,46 +170,24 @@ CREATE TABLE IF NOT EXISTS "BackupFallback" (
 );
 INSERT INTO "BackupFallback" (id, created_at) VALUES ('%s', NOW());
 `, backupID, time.Now().Format(time.RFC3339), backupErr, backupID))
-	}
+}
 
-	s.mu.Lock()
-	if p, ok := s.progress[backupID]; ok {
-		p.Message = "Writing compressed file..."
-		p.Percent = 90
-	}
-	s.mu.Unlock()
-
-	// Compress using gzip
+// compressAndWriteBackup compresses the backup data using gzip and writes it to disk.
+// Returns the backup file path.
+func (s *BackupService) compressAndWriteBackup(backupID string, backupData []byte, backup *models.Backup) string {
 	backupPath := filepath.Join(s.basePath, fmt.Sprintf("backup-%s.sql.gz", backupID))
 	var compressedBuf bytes.Buffer
 	gzw := gzip.NewWriter(&compressedBuf)
-	
+
 	if _, err := gzw.Write(backupData); err == nil {
-		_ = gzw.Close()
-		_ = os.WriteFile(backupPath, compressedBuf.Bytes(), 0644)
+		gzw.Close()
+		os.WriteFile(backupPath, compressedBuf.Bytes(), 0644)
 		backup.Size = int64(compressedBuf.Len())
 	} else {
-		// Fallback to uncompressed file
-		_ = os.WriteFile(backupPath, backupData, 0644)
+		os.WriteFile(backupPath, backupData, 0644)
 		backup.Size = int64(len(backupData))
 	}
-
-	s.mu.Lock()
-	if p, ok := s.progress[backupID]; ok {
-		p.Message = "Finalizing..."
-		p.Percent = 100
-	}
-	s.mu.Unlock()
-	time.Sleep(100 * time.Millisecond)
-
-	backup.Status = "completed"
-	backup.Checksum = s.generateChecksum(backupID)
-	backup.DownloadURL = backupPath
-
-	now := time.Now()
-	backup.CompletedAt = &now
-
-	return db.DB.Save(&backup).Error
+	return backupPath
 }
 
 // RestoreBackup restores from a backup

@@ -6,6 +6,16 @@ import (
 	"thanawy-backend/internal/middleware"
 )
 
+const (
+	adminAnnouncementsRoute     = "/announcements"
+	adminTeachersRoute          = "/teachers"
+	adminCourseCategoriesRoute  = "/course-categories"
+	adminBackupsScheduleRoute   = "/backups/schedule"
+	adminBackupsScheduleIDRoute = adminBackupsScheduleRoute + "/:id"
+	adminUserIDRoute            = "/users/:id"
+	adminSubjectsRoute          = "/subjects"
+)
+
 // SetupAdminRoutes configures administrative API endpoints
 func SetupAdminRoutes(router *gin.Engine) {
 	admin := router.Group("/api/admin")
@@ -17,10 +27,10 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.GET("/live", handlers.GetAdminLive)
 		admin.GET("/analytics", handlers.GetAdminAnalytics)
 		admin.GET("/infrastructure/stats", handlers.GetAdminInfrastructureStats)
-		admin.GET("/announcements", handlers.GetAdminAnnouncements)
-		admin.POST("/announcements", handlers.CreateAdminAnnouncement)
-		admin.PATCH("/announcements", handlers.UpdateAdminAnnouncement)
-		admin.DELETE("/announcements", handlers.DeleteAdminAnnouncement)
+		admin.GET(adminAnnouncementsRoute, handlers.GetAdminAnnouncements)
+		admin.POST(adminAnnouncementsRoute, handlers.CreateAdminAnnouncement)
+		admin.PATCH(adminAnnouncementsRoute, handlers.UpdateAdminAnnouncement)
+		admin.DELETE(adminAnnouncementsRoute, handlers.DeleteAdminAnnouncement)
 		admin.GET("/reports/overview", handlers.GetAdminReportsOverview)
 		admin.GET("/reports/users", handlers.GetAdminReportsUsers)
 		admin.GET("/reports/books", handlers.GetAdminReportsBooks)
@@ -33,16 +43,16 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.DELETE("/impersonate", handlers.DeleteImpersonation)
 
 		// Teachers
-		admin.GET("/teachers", handlers.GetTeachersForAdmin)
-		admin.POST("/teachers", handlers.CreateTeacher)
-		admin.PATCH("/teachers", handlers.UpdateTeacher)
-		admin.DELETE("/teachers", handlers.DeleteTeacher)
+		admin.GET(adminTeachersRoute, handlers.GetTeachersForAdmin)
+		admin.POST(adminTeachersRoute, handlers.CreateTeacher)
+		admin.PATCH(adminTeachersRoute, handlers.UpdateTeacher)
+		admin.DELETE(adminTeachersRoute, handlers.DeleteTeacher)
 
 		// Categories
-		admin.GET("/course-categories", handlers.GetCategoriesForAdmin)
-		admin.POST("/course-categories", handlers.CreateCategory)
-		admin.PATCH("/course-categories", handlers.UpdateCategory)
-		admin.DELETE("/course-categories", handlers.DeleteCategory)
+		admin.GET(adminCourseCategoriesRoute, handlers.GetCategoriesForAdmin)
+		admin.POST(adminCourseCategoriesRoute, handlers.CreateCategory)
+		admin.PATCH(adminCourseCategoriesRoute, handlers.UpdateCategory)
+		admin.DELETE(adminCourseCategoriesRoute, handlers.DeleteCategory)
 
 		// Support Tickets
 		admin.GET("/tickets", handlers.GetSupportTickets)
@@ -61,11 +71,11 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/backups", handlers.CreateBackup)
 		admin.GET("/backups/stats", handlers.GetBackupStats)
 		admin.GET("/backups/tables", handlers.GetDatabaseTables)
-		admin.POST("/backups/schedule", handlers.ScheduleBackup)
-		admin.PUT("/backups/schedule", handlers.UpdateBackupSchedule)
-		admin.PUT("/backups/schedule/:id", handlers.UpdateBackupSchedule)
-		admin.DELETE("/backups/schedule", handlers.DeleteBackupSchedule)
-		admin.DELETE("/backups/schedule/:id", handlers.DeleteBackupSchedule)
+		admin.POST(adminBackupsScheduleRoute, handlers.ScheduleBackup)
+		admin.PUT(adminBackupsScheduleRoute, handlers.UpdateBackupSchedule)
+		admin.PUT(adminBackupsScheduleIDRoute, handlers.UpdateBackupSchedule)
+		admin.DELETE(adminBackupsScheduleRoute, handlers.DeleteBackupSchedule)
+		admin.DELETE(adminBackupsScheduleIDRoute, handlers.DeleteBackupSchedule)
 		admin.DELETE("/backups/:id", handlers.DeleteBackup)
 		admin.GET("/backups/:id/download", handlers.DownloadBackup)
 		admin.POST("/backups/:id/restore", handlers.RestoreBackup)
@@ -175,17 +185,17 @@ func SetupAdminRoutes(router *gin.Engine) {
 		// User
 		admin.GET("/users", handlers.GetUsers)
 		admin.POST("/users", handlers.CreateUser)
-		admin.GET("/users/:id", handlers.GetUserByID)
-		admin.PATCH("/users/:id", handlers.UpdateUser)
-		admin.DELETE("/users/:id", handlers.DeleteUser)
+		admin.GET(adminUserIDRoute, handlers.GetUserByID)
+		admin.PATCH(adminUserIDRoute, handlers.UpdateUser)
+		admin.DELETE(adminUserIDRoute, handlers.DeleteUser)
 		admin.GET("/search/users", handlers.SearchUsers)
 		admin.POST("/users/search", handlers.SearchUsers)
 
 		// Subject
-		admin.GET("/subjects", handlers.GetSubjects)
-		admin.POST("/subjects", handlers.CreateSubject)
-		admin.PATCH("/subjects", handlers.UpdateSubject)
-		admin.DELETE("/subjects", handlers.DeleteSubject)
+		admin.GET(adminSubjectsRoute, handlers.GetSubjects)
+		admin.POST(adminSubjectsRoute, handlers.CreateSubject)
+		admin.PATCH(adminSubjectsRoute, handlers.UpdateSubject)
+		admin.DELETE(adminSubjectsRoute, handlers.DeleteSubject)
 
 		// Curriculum
 		admin.PATCH("/subjects/:id/curriculum", handlers.UpdateCourseCurriculum)

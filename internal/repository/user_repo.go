@@ -88,38 +88,15 @@ func (r *UserRepository) FindByEmailNoCache(email string) (*models.User, error) 
 }
 
 func (r *UserRepository) FindByID(id string) (*models.User, error) {
-	// 1. Try local memory cache first to bypass Redis cloud network latency
-	if val, ok := localUserCache.Load(id); ok {
-		cached := val.(InMemoryUserCache)
-		if time.Now().Before(cached.ExpiresAt) {
-			return cached.User, nil
-		}
-		localUserCache.Delete(id)
+	// Try local memory cache first to bypass Redis cloud network latency
+	if val, ok := r.tryLocalUserCache(id); ok {
+		return val, nil
 	}
 
 	cacheKey := fmt.Sprintf(userIDCacheKeyFormat, UserCachePrefix, id)
 
 	val, err, _ := r.sf.Do(cacheKey, func() (interface{}, error) {
-		var user models.User
-
-		// Try cache first
-		if db.Redis != nil {
-			redisCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-			cachedVal, err := db.Redis.Get(redisCtx, cacheKey).Result()
-			cancel()
-			if err == nil {
-				if json.Unmarshal([]byte(cachedVal), &user) == nil {
-					return &user, nil
-				}
-			}
-		}
-
-		// Hit Database (Unscoped to bypass soft delete until deleted_at column is added)
-		err := r.db.Unscoped().Take(&user, queryByID, id).Error
-		if err == nil && db.Redis != nil {
-			r.cacheUser(&user)
-		}
-		return &user, err
+		return r.fetchUserFromStore(cacheKey, id)
 	})
 
 	if err != nil {
@@ -134,6 +111,44 @@ func (r *UserRepository) FindByID(id string) (*models.User, error) {
 	})
 
 	return resUser, nil
+}
+
+// tryLocalUserCache attempts to fetch the user from the in-memory local cache.
+// Returns the cached user and true if found and not expired.
+func (r *UserRepository) tryLocalUserCache(id string) (*models.User, bool) {
+	if val, ok := localUserCache.Load(id); ok {
+		cached := val.(InMemoryUserCache)
+		if time.Now().Before(cached.ExpiresAt) {
+			return cached.User, true
+		}
+		localUserCache.Delete(id)
+	}
+	return nil, false
+}
+
+// fetchUserFromStore attempts to retrieve the user from Redis cache first,
+// then falls back to the database. Caches the result in Redis on success.
+func (r *UserRepository) fetchUserFromStore(cacheKey, id string) (*models.User, error) {
+	// Try Redis cache first
+	if db.Redis != nil {
+		redisCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		cachedVal, err := db.Redis.Get(redisCtx, cacheKey).Result()
+		cancel()
+		if err == nil {
+			var user models.User
+			if json.Unmarshal([]byte(cachedVal), &user) == nil {
+				return &user, nil
+			}
+		}
+	}
+
+	// Hit Database (Unscoped to bypass soft delete until deleted_at column is added)
+	var user models.User
+	err := r.db.Unscoped().Take(&user, queryByID, id).Error
+	if err == nil && db.Redis != nil {
+		r.cacheUser(&user)
+	}
+	return &user, err
 }
 
 func (r *UserRepository) Update(user *models.User) error {

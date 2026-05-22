@@ -30,3 +30,7 @@ Desktop.ini
 # Go specific
 *.test
 *.out
+*.prof
+*.cover
+*.tmp
+*.go.*
