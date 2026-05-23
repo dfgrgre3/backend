@@ -23,6 +23,7 @@ bin/
 # Environment & Configuration Files
 # ==========================================
 .env
+.env.local
 .env.*
 !.env.example
 
@@ -113,3 +114,6 @@ ehthumbs.db
 Thumbs.db
 Desktop.ini
 desktop.ini
+
+.vercel
+.env*
