@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -90,6 +91,64 @@ func Load() *Config {
 	}
 
 	return c
+}
+
+// LoadSafe returns a Config without calling log.Fatal.
+// Instead, it returns the configuration and an error if JWT_SECRET is invalid.
+// This is used by the Vercel serverless handler to avoid crashing on cold start.
+func LoadSafe() (*Config, error) {
+	dbURL := getEnv("DATABASE_URL", "")
+	jwtSecret := getEnv("JWT_SECRET", "")
+	environment := getEnv("NODE_ENV", "development")
+
+	if environment == "production" {
+		if jwtSecret == "" || jwtSecret == "default_secret" || jwtSecret == "dev_only_secret_change_in_production" {
+			return nil, fmt.Errorf("JWT_SECRET must be set to a secure, unique value in production environments")
+		}
+		if len(jwtSecret) < 32 {
+			return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters long for production security")
+		}
+	} else if jwtSecret == "" {
+		log.Println("WARNING: JWT_SECRET is not set. Using insecure default for development only.")
+		jwtSecret = "dev_only_secret_change_in_production_" + generateRandomString(16)
+	}
+
+	c := &Config{
+		DatabaseURL:          dbURL,
+		DatabaseWriteURL:     getEnv("DATABASE_WRITE_DSN", ""),
+		DatabaseReadReplicas: parseReplicas(getEnv("DATABASE_REPLICAS", "")),
+		JWTSecret:            jwtSecret,
+		Environment:          environment,
+		StorageType:          getEnv("STORAGE_TYPE", "s3"),
+	}
+
+	c.S3.Endpoint = getEnv("S3_ENDPOINT", "")
+	c.S3.AccessKey = getEnv("S3_ACCESS_KEY", "")
+	c.S3.SecretKey = getEnv("S3_SECRET_KEY", "")
+	c.S3.Bucket = getEnv("S3_BUCKET", "")
+	c.S3.Region = getEnv("S3_REGION", "us-east-1")
+	c.S3.UseSSL = getEnv("S3_USE_SSL", "true") == "true"
+	c.S3.PublicURL = getEnv("S3_PUBLIC_URL", "")
+
+	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SECRET", "")
+
+	defaultRanges := []string{
+		"127.0.0.1/8",
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"::1/128",
+	}
+	models.DefaultInternalIPRanges = defaultRanges
+
+	internalIPsRaw := getEnv("INTERNAL_IP_RANGES", "")
+	if internalIPsRaw != "" {
+		c.InternalIPRanges = strings.Split(internalIPsRaw, ",")
+	} else {
+		c.InternalIPRanges = defaultRanges
+	}
+
+	return c, nil
 }
 
 // generateRandomString generates a random string for dev secrets
