@@ -25,6 +25,7 @@ func SetupAdminRoutes(router *gin.Engine) {
 	admin := router.Group("/api/admin")
 	admin.Use(middleware.Auth())
 	admin.Use(middleware.AdminRequired())
+	admin.Use(middleware.StrictRBAC())
 	{
 		// Dashboard
 		admin.GET("/dashboard", handlers.GetAdminDashboard)
@@ -241,6 +242,15 @@ func SetupAdminRoutes(router *gin.Engine) {
 
 		// Search
 		admin.GET("/search/content", handlers.SearchContent)
+
+		// Partitions, Marketing & Contests (moved from protected_routes.go)
+		admin.GET("/database-partitions", handlers.DatabasePartitions)
+		admin.GET("/marketing", handlers.Marketing)
+		admin.POST("/marketing", handlers.Marketing)
+		admin.GET("/contests", handlers.Contests)
+		admin.POST("/contests", handlers.Contests)
+		admin.PATCH("/contests/:id", handlers.Contests)
+		admin.DELETE("/contests/:id", handlers.Contests)
 
 		// Course action
 		admin.GET(adminCoursesActionRoute, handlers.AdminCourseAction)

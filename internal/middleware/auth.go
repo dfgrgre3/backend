@@ -20,6 +20,7 @@ import (
 
 	"github.com/MicahParks/keyfunc/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -34,18 +35,13 @@ var (
 	jwksMutex    sync.RWMutex
 	jwksTTL      = 1 * time.Hour // Default TTL, can be overridden by JWKS_CACHE_TTL_HOURS env var
 
-	localRolePermsTTL = 5 * time.Minute
-	rolePermsRedisTTL = 5 * time.Minute
+	localRolePermsTTL        = 5 * time.Minute
+	rolePermsRedisTTL        = 5 * time.Minute
+	localRolePermsMaxEntries = 10000
 )
 
-type InMemoryRolePerms struct {
-	Role        string
-	Permissions []string
-	ExpiresAt   time.Time
-}
-
 var (
-	localRolePermsCache sync.Map
+	localRolePermsCache = expirable.NewLRU[string, *userAuthContext](localRolePermsMaxEntries, nil, localRolePermsTTL)
 	userContextSF       singleflight.Group
 )
 
@@ -56,7 +52,7 @@ type userAuthContext struct {
 
 // InvalidateRolePermsCache evicts a user's cached role/permissions
 func InvalidateRolePermsCache(userID string) {
-	localRolePermsCache.Delete(userID)
+	localRolePermsCache.Remove(userID)
 }
 
 // Context keys for storing user information in request context
@@ -187,18 +183,7 @@ func setContextPermissions(c *gin.Context, permissions models.JSONStringArray) {
 // fetchCachedRolePerms checks local in-memory cache for user role/permissions.
 // Returns the cached context and true if found and not expired.
 func fetchCachedRolePerms(userID string) (*userAuthContext, bool) {
-	val, ok := localRolePermsCache.Load(userID)
-	if !ok {
-		return nil, false
-	}
-
-	cached := val.(InMemoryRolePerms)
-	if time.Now().Before(cached.ExpiresAt) {
-		return &userAuthContext{Role: cached.Role, Permissions: cached.Permissions}, true
-	}
-
-	localRolePermsCache.Delete(userID)
-	return nil, false
+	return localRolePermsCache.Get(userID)
 }
 
 // fetchRedisRolePerms attempts to retrieve user role/permissions from Redis cache.
@@ -231,11 +216,7 @@ func fetchRedisRolePerms(cacheKey string) (*userAuthContext, bool) {
 
 // storeInLocalCache populates the in-memory cache for the given user.
 func storeInLocalCache(userID string, ctx *userAuthContext) {
-	localRolePermsCache.Store(userID, InMemoryRolePerms{
-		Role:        ctx.Role,
-		Permissions: ctx.Permissions,
-		ExpiresAt:   time.Now().Add(localRolePermsTTL),
-	})
+	localRolePermsCache.Add(userID, ctx)
 }
 
 // fetchDatabaseRolePerms retrieves user role/permissions from the database.
@@ -343,13 +324,24 @@ func processImpersonation(c *gin.Context, adminID string) {
 		return
 	}
 
-	var targetUser models.User
-	if err := db.DB.Unscoped().Select("id", "role", "permissions").Take(&targetUser, "id = ?", impersonatedID).Error; err == nil {
+	var authCtx *userAuthContext
+	// Try local in-memory cache first to bypass Redis cloud network latency
+	if cached, ok := fetchCachedRolePerms(impersonatedID); ok {
+		authCtx = cached
+	} else {
+		// Use singleflight to collapse concurrent calls for the same user
+		res, err, _ := userContextSF.Do(impersonatedID, buildSingleFlightCallback(impersonatedID, ""))
+		if err == nil {
+			authCtx = res.(*userAuthContext)
+		}
+	}
+
+	if authCtx != nil && authCtx.Role != "" {
 		c.Set("originalAdminId", adminID)
 		c.Set("userId", impersonatedID)
-		c.Set("role", string(targetUser.Role))
+		c.Set("role", authCtx.Role)
 		c.Set("isImpersonating", true)
-		setContextPermissions(c, targetUser.Permissions)
+		c.Set("permissions", authCtx.Permissions)
 	}
 }
 
@@ -361,6 +353,7 @@ func AdminRequired() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Admin access required"})
 			return
 		}
+		MarkRBACAuthorized(c)
 		c.Next()
 	}
 }
@@ -373,6 +366,7 @@ func ModeratorRequired() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Moderator access required"})
 			return
 		}
+		MarkRBACAuthorized(c)
 		c.Next()
 	}
 }
@@ -385,6 +379,7 @@ func AdminOrModerator() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Admin or Moderator access required"})
 			return
 		}
+		MarkRBACAuthorized(c)
 		c.Next()
 	}
 }
@@ -394,6 +389,7 @@ func RoleRequired(roles ...string) gin.HandlerFunc {
 		currentRole, _ := c.Get("role")
 		for _, role := range roles {
 			if currentRole == role {
+				MarkRBACAuthorized(c)
 				c.Next()
 				return
 			}
@@ -425,6 +421,7 @@ func PermissionRequired(permission string) gin.HandlerFunc {
 		}
 
 		if user.HasPermission(permission) {
+			MarkRBACAuthorized(c)
 			c.Next()
 			return
 		}

@@ -319,9 +319,12 @@ func ImpersonateUser(c *gin.Context) {
 		return
 	}
 
-	// Set impersonation cookie
-	// In a real app, this should be a signed cookie or stored in a session
-	c.SetCookie("impersonate_user_id", req.TargetUserID, 3600, "/", "", isProduction(), true)
+	// Set impersonation cookie with maximum security:
+	// HttpOnly=true — prevents JavaScript access (XSS protection)
+	// Secure=true — only sent over HTTPS
+	// SameSite=Strict — prevents CSRF attacks (never sent for cross-site requests)
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("impersonate_user_id", req.TargetUserID, 3600, "/", "", true, true)
 
 	api_response.Success(c, gin.H{
 		"success": true,

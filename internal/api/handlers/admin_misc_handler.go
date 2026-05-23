@@ -1006,7 +1006,8 @@ func GetLibraryCategories(c *gin.Context) {
 }
 
 func DeleteImpersonation(c *gin.Context) {
-	c.SetCookie("impersonate_user_id", "", -1, "/", "", isProduction(), true)
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("impersonate_user_id", "", -1, "/", "", true, true)
 	api_response.Success(c, gin.H{
 		"message": "تم إنهاء جلسة انتحال الشخصية والعودة لحسابك الأصلي",
 	})

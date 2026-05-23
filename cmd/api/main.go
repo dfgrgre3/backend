@@ -34,7 +34,6 @@ import (
 	"thanawy-backend/internal/api/handlers"
 	"thanawy-backend/internal/middleware"
 	thanawyv1 "thanawy-backend/internal/proto/thanawy/v1"
-	"thanawy-backend/internal/worker"
 
 	_ "thanawy-backend/docs" // Required for Swagger documentation generation
 
@@ -74,8 +73,7 @@ func main() {
 	}
 
 	// Initialize Hexagonal Architecture (Dependency Injection)
-	services, hexHandlers := app.Initialize(db.DB)
-	_ = services // Used for domain services
+	_, hexHandlers := app.Initialize(db.DB)
 
 	// Initialize WebSocket Hub with Redis Pub/Sub support
 	handlers.InitHub()
@@ -88,76 +86,94 @@ func main() {
 	// Setup Router
 	r := setupRouter(cfg, hexHandlers)
 
-	// Start gRPC Server
-	grpcServer := startGRPCServer(courseSvc, authSvc, analyticsSvc)
+	runAPI := getEnvBool("RUN_API", true)
+	runWorkers := getEnvBool("RUN_WORKERS", true)
+	runScheduler := getEnvBool("RUN_SCHEDULER", true)
 
-	// Start Background Worker and Periodic Scheduler
-	go func() {
-		log.Println("Starting background worker...")
-		worker.StartWorker()
-	}()
+	var srv *http.Server
+	var grpcServer *grpc.Server
 
-	go func() {
-		log.Println("Starting periodic task scheduler...")
-		worker.StartScheduler()
-	}()
-
-	// Start Analytics Batch Worker (separate from Asynq — uses Redis Stream)
-	go func() {
-		log.Println("Starting analytics batch worker (Redis Stream consumer)...")
-		worker.StartAnalyticsBatchWorker()
-	}()
-
-	// Start HTTP Server with graceful shutdown
-	port := os.Getenv("BACKEND_PORT")
-	if port == "" {
-		port = os.Getenv("PORT")
+	if runAPI {
+		// Start gRPC Server
+		grpcServer = startGRPCServer(courseSvc, authSvc, analyticsSvc)
 	}
 
-	// If port is 3000, it's likely picking up the Next.js PORT from root .env
-	// We fallback to 8082 to avoid the "address already in use" conflict.
-	if port == "" || port == "3000" {
-		port = "8082"
+	if runWorkers {
+		// Start Background Worker and Periodic Scheduler
+		go func() {
+			log.Println("Starting background worker...")
+			worker.StartWorker()
+		}()
+
+		// Start Analytics Batch Worker (separate from Asynq — uses Redis Stream)
+		go func() {
+			log.Println("Starting analytics batch worker (Redis Stream consumer)...")
+			worker.StartAnalyticsBatchWorker()
+		}()
 	}
 
-	srv := &http.Server{
-		Addr:         ":" + port,
-		Handler:      r,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+	if runScheduler {
+		go func() {
+			log.Println("Starting periodic task scheduler...")
+			worker.StartScheduler()
+		}()
 	}
 
-	// Run server in goroutine
-	go func() {
-		log.Printf("HTTP server starting on port %s", port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
+	if runAPI {
+		// Start HTTP Server with graceful shutdown
+		port := os.Getenv("BACKEND_PORT")
+		if port == "" {
+			port = os.Getenv("PORT")
 		}
-	}()
 
-	// Wait for interrupt signal to gracefully shutdown the server
+		// If port is 3000, it's likely picking up the Next.js PORT from root .env
+		// We fallback to 8082 to avoid the "address already in use" conflict.
+		if port == "" || port == "3000" {
+			port = "8082"
+		}
+
+		srv = &http.Server{
+			Addr:         ":" + port,
+			Handler:      r,
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 30 * time.Second,
+			IdleTimeout:  120 * time.Second,
+		}
+
+		// Run server in goroutine
+		go func() {
+			log.Printf("HTTP server starting on port %s", port)
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("Failed to start server: %v", err)
+			}
+		}()
+	}
+
+	// Wait for interrupt signal to gracefully shutdown processes
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	log.Println("Shutting down processes...")
 
-	// Create shutdown context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	if runAPI && srv != nil {
+		log.Println("Shutting down HTTP server...")
+		// Create shutdown context with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-	// Shutdown HTTP server
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("HTTP server forced to shutdown: %v", err)
+		// Shutdown HTTP server
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("HTTP server forced to shutdown: %v", err)
+		}
 	}
 
 	// Shutdown gRPC server if exists
-	if grpcServer != nil {
+	if runAPI && grpcServer != nil {
 		log.Println("Shutting down gRPC server...")
 		grpcServer.GracefulStop()
 	}
 
-	log.Println("Server exited")
+	log.Println("Process exited")
 }
 
 func initS3Storage(cfg *config.Config) {
@@ -243,4 +259,16 @@ func startGRPCServer(courseSvc *internalgrpc.CourseServiceServer, authSvc *inter
 		}
 	}()
 	return grpcServer
+}
+
+func getEnvBool(key string, defaultVal bool) bool {
+	valStr := os.Getenv(key)
+	if valStr == "" {
+		return defaultVal
+	}
+	val, err := strconv.ParseBool(valStr)
+	if err != nil {
+		return defaultVal
+	}
+	return val
 }

@@ -19,6 +19,8 @@ func SetupProtectedRoutes(router *gin.Engine) {
 	protected := router.Group("/api")
 	protected.Use(middleware.Auth())
 	protected.Use(middleware.Idempotency())
+	protected.Use(middleware.AnyAuthenticatedUser())
+	protected.Use(middleware.StrictRBAC())
 	{
 		protected.GET("/progress/summary", handlers.GetProgressSummary)
 		protected.GET("/analytics/weekly", handlers.GetWeeklyAnalytics)
@@ -84,13 +86,6 @@ func SetupProtectedRoutes(router *gin.Engine) {
 
 		// Search
 		protected.GET("/search", handlers.GlobalSearch)
-		protected.GET("/database-partitions", handlers.DatabasePartitions)
-		protected.GET("/marketing", handlers.Marketing)
-		protected.POST("/marketing", handlers.Marketing)
-		protected.GET("/contests", handlers.Contests)
-		protected.POST("/contests", handlers.Contests)
-		protected.PATCH("/contests/:id", handlers.Contests)
-		protected.DELETE("/contests/:id", handlers.Contests)
 
 		// Library
 		protected.GET("/library/books", handlers.GetLibraryBooks)
