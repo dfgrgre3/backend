@@ -93,7 +93,7 @@ func ValidateAIInput(message string, maxLength int) (string, error) {
 }
 
 // GenerateContent creates educational content using real AI
-func (s *AIService) GenerateContent(ctx context.Context, prompt string, contentType string) (string, error) {
+func (s *AIService) GenerateContent(ctx context.Context, prompt, contentType string) (string, error) {
 	if !s.enabled {
 		return "", fmt.Errorf("%s - check API key configuration", errAINotEnabled)
 	}
@@ -150,7 +150,7 @@ func (s *AIService) GenerateContentWithMessages(ctx context.Context, messages []
 }
 
 // ReviewContent reviews and provides feedback on educational content
-func (s *AIService) ReviewContent(ctx context.Context, content string, subject string) (map[string]interface{}, error) {
+func (s *AIService) ReviewContent(ctx context.Context, content, subject string) (map[string]interface{}, error) {
 	if !s.enabled {
 		return nil, fmt.Errorf(errAINotEnabled)
 	}
@@ -260,7 +260,7 @@ func getRiskLevel(score int) string {
 }
 
 // GenerateQuiz generates quiz questions for a topic
-func (s *AIService) GenerateQuiz(ctx context.Context, topic string, difficulty string, count int) ([]map[string]interface{}, error) {
+func (s *AIService) GenerateQuiz(ctx context.Context, topic, difficulty string, count int) ([]map[string]interface{}, error) {
 	if !s.enabled {
 		return nil, fmt.Errorf(errAINotEnabled)
 	}
@@ -437,17 +437,18 @@ func (s *AIService) callOpenAICompatibleWithMessages(ctx context.Context, messag
 	return result.Choices[0].Message.Content, nil
 }
 
-func (s *AIService) callGeminiWithMessages(ctx context.Context, messages []map[string]interface{}, model string) (string, error) {
+func (s *AIService) callGeminiWithMessages(ctx context.Context, messages []map[string]interface{}, _ string) (string, error) {
 	// Simple mapping for Gemini (concatenating history)
 	var prompt strings.Builder
 	for _, m := range messages {
 		role := m["role"].(string)
 		content := m["content"].(string)
-		if role == "system" {
+		switch role {
+		case "system":
 			prompt.WriteString("System: " + content + "\n")
-		} else if role == "user" {
+		case "user":
 			prompt.WriteString("User: " + content + "\n")
-		} else {
+		default:
 			prompt.WriteString("Assistant: " + content + "\n")
 		}
 	}
@@ -532,7 +533,7 @@ func (s *AIService) callGemini(ctx context.Context, systemPrompt, userMessage st
 }
 
 // LogAIInteraction logs AI usage for analytics and cost tracking
-func (s *AIService) LogAIInteraction(action string, userID string, input string, output string) error {
+func (s *AIService) LogAIInteraction(action, userID, input, output string) error {
 	interaction := models.AIConversation{
 		ID:        uuid.New().String(),
 		UserID:    userID,
@@ -556,7 +557,7 @@ func (s *AIService) LogAIInteraction(action string, userID string, input string,
 	// Save conversation and first message
 	tx := db.DB.Begin()
 	defer func() {
-		if r := recover(); r != nil {
+		if recover() != nil {
 			tx.Rollback()
 		}
 	}()

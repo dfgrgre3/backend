@@ -98,7 +98,7 @@ export type GetCourseResponse = Message<"thanawy.v1.GetCourseResponse"> & {
   /**
    * @generated from field: thanawy.v1.Course course = 1;
    */
-  course?: Course | undefined;
+  course?: Course;
 };
 
 /**

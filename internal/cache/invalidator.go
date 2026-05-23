@@ -27,81 +27,79 @@ const (
 	entityIDKeyFmt = "%sid:%s"
 )
 
-type CacheInvalidator struct {
-	ctx context.Context
-}
+type CacheInvalidator struct{}
 
 func NewCacheInvalidator() *CacheInvalidator {
-	return &CacheInvalidator{ctx: context.Background()}
+	return &CacheInvalidator{}
 }
 
-func (ci *CacheInvalidator) InvalidateSubject(id string) {
+func (ci *CacheInvalidator) InvalidateSubject(ctx context.Context, id string) {
 	if db.Redis == nil {
 		return
 	}
 	key := fmt.Sprintf(entityIDKeyFmt, CachePrefixSubject, id)
-	ci.del(key)
-	ci.invalidatePattern(CachePrefixSubject + CachePrefixList + "*")
+	ci.del(ctx, key)
+	ci.invalidatePattern(ctx, CachePrefixSubject + CachePrefixList + "*")
 	log.Printf("[Cache] Invalidated subject cache: %s", id)
 }
 
-func (ci *CacheInvalidator) InvalidateUser(id string) {
+func (ci *CacheInvalidator) InvalidateUser(ctx context.Context, id string) {
 	if db.Redis == nil {
 		return
 	}
-	ci.del(fmt.Sprintf(entityIDKeyFmt, CachePrefixUser, id))
-	ci.del(fmt.Sprintf("%semail:*", CachePrefixUser))
+	ci.del(ctx, fmt.Sprintf(entityIDKeyFmt, CachePrefixUser, id))
+	ci.del(ctx, fmt.Sprintf("%semail:*", CachePrefixUser))
 	log.Printf("[Cache] Invalidated user cache: %s", id)
 }
 
-func (ci *CacheInvalidator) InvalidateCategory(id string) {
+func (ci *CacheInvalidator) InvalidateCategory(ctx context.Context, id string) {
 	if db.Redis == nil {
 		return
 	}
 	key := fmt.Sprintf(entityIDKeyFmt, CachePrefixCategory, id)
-	ci.del(key)
-	ci.invalidatePattern(CachePrefixCategory + CachePrefixList + "*")
+	ci.del(ctx, key)
+	ci.invalidatePattern(ctx, CachePrefixCategory + CachePrefixList + "*")
 	log.Printf("[Cache] Invalidated category cache: %s", id)
 }
 
-func (ci *CacheInvalidator) InvalidateExam(id string) {
+func (ci *CacheInvalidator) InvalidateExam(ctx context.Context, id string) {
 	if db.Redis == nil {
 		return
 	}
 	key := fmt.Sprintf(entityIDKeyFmt, CachePrefixExam, id)
-	ci.del(key)
-	ci.invalidatePattern(CachePrefixExam + CachePrefixList + "*")
+	ci.del(ctx, key)
+	ci.invalidatePattern(ctx, CachePrefixExam + CachePrefixList + "*")
 	log.Printf("[Cache] Invalidated exam cache: %s", id)
 }
 
-func (ci *CacheInvalidator) InvalidateAllLists() {
+func (ci *CacheInvalidator) InvalidateAllLists(ctx context.Context) {
 	if db.Redis == nil {
 		return
 	}
-	ci.invalidatePattern("*" + CachePrefixList + "*")
+	ci.invalidatePattern(ctx, "*" + CachePrefixList + "*")
 	log.Printf("[Cache] Invalidated all list caches")
 }
 
-func (ci *CacheInvalidator) InvalidateMaterializedViews() {
+func (ci *CacheInvalidator) InvalidateMaterializedViews(ctx context.Context) {
 	if db.Redis == nil {
 		return
 	}
-	ci.del("mv_user_progress_summary")
-	ci.del("mv_user_weekly_analytics")
-	ci.del("mv_user_watch_time")
+	ci.del(ctx, "mv_user_progress_summary")
+	ci.del(ctx, "mv_user_weekly_analytics")
+	ci.del(ctx, "mv_user_watch_time")
 	log.Printf("[Cache] Invalidated materialized view caches")
 }
 
-func (ci *CacheInvalidator) del(key string) {
-	if err := db.Redis.Del(ci.ctx, key).Err(); err != nil {
+func (ci *CacheInvalidator) del(ctx context.Context, key string) {
+	if err := db.Redis.Del(ctx, key).Err(); err != nil {
 		log.Printf("[Cache] Error deleting key %s: %v", key, err)
 	}
 }
 
-func (ci *CacheInvalidator) invalidatePattern(pattern string) {
-	iter := db.Redis.Scan(ci.ctx, 0, pattern, 100).Iterator()
-	for iter.Next(ci.ctx) {
-		if err := db.Redis.Del(ci.ctx, iter.Val()).Err(); err != nil {
+func (ci *CacheInvalidator) invalidatePattern(ctx context.Context, pattern string) {
+	iter := db.Redis.Scan(ctx, 0, pattern, 100).Iterator()
+	for iter.Next(ctx) {
+		if err := db.Redis.Del(ctx, iter.Val()).Err(); err != nil {
 			log.Printf("[Cache] Error deleting pattern match %s: %v", iter.Val(), err)
 		}
 	}

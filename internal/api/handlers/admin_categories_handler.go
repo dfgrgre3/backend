@@ -128,7 +128,7 @@ func CreateCategory(c *gin.Context) {
 		return
 	}
 
-	cache.NewCacheInvalidator().InvalidateCategory(category.ID)
+	cache.NewCacheInvalidator().InvalidateCategory(c.Request.Context(), category.ID)
 	apiresponse.Created(c, gin.H{"category": category})
 }
 
@@ -173,7 +173,7 @@ func UpdateCategory(c *gin.Context) {
 		}
 	}
 
-	cache.NewCacheInvalidator().InvalidateCategory(category.ID)
+	cache.NewCacheInvalidator().InvalidateCategory(c.Request.Context(), category.ID)
 	apiresponse.Success(c, nil)
 }
 
@@ -198,7 +198,7 @@ func DeleteCategory(c *gin.Context) {
 		return
 	}
 
-	cache.NewCacheInvalidator().InvalidateCategory(input.ID)
+	cache.NewCacheInvalidator().InvalidateCategory(c.Request.Context(), input.ID)
 	apiresponse.Success(c, nil)
 }
 

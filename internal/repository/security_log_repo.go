@@ -28,7 +28,7 @@ func (r *SecurityLogRepository) FindByUserID(userID string, limit int) ([]models
 	return logs, err
 }
 
-func (r *SecurityLogRepository) FindAll(limit int, offset int) ([]models.SecurityLog, int64, error) {
+func (r *SecurityLogRepository) FindAll(limit, offset int) ([]models.SecurityLog, int64, error) {
 	var logs []models.SecurityLog
 	var count int64
 

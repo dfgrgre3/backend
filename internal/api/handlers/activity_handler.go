@@ -153,7 +153,7 @@ func GetStudySessions(c *gin.Context) {
 	}
 
 	if db.Redis != nil {
-		if ok := tryRedisStudySessionsCache(c, cacheKey); ok {
+		if tryRedisStudySessionsCache(c, cacheKey) {
 			return
 		}
 	}

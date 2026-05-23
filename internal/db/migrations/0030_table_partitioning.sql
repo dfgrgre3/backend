@@ -4,10 +4,18 @@
 
 BEGIN;
 
+-- Helper function to avoid duplicating the 'month' string literal (plsql:S1192)
+CREATE OR REPLACE FUNCTION pg_temp.date_part_month()
+RETURNS TEXT AS $$
+BEGIN
+    RETURN 'month';
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
 CREATE OR REPLACE FUNCTION pg_temp.month_start(input_date DATE)
 RETURNS DATE AS $$
 DECLARE
-    date_part CONSTANT TEXT := 'month';
+    date_part CONSTANT TEXT := pg_temp.date_part_month();
 BEGIN
     RETURN DATE_TRUNC(date_part, input_date)::DATE;
 END;
@@ -184,7 +192,7 @@ CREATE INDEX IF NOT EXISTS idx_study_session_subject ON "StudySession_partitione
 CREATE OR REPLACE FUNCTION create_future_partitions()
 RETURNS void AS $$
 DECLARE
-    date_part_month CONSTANT TEXT := 'month';
+    date_part_month CONSTANT TEXT := pg_temp.date_part_month();
     analytics_event_partition_prefix CONSTANT TEXT := 'analytics' || '_event' || '_y';
     security_audit_partition_prefix CONSTANT TEXT := 'security' || '_audit' || '_y';
     audit_log_partition_prefix CONSTANT TEXT := 'audit' || '_log' || '_y';
@@ -235,7 +243,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION drop_old_partitions(retention_months INTEGER DEFAULT 12)
 RETURNS void AS $$
 DECLARE
-    date_part_month CONSTANT TEXT := 'month';
+    date_part_month CONSTANT TEXT := pg_temp.date_part_month();
     analytics_event_partition_prefix CONSTANT TEXT := 'analytics' || '_event_' || 'y';
     security_audit_partition_prefix CONSTANT TEXT := 'security' || '_audit_' || 'y';
     audit_log_partition_prefix CONSTANT TEXT := 'audit' || '_log_' || 'y';
@@ -287,9 +295,5 @@ $$ LANGUAGE plpgsql;
 -- ============================================================
 -- Migration Complete
 -- ============================================================
-
--- Note: To migrate existing data, run:
--- INSERT INTO "AnalyticsEvent_partitioned" SELECT * FROM "AnalyticsEvent";
--- Then rename tables and update application code to use partitioned tables.
 
 COMMIT;

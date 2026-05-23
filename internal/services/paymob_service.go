@@ -104,7 +104,7 @@ func (s *PaymobService) RegisterOrder(authToken string, amountCents int64, items
 }
 
 // 3. Payment Key Generation
-func (s *PaymobService) GetPaymentKey(authToken string, orderID int64, amountCents int64, integrationID string, billingData map[string]string) (string, error) {
+func (s *PaymobService) GetPaymentKey(authToken string, orderID, amountCents int64, integrationID string, billingData map[string]string) (string, error) {
 	// Ensure billing data has required fields
 	required := []string{"first_name", "last_name", "email", "phone_number"}
 	for _, f := range required {
@@ -174,7 +174,7 @@ func (s *PaymobService) GetPaymentKey(authToken string, orderID int64, amountCen
 }
 
 // Wallet Payment Request (for Vodafone Cash, etc.)
-func (s *PaymobService) CreateWalletRequest(paymentKey string, phoneNumber string) (string, error) {
+func (s *PaymobService) CreateWalletRequest(paymentKey, phoneNumber string) (string, error) {
 	payload := map[string]interface{}{
 		"source": map[string]string{
 			"identifier": phoneNumber,

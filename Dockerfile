@@ -10,8 +10,11 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the source code
-COPY . .
+# Copy the source code selectively to avoid copying sensitive or unnecessary files
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
+COPY pkg/ ./pkg/
+COPY docs/ ./docs/
 
 # Build with optimizations
 # -ldflags="-s -w" reduces binary size by removing symbol table and debug info

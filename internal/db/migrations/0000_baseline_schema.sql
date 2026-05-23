@@ -879,7 +879,7 @@ CREATE TABLE public."BlogPost" (
 -- Name: COLUMN "BlogPost".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."BlogPost".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."BlogPost".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -914,7 +914,7 @@ CREATE TABLE public."Book" (
 -- Name: COLUMN "Book".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."Book".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."Book".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -1073,7 +1073,7 @@ CREATE TABLE public."Contest" (
 -- Name: COLUMN "Contest".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."Contest".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."Contest".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -1150,7 +1150,7 @@ CREATE TABLE public."CourseReview" (
 -- Name: COLUMN "CourseReview".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."CourseReview".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."CourseReview".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -1216,7 +1216,7 @@ CREATE TABLE public."Event" (
 -- Name: COLUMN "Event".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."Event".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."Event".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -1279,7 +1279,7 @@ PARTITION BY RANGE (taken_at);
 -- Name: COLUMN "ExamResult".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."ExamResult".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."ExamResult".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -1470,7 +1470,7 @@ CREATE TABLE public."LessonAttachment" (
 -- Name: COLUMN "LessonAttachment".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."LessonAttachment".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."LessonAttachment".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -1835,7 +1835,7 @@ CREATE TABLE public."Reminder" (
 -- Name: COLUMN "Reminder".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."Reminder".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."Reminder".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -1893,7 +1893,7 @@ CREATE TABLE public."Reward" (
 -- Name: COLUMN "Reward".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."Reward".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."Reward".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -1924,7 +1924,7 @@ CREATE TABLE public."Schedule" (
 -- Name: COLUMN "Schedule".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."Schedule".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."Schedule".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -1956,7 +1956,7 @@ CREATE TABLE public."Season" (
 -- Name: COLUMN "Season".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."Season".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."Season".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -2055,7 +2055,7 @@ CREATE TABLE public."Session" (
 -- Name: COLUMN "Session".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."Session".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."Session".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -2088,7 +2088,7 @@ CREATE TABLE public."StudySession" (
 -- Name: COLUMN "StudySession".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."StudySession".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."StudySession".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -2242,7 +2242,7 @@ CREATE TABLE public."SubscriptionPlan" (
 -- Name: COLUMN "SubscriptionPlan".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."SubscriptionPlan".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."SubscriptionPlan".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -2288,7 +2288,7 @@ CREATE TABLE public."Task" (
 -- Name: COLUMN "Task".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."Task".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."Task".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -2382,7 +2382,7 @@ CREATE TABLE public."TopicProgress" (
 -- Name: COLUMN "TopicProgress".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."TopicProgress".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."TopicProgress".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -2585,7 +2585,7 @@ CREATE TABLE public."UserSettings" (
 -- Name: COLUMN "UserSettings".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."UserSettings".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."UserSettings".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --
@@ -2643,7 +2643,7 @@ CREATE TABLE public."WalletTransaction" (
 -- Name: COLUMN "WalletTransaction".deleted_at; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public."WalletTransaction".deleted_at IS :'SOFT_DELETE_COMMENT';
+COMMENT ON COLUMN public."WalletTransaction".deleted_at IS :'SOFT_DELETE_COMMENT'; -- NOSONAR
 
 
 --

@@ -140,7 +140,7 @@ func RegisterAuthServiceServer(s grpc.ServiceRegistrar, srv AuthServiceServer) {
 	s.RegisterService(&AuthService_ServiceDesc, srv)
 }
 
-func _AuthService_Login_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func authServiceLoginHandler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(LoginRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -158,7 +158,7 @@ func _AuthService_Login_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthService_Register_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func authServiceRegisterHandler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RegisterRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -176,7 +176,7 @@ func _AuthService_Register_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthService_GetProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func authServiceGetProfileHandler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetProfileRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -194,7 +194,7 @@ func _AuthService_GetProfile_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthService_Logout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func authServiceLogoutHandler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(LogoutRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -221,19 +221,19 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "Login",
-			Handler:    _AuthService_Login_Handler,
+			Handler:    authServiceLoginHandler,
 		},
 		{
 			MethodName: "Register",
-			Handler:    _AuthService_Register_Handler,
+			Handler:    authServiceRegisterHandler,
 		},
 		{
 			MethodName: "GetProfile",
-			Handler:    _AuthService_GetProfile_Handler,
+			Handler:    authServiceGetProfileHandler,
 		},
 		{
 			MethodName: "Logout",
-			Handler:    _AuthService_Logout_Handler,
+			Handler:    authServiceLogoutHandler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

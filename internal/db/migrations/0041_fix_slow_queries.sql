@@ -76,11 +76,7 @@ CREATE INDEX IF NOT EXISTS idx_exam_result_user_taken_covering
 -- 5. Recommendations: تسريع استعلام التوصيات (تعطيل لعدم وجود جدول Recommendation)
 -- ============================================================
 -- الاستعلام: WHERE user_id = ? ORDER BY score DESC
--- DROP INDEX IF EXISTS idx_recommendation_user_score;
--- CREATE INDEX IF NOT EXISTS idx_recommendation_user_score
---     ON "Recommendation" (user_id, score DESC)
---     INCLUDE (id, subject_id, reason, type)
---     WHERE deleted_at IS NULL;
+
 
 -- ============================================================
 -- 6. Subscription/Addons: تسريع استعلام الإضافات
@@ -107,8 +103,8 @@ ANALYZE "Payment";
 ANALYZE "User";
 ANALYZE "UserAchievement";
 ANALYZE "Exam";
--- ANALYZE "Recommendation";
+
 ANALYZE "UserSubscription";
--- ANALYZE "Activity";
+
 
 COMMIT;

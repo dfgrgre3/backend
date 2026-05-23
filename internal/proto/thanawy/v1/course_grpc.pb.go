@@ -108,7 +108,7 @@ func RegisterCourseServiceServer(s grpc.ServiceRegistrar, srv CourseServiceServe
 	s.RegisterService(&CourseService_ServiceDesc, srv)
 }
 
-func _CourseService_GetCourses_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func courseServiceGetCoursesHandler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetCoursesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -126,7 +126,7 @@ func _CourseService_GetCourses_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
-func _CourseService_GetCourse_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func courseServiceGetCourseHandler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetCourseRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -153,11 +153,11 @@ var CourseService_ServiceDesc = grpc.ServiceDesc{
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "GetCourses",
-			Handler:    _CourseService_GetCourses_Handler,
+			Handler:    courseServiceGetCoursesHandler,
 		},
 		{
 			MethodName: "GetCourse",
-			Handler:    _CourseService_GetCourse_Handler,
+			Handler:    courseServiceGetCourseHandler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

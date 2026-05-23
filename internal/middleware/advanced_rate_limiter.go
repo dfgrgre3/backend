@@ -83,7 +83,7 @@ func (arl *AdvancedRateLimiter) AdminRateLimiter() gin.HandlerFunc {
 
 		// Check burst allowance first
 		burstKey := key + ":burst"
-		burstCount, _ := arl.getCount(c.Request.Context(), burstKey, window)
+		burstCount, _ := arl.getCount(c.Request.Context(), burstKey)
 
 		if burstCount > burst {
 			// Use sliding window for strict limiting after burst exceeded
@@ -193,7 +193,7 @@ func (arl *AdvancedRateLimiter) incrementCounter(ctx context.Context, key string
 }
 
 // getCount gets current count without incrementing
-func (arl *AdvancedRateLimiter) getCount(ctx context.Context, key string, window time.Duration) (int, error) {
+func (arl *AdvancedRateLimiter) getCount(ctx context.Context, key string) (int, error) {
 	val, err := arl.client.Get(ctx, key).Int()
 	if err == redis.Nil {
 		return 0, nil

@@ -620,10 +620,10 @@ func getSortedChunks(ctx context.Context, uploadID string) ([]chunkEntry, error)
 }
 
 type chunkStreamReader struct {
-	ctx           context.Context
 	chunks        []chunkEntry
 	currentIdx    int
 	currentReader io.ReadCloser
+	downloadFn    func(chunkPath string) (io.ReadCloser, error)
 }
 
 func (r *chunkStreamReader) Read(p []byte) (n int, err error) {
@@ -633,7 +633,7 @@ func (r *chunkStreamReader) Read(p []byte) (n int, err error) {
 				return 0, io.EOF
 			}
 			chunkPath := r.chunks[r.currentIdx].path
-			rc, err := storage.GlobalStorage.Download(r.ctx, chunkPath)
+			rc, err := r.downloadFn(chunkPath)
 			if err != nil {
 				return 0, fmt.Errorf("failed to download chunk %s: %w", chunkPath, err)
 			}
@@ -668,8 +668,10 @@ func assembleAndUploadFinalFile(ctx context.Context, uploadID string, metadata c
 	finalFilename := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
 
 	stream := &chunkStreamReader{
-		ctx:    ctx,
 		chunks: chunks,
+		downloadFn: func(chunkPath string) (io.ReadCloser, error) {
+			return storage.GlobalStorage.Download(ctx, chunkPath)
+		},
 	}
 	defer stream.Close()
 
@@ -1788,7 +1790,7 @@ func GetAdminInfrastructureStats(c *gin.Context) {
 	if err != nil {
 		dbStatus = "unhealthy"
 	} else {
-		if pingErr := sqlDB.Ping(); pingErr != nil {
+		if sqlDB.Ping() != nil {
 			dbStatus = "unhealthy"
 		}
 	}

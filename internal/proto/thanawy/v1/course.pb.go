@@ -60,7 +60,7 @@ func (x *Course) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Course.ProtoReflect.Descriptor instead.
 func (*Course) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{0}
+	return fileThanawyV1CourseProtoRawDescGZIP(), []int{0}
 }
 
 func (x *Course) GetId() string {
@@ -126,7 +126,7 @@ func (x *GetCoursesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCoursesRequest.ProtoReflect.Descriptor instead.
 func (*GetCoursesRequest) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{1}
+	return fileThanawyV1CourseProtoRawDescGZIP(), []int{1}
 }
 
 type GetCoursesResponse struct {
@@ -165,7 +165,7 @@ func (x *GetCoursesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCoursesResponse.ProtoReflect.Descriptor instead.
 func (*GetCoursesResponse) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{2}
+	return fileThanawyV1CourseProtoRawDescGZIP(), []int{2}
 }
 
 func (x *GetCoursesResponse) GetCourses() []*Course {
@@ -211,7 +211,7 @@ func (x *GetCourseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCourseRequest.ProtoReflect.Descriptor instead.
 func (*GetCourseRequest) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{3}
+	return fileThanawyV1CourseProtoRawDescGZIP(), []int{3}
 }
 
 func (x *GetCourseRequest) GetId() string {
@@ -257,7 +257,7 @@ func (x *GetCourseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCourseResponse.ProtoReflect.Descriptor instead.
 func (*GetCourseResponse) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{4}
+	return fileThanawyV1CourseProtoRawDescGZIP(), []int{4}
 }
 
 func (x *GetCourseResponse) GetCourse() *Course {
@@ -295,7 +295,7 @@ var (
 	file_thanawy_v1_course_proto_rawDescData []byte
 )
 
-func file_thanawy_v1_course_proto_rawDescGZIP() []byte {
+func fileThanawyV1CourseProtoRawDescGZIP() []byte {
 	file_thanawy_v1_course_proto_rawDescOnce.Do(func() {
 		file_thanawy_v1_course_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_thanawy_v1_course_proto_rawDesc), len(file_thanawy_v1_course_proto_rawDesc)))
 	})
@@ -324,8 +324,8 @@ var file_thanawy_v1_course_proto_depIdxs = []int32{
 	0, // [0:2] is the sub-list for field type_name
 }
 
-func init() { file_thanawy_v1_course_proto_init() }
-func file_thanawy_v1_course_proto_init() {
+func init() { fileThanawyV1CourseProtoInit() }
+func fileThanawyV1CourseProtoInit() {
 	if File_thanawy_v1_course_proto != nil {
 		return
 	}

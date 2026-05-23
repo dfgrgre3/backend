@@ -52,10 +52,6 @@ func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	if os.Getenv("DB_DEBUG") == "true" && os.Getenv("NODE_ENV") != "production" {
-		db = db.Debug()
-	}
-
 	sourceDSN := dsn
 	if writeDSN != "" {
 		sourceDSN = writeDSN
@@ -125,7 +121,7 @@ func WithWriteTx(fn func(tx *gorm.DB) error) error {
 }
 
 func getGormLogLevel() logger.LogLevel {
-	if os.Getenv("DB_LOG_LEVEL") == "info" && os.Getenv("NODE_ENV") != "production" {
+	if (os.Getenv("DB_LOG_LEVEL") == "info" || os.Getenv("DB_DEBUG") == "true") && os.Getenv("NODE_ENV") != "production" {
 		return logger.Info
 	}
 	return logger.Warn

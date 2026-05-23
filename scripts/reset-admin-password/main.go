@@ -12,9 +12,9 @@ import (
 )
 
 func main() {
-	if err := godotenv.Load(".env"); err != nil {
+	if godotenv.Load(".env") != nil {
 		// Try parent dirs too
-		if err2 := godotenv.Load("../../.env"); err2 != nil {
+		if godotenv.Load("../../.env") != nil {
 			log.Println("No .env file found, using system environment variables")
 		}
 	}

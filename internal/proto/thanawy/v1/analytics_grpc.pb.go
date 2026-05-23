@@ -108,7 +108,7 @@ func RegisterAnalyticsServiceServer(s grpc.ServiceRegistrar, srv AnalyticsServic
 	s.RegisterService(&AnalyticsService_ServiceDesc, srv)
 }
 
-func _AnalyticsService_GetProgressSummary_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func analyticsServiceGetProgressSummaryHandler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetProgressSummaryRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -126,7 +126,7 @@ func _AnalyticsService_GetProgressSummary_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AnalyticsService_GetWeeklyAnalytics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func analyticsServiceGetWeeklyAnalyticsHandler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetWeeklyAnalyticsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -153,11 +153,11 @@ var AnalyticsService_ServiceDesc = grpc.ServiceDesc{
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "GetProgressSummary",
-			Handler:    _AnalyticsService_GetProgressSummary_Handler,
+			Handler:    analyticsServiceGetProgressSummaryHandler,
 		},
 		{
 			MethodName: "GetWeeklyAnalytics",
-			Handler:    _AnalyticsService_GetWeeklyAnalytics_Handler,
+			Handler:    analyticsServiceGetWeeklyAnalyticsHandler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

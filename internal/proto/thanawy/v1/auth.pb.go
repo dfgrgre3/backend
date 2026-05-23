@@ -62,7 +62,7 @@ func (x *User) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use User.ProtoReflect.Descriptor instead.
 func (*User) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_auth_proto_rawDescGZIP(), []int{0}
+	return fileThanawyV1AuthProtoRawDescGZIP(), []int{0}
 }
 
 func (x *User) GetId() string {
@@ -144,7 +144,7 @@ func (x *LoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginRequest.ProtoReflect.Descriptor instead.
 func (*LoginRequest) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_auth_proto_rawDescGZIP(), []int{1}
+	return fileThanawyV1AuthProtoRawDescGZIP(), []int{1}
 }
 
 func (x *LoginRequest) GetEmail() string {
@@ -199,7 +199,7 @@ func (x *LoginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginResponse.ProtoReflect.Descriptor instead.
 func (*LoginResponse) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_auth_proto_rawDescGZIP(), []int{2}
+	return fileThanawyV1AuthProtoRawDescGZIP(), []int{2}
 }
 
 func (x *LoginResponse) GetSuccess() bool {
@@ -265,7 +265,7 @@ func (x *RegisterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterRequest.ProtoReflect.Descriptor instead.
 func (*RegisterRequest) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_auth_proto_rawDescGZIP(), []int{3}
+	return fileThanawyV1AuthProtoRawDescGZIP(), []int{3}
 }
 
 func (x *RegisterRequest) GetEmail() string {
@@ -354,7 +354,7 @@ func (x *RegisterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterResponse.ProtoReflect.Descriptor instead.
 func (*RegisterResponse) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_auth_proto_rawDescGZIP(), []int{4}
+	return fileThanawyV1AuthProtoRawDescGZIP(), []int{4}
 }
 
 func (x *RegisterResponse) GetSuccess() bool {
@@ -406,7 +406,7 @@ func (x *GetProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfileRequest.ProtoReflect.Descriptor instead.
 func (*GetProfileRequest) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_auth_proto_rawDescGZIP(), []int{5}
+	return fileThanawyV1AuthProtoRawDescGZIP(), []int{5}
 }
 
 type GetProfileResponse struct {
@@ -445,7 +445,7 @@ func (x *GetProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfileResponse.ProtoReflect.Descriptor instead.
 func (*GetProfileResponse) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_auth_proto_rawDescGZIP(), []int{6}
+	return fileThanawyV1AuthProtoRawDescGZIP(), []int{6}
 }
 
 func (x *GetProfileResponse) GetUser() *User {
@@ -490,7 +490,7 @@ func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutRequest.ProtoReflect.Descriptor instead.
 func (*LogoutRequest) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_auth_proto_rawDescGZIP(), []int{7}
+	return fileThanawyV1AuthProtoRawDescGZIP(), []int{7}
 }
 
 type LogoutResponse struct {
@@ -530,7 +530,7 @@ func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutResponse.ProtoReflect.Descriptor instead.
 func (*LogoutResponse) Descriptor() ([]byte, []int) {
-	return file_thanawy_v1_auth_proto_rawDescGZIP(), []int{8}
+	return fileThanawyV1AuthProtoRawDescGZIP(), []int{8}
 }
 
 func (x *LogoutResponse) GetSuccess() bool {
@@ -598,7 +598,7 @@ var (
 	file_thanawy_v1_auth_proto_rawDescData []byte
 )
 
-func file_thanawy_v1_auth_proto_rawDescGZIP() []byte {
+func fileThanawyV1AuthProtoRawDescGZIP() []byte {
 	file_thanawy_v1_auth_proto_rawDescOnce.Do(func() {
 		file_thanawy_v1_auth_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_thanawy_v1_auth_proto_rawDesc), len(file_thanawy_v1_auth_proto_rawDesc)))
 	})
@@ -636,8 +636,8 @@ var file_thanawy_v1_auth_proto_depIdxs = []int32{
 	0, // [0:3] is the sub-list for field type_name
 }
 
-func init() { file_thanawy_v1_auth_proto_init() }
-func file_thanawy_v1_auth_proto_init() {
+func init() { fileThanawyV1AuthProtoInit() }
+func fileThanawyV1AuthProtoInit() {
 	if File_thanawy_v1_auth_proto != nil {
 		return
 	}

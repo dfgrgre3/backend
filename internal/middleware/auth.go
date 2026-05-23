@@ -241,7 +241,7 @@ func storeInLocalCache(userID string, ctx *userAuthContext) {
 // fetchDatabaseRolePerms retrieves user role/permissions from the database.
 // Caches the result in Redis (async) and local in-memory cache.
 // Returns nil if the user is not found in the database.
-func fetchDatabaseRolePerms(userID string, cacheKey string) *userAuthContext {
+func fetchDatabaseRolePerms(userID, cacheKey string) *userAuthContext {
 	var user models.User
 	if err := db.DB.Unscoped().
 		Select("role", "permissions").
@@ -273,7 +273,7 @@ func fetchDatabaseRolePerms(userID string, cacheKey string) *userAuthContext {
 
 // buildSingleFlightCallback creates the function used inside singleflight.Do
 // to fetch user role/permissions from cache layers and finally database.
-func buildSingleFlightCallback(userID string, fallbackRole string) func() (interface{}, error) {
+func buildSingleFlightCallback(userID, fallbackRole string) func() (interface{}, error) {
 	return func() (interface{}, error) {
 		// Re-check local cache inside singleflight (avoid duplicate work)
 		if cached, ok := fetchCachedRolePerms(userID); ok {
@@ -298,7 +298,7 @@ func buildSingleFlightCallback(userID string, fallbackRole string) func() (inter
 }
 
 // Helper to fetch and set user role/permissions in context from database or fallback
-func hydrateUserContext(c *gin.Context, userID string, fallbackRole string) {
+func hydrateUserContext(c *gin.Context, userID, fallbackRole string) {
 	if db.DB == nil {
 		log.Printf("WARN: Database connection is nil in hydrateUserContext for user %s", userID)
 		c.Set("role", strings.ToUpper(fallbackRole))

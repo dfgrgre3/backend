@@ -293,7 +293,7 @@ func Verify2FA(c *gin.Context) {
 	})
 }
 
-func validateTOTP(secretBase32 string, token string) bool {
+func validateTOTP(secretBase32, token string) bool {
 	secret := strings.ToUpper(secretBase32)
 	secretBytes, err := base32.StdEncoding.DecodeString(secret)
 	if err != nil {
@@ -1290,7 +1290,7 @@ func GetBillingSummary(c *gin.Context) {
 		return
 	}
 
-	responseData := fetchBillingData(c, uid, cacheKey)
+	responseData := fetchBillingData(uid)
 	if responseData == nil {
 		return
 	}
@@ -1325,7 +1325,7 @@ func checkBillingCaches(c *gin.Context, cacheKey string) bool {
 	return false
 }
 
-func fetchBillingData(c *gin.Context, uid, cacheKey string) gin.H {
+func fetchBillingData(uid string) gin.H {
 	readDB := db.ReadDB()
 	if readDB == nil {
 		readDB = db.DB
@@ -1639,7 +1639,7 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 	return nil
 }
 
-func EnsureUserExists(userId string, email string) error {
+func EnsureUserExists(userId, email string) error {
 	var user models.User
 	err := db.DB.First(&user, idQuery, userId).Error
 

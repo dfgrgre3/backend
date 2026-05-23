@@ -1,36 +1,115 @@
-# Binaries and executables
+# ==========================================
+# Compiled Binaries & Executables
+# ==========================================
+# Windows executables
 *.exe
 *.exe~
 *.dll
+
+# Unix/Linux/macOS binaries/libraries
 *.so
 *.dylib
 bin/
 
-# Environment files
+# Root-level built binaries (Unix/Linux/macOS)
+/api
+/backend
+/clear-rate-limits
+/main
+/targeted_migrate
+/thanawy-backend
+
+# ==========================================
+# Environment & Configuration Files
+# ==========================================
 .env
 .env.*
 !.env.example
 
-# Runtime / Data directories
-uploads/
-backups/
-
-# IDE and system files
-.idea/
-.vscode/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-.DS_Store
-Thumbs.db
-Desktop.ini
-
-# Go specific
+# ==========================================
+# Go Specific
+# ==========================================
+# Test/Coverage/Profiling artifacts
 *.test
 *.out
 *.prof
 *.cover
 *.tmp
 *.go.*
+
+# Go workspaces
+go.work
+go.work.sum
+
+# Go vendor directory (uncomment if you do not want to commit vendored dependencies)
+# vendor/
+
+# ==========================================
+# Node / Javascript / Frontend
+# ==========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.eslintcache
+.stylelintcache
+dist/
+
+# ==========================================
+# Python Specific
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# ==========================================
+# IDEs & Text Editors
+# ==========================================
+# JetBrains / IntelliJ IDEA
+.idea/
+
+# VS Code
+.vscode/
+
+# Vim
+*.sw?
+*~
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Other common IDE configurations
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ==========================================
+# Runtime / Data Directories
+# ==========================================
+uploads/
+backups/
+*.log
+logs/
+
+# ==========================================
+# OS / System Specific
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+desktop.ini

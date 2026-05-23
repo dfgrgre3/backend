@@ -61,7 +61,6 @@ type Hub struct {
 	unregister  chan *Client
 	mu          sync.RWMutex
 	redisPubSub *redis.PubSub
-	redisCtx    context.Context
 }
 
 var GlobalHub = &Hub{
@@ -80,8 +79,7 @@ func InitHub() {
 
 	log.Println("Initializing WebSocket hub with Redis Pub/Sub support")
 
-	GlobalHub.redisCtx = context.Background()
-	GlobalHub.redisPubSub = db.Redis.Subscribe(GlobalHub.redisCtx, redisBroadcastChannel)
+	GlobalHub.redisPubSub = db.Redis.Subscribe(context.Background(), redisBroadcastChannel)
 
 	go GlobalHub.Run()
 	go GlobalHub.redisSubscribe()
@@ -229,7 +227,7 @@ func (h *Hub) NotifyUser(userID string, message interface{}) {
 	h.BroadcastToUser(userID, payload)
 }
 
-func GlobalNotifyAdmins(title string, message string, typeStr string) {
+func GlobalNotifyAdmins(title, message, typeStr string) {
 	msg := map[string]interface{}{
 		"type":    "admin_notification",
 		"title":   title,

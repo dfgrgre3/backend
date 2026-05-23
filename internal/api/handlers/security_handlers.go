@@ -738,7 +738,7 @@ func BulkAddIPToWhitelist(c *gin.Context) {
 	added := 0
 	for _, raw := range req.IPAddresses {
 		ip := raw
-		if parsed := net.ParseIP(ip); parsed == nil {
+		if net.ParseIP(ip) == nil {
 			tx.Rollback()
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid IP address: " + raw})
 			return

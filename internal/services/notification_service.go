@@ -70,7 +70,7 @@ func (s *NotificationService) MarkAsRead(notificationID string) error {
 }
 
 // MarkAsFailed marks a notification as failed
-func (s *NotificationService) MarkAsFailed(notificationID string, errorMsg string) error {
+func (s *NotificationService) MarkAsFailed(notificationID, errorMsg string) error {
 	return db.DB.Model(&models.Notification{}).
 		Where(idCondition, notificationID).
 		Updates(map[string]interface{}{

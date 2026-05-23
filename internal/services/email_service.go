@@ -62,7 +62,7 @@ func GetEmailService() *EmailService {
 }
 
 // SendEmail sends an email to a single recipient
-func (s *EmailService) SendEmail(to string, subject string, body string, isHTML bool) error {
+func (s *EmailService) SendEmail(to, subject, body string, isHTML bool) error {
 	if !s.enabled {
 		fmt.Printf("[Email] Service disabled, skipping email to %s: %s\n", to, subject)
 		return nil
@@ -99,7 +99,7 @@ func (s *EmailService) SendEmail(to string, subject string, body string, isHTML 
 }
 
 // SendBulkEmail sends the same email to multiple recipients
-func (s *EmailService) SendBulkEmail(to []string, subject string, body string, isHTML bool) map[string]error {
+func (s *EmailService) SendBulkEmail(to []string, subject, body string, isHTML bool) map[string]error {
 	results := make(map[string]error)
 
 	for _, recipient := range to {
@@ -111,7 +111,7 @@ func (s *EmailService) SendBulkEmail(to []string, subject string, body string, i
 }
 
 // SendTemplateEmail sends an email using a template
-func (s *EmailService) SendTemplateEmail(to string, subject string, templateName string, data map[string]interface{}) error {
+func (s *EmailService) SendTemplateEmail(to, subject, templateName string, data map[string]interface{}) error {
 	// TODO: Implement template rendering
 	// For now, just send a simple message
 	body := fmt.Sprintf("رسالة من المنصة التعليمية\nالقالب: %s\nالبيانات: %v", templateName, data)
@@ -119,7 +119,7 @@ func (s *EmailService) SendTemplateEmail(to string, subject string, templateName
 }
 
 // BuildNotificationEmail builds a notification email body
-func (s *EmailService) BuildNotificationEmail(title string, message string, actionURL string) string {
+func (s *EmailService) BuildNotificationEmail(title, message, actionURL string) string {
 	return fmt.Sprintf(`
 		<div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
 			<h2 style="color: #333;">%s</h2>

@@ -695,7 +695,7 @@ func UpdateSubject(c *gin.Context) {
 	// Refresh from DB to get all fields
 	db.DB.First(&subject, idQuery, id)
 	getSubjectRepo().Update(&subject) // Update cache
-	cache.NewCacheInvalidator().InvalidateSubject(id)
+	cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), id)
 
 	LogAudit(c, "UPDATE", "subject", id, input)
 	api_response.Success(c, gin.H{"course": subject})
@@ -914,7 +914,7 @@ func DeleteSubject(c *gin.Context) {
 	}
 
 	// Clear cache
-	cache.NewCacheInvalidator().InvalidateSubject(id)
+	cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), id)
 
 	LogAudit(c, "DELETE", "subject", id, nil)
 	log.Printf("Successfully deleted subject: %q (%q)", id, subject.Name)
@@ -1093,7 +1093,7 @@ func UpdateCourseCurriculum(c *gin.Context) {
 	}
 
 	getSubjectRepo().InvalidateSubjectCache(id)
-	cache.NewCacheInvalidator().InvalidateSubject(id)
+	cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), id)
 
 	var subject models.Subject
 	if err := db.DB.Preload(preloadTopicsSubTopics).First(&subject, idQuery, id).Error; err != nil {
@@ -1221,7 +1221,7 @@ func AddLessonAttachment(c *gin.Context) {
 		var topic models.Topic
 		if err := db.DB.First(&topic, idQuery, subTopic.TopicID).Error; err == nil && topic.SubjectID != "" {
 			getSubjectRepo().InvalidateSubjectCache(topic.SubjectID)
-			cache.NewCacheInvalidator().InvalidateSubject(topic.SubjectID)
+			cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), topic.SubjectID)
 		}
 	}
 
@@ -1251,7 +1251,7 @@ func CreateCourseReview(c *gin.Context) {
 	db.DB.Model(&models.CourseReview{}).Where(subjectIDQuotedQuery, subjectId).Select("avg(rating)").Scan(&avg)
 	db.DB.Model(&models.Subject{}).Where(idQuery, subjectId).Update("rating", avg)
 
-	cache.NewCacheInvalidator().InvalidateSubject(subjectId)
+	cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), subjectId)
 
 	c.JSON(http.StatusCreated, review)
 }
