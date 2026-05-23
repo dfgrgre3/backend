@@ -127,20 +127,38 @@ func (s *EmailService) SendTemplateEmail(to, subject, templateName string, data 
 
 	templatePath := filepath.Join(templatesDir, templateName+".html")
 
-	var body bytes.Buffer
+	var bodyBytes []byte
+	var err error
 
-	// Check if template file exists
 	if _, statErr := os.Stat(templatePath); statErr == nil {
-		tmpl, parseErr := template.ParseFiles(templatePath)
-		if parseErr != nil {
-			return fmt.Errorf("failed to parse email template %s: %w", templateName, parseErr)
-		}
-		if executeErr := tmpl.Execute(&body, data); executeErr != nil {
-			return fmt.Errorf("failed to execute email template %s: %w", templateName, executeErr)
+		bodyBytes, err = renderTemplateFile(templatePath, data)
+		if err != nil {
+			return fmt.Errorf("failed to parse/execute email template %s: %w", templateName, err)
 		}
 	} else {
-		// Fallback: render from a default HTML template string
-		fallbackTmplSrc := `
+		bodyBytes, err = renderFallbackTemplate(subject, data)
+		if err != nil {
+			return err
+		}
+	}
+
+	return s.SendEmail(to, subject, string(bodyBytes), true)
+}
+
+func renderTemplateFile(templatePath string, data map[string]interface{}) ([]byte, error) {
+	tmpl, err := template.ParseFiles(templatePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse template: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, fmt.Errorf("failed to execute template: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func renderFallbackTemplate(subject string, data map[string]interface{}) ([]byte, error) {
+	const fallbackTmplSrc = `
 			<div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
 				<h2 style="color: #333;">{{.Title}}</h2>
 				<div style="color: #666; line-height: 1.6; margin-top: 20px;">
@@ -155,33 +173,35 @@ func (s *EmailService) SendTemplateEmail(to, subject, templateName string, data 
 				<p style="color: #999; font-size: 12px; text-align: center;">هذه رسالة آلية من منصة التعلّم</p>
 			</div>
 		`
-		tmpl, parseErr := template.New("fallback").Parse(fallbackTmplSrc)
-		if parseErr != nil {
-			return fmt.Errorf("failed to parse fallback template: %w", parseErr)
-		}
-
-		// Ensure title and message have fallback values if not present
-		if _, ok := data["Title"]; !ok {
-			data["Title"] = subject
-		}
-		if _, ok := data["Message"]; !ok {
-			if msg, ok := data["message"].(string); ok {
-				data["Message"] = msg
-			} else {
-				var fields []string
-				for k, v := range data {
-					fields = append(fields, fmt.Sprintf("<strong>%s:</strong> %v", k, v))
-				}
-				data["Message"] = strings.Join(fields, "<br>")
-			}
-		}
-
-		if executeErr := tmpl.Execute(&body, data); executeErr != nil {
-			return fmt.Errorf("failed to execute fallback template: %w", executeErr)
-		}
+	tmpl, err := template.New("fallback").Parse(fallbackTmplSrc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse fallback template: %w", err)
 	}
 
-	return s.SendEmail(to, subject, body.String(), true)
+	prepareFallbackData(subject, data)
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, fmt.Errorf("failed to execute fallback template: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func prepareFallbackData(subject string, data map[string]interface{}) {
+	if _, ok := data["Title"]; !ok {
+		data["Title"] = subject
+	}
+	if _, ok := data["Message"]; !ok {
+		if msg, ok := data["message"].(string); ok {
+			data["Message"] = msg
+		} else {
+			var fields []string
+			for k, v := range data {
+				fields = append(fields, fmt.Sprintf("<strong>%s:</strong> %v", k, v))
+			}
+			data["Message"] = strings.Join(fields, "<br>")
+		}
+	}
 }
 
 // BuildNotificationEmail builds a notification email body
