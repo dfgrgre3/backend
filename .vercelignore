@@ -18,10 +18,8 @@ build/
 *.bak
 .DS_Store
 # Exclude large binaries and directories
-app/
 bin/
 uploads/
-pkg/
 static/
 public/
 # Next.js and Vercel build outputs

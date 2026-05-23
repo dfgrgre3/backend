@@ -1,14 +1,27 @@
 {
+  "framework": null,
+  "buildCommand": "cd $VERCEL_WORKSPACE_PATH && go build -ldflags='-s -w' -o /tmp/user-server ./cmd/api",
+  "outputDirectory": ".",
+  "installCommand": "",
+  "functions": {
+    "api/index.go": {
+      "runtime": "go1.x",
+      "includeFiles": "**/*.go"
+    }
+  },
   "builds": [
     {
-      "src": "cmd/api/main.go",
-      "use": "@vercel/go"
+      "src": "cmd/api/**/*.go",
+      "use": "@vercel/go",
+      "config": {
+        "goCommand": "cd $VERCEL_WORKSPACE_PATH && go build -ldflags='-s -w' -o /tmp/user-server ./cmd/api"
+      }
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "cmd/api/main.go"
+      "dest": "/"
     }
   ]
 }
