@@ -117,3 +117,5 @@ desktop.ini
 
 .vercel
 .env*
+
+/src/generated/prisma

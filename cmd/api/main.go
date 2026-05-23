@@ -37,6 +37,7 @@ import (
 	"thanawy-backend/internal/api/handlers"
 	"thanawy-backend/internal/middleware"
 	thanawyv1 "thanawy-backend/internal/proto/thanawy/v1"
+	"thanawy-backend/internal/proto/thanawy/v1/thanawyv1connect"
 
 	_ "thanawy-backend/docs" // Required for Swagger documentation generation
 
@@ -90,7 +91,7 @@ func main() {
 	analyticsSvc := &internalgrpc.AnalyticsServiceServer{}
 
 	// Setup Router
-	r := setupRouter(cfg, hexHandlers)
+	r := setupRouter(cfg, hexHandlers, courseSvc, authSvc, analyticsSvc)
 
 	runAPI := getEnvBool("RUN_API", true)
 	runWorkers := getEnvBool("RUN_WORKERS", true)
@@ -203,7 +204,7 @@ func initS3Storage(cfg *config.Config) {
 	log.Println("Storage initialized with S3 provider (Cloudflare R2)")
 }
 
-func setupRouter(cfg *config.Config, hexHandlers *app.Handlers) *gin.Engine {
+func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *internalgrpc.CourseServiceServer, authSvc *internalgrpc.AuthServiceServer, analyticsSvc *internalgrpc.AnalyticsServiceServer) *gin.Engine {
 	if os.Getenv("GIN_MODE") == "release" || cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -229,6 +230,15 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers) *gin.Engine {
 	})
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// Register Connect-RPC Handlers
+	coursePath, courseHandler := thanawyv1connect.NewCourseServiceHandler(&internalgrpc.CourseConnectHandler{Svc: courseSvc})
+	authPath, authHandler := thanawyv1connect.NewAuthServiceHandler(&internalgrpc.AuthConnectHandler{Svc: authSvc})
+	analyticsPath, analyticsHandler := thanawyv1connect.NewAnalyticsServiceHandler(&internalgrpc.AnalyticsConnectHandler{Svc: analyticsSvc})
+
+	r.Any(coursePath+"*any", gin.WrapH(courseHandler))
+	r.Any(authPath+"*any", gin.WrapH(authHandler))
+	r.Any(analyticsPath+"*any", gin.WrapH(analyticsHandler))
 
 	router.SetupAuthRoutes(r)
 	router.SetupPublicRoutes(r)
