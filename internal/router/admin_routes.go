@@ -1,9 +1,10 @@
 package router
 
 import (
-	"github.com/gin-gonic/gin"
 	"thanawy-backend/internal/api/handlers"
 	"thanawy-backend/internal/middleware"
+
+	"github.com/gin-gonic/gin"
 )
 
 const (
@@ -14,6 +15,9 @@ const (
 	adminBackupsScheduleIDRoute = adminBackupsScheduleRoute + "/:id"
 	adminUserIDRoute            = "/users/:id"
 	adminSubjectsRoute          = "/subjects"
+	adminReportsIDRoute         = "/reports/:id"
+	adminCoursesActionRoute     = "/courses/action"
+	adminSettingsRoute          = "/settings"
 )
 
 // SetupAdminRoutes configures administrative API endpoints
@@ -219,9 +223,9 @@ func SetupAdminRoutes(router *gin.Engine) {
 		// Reports
 		admin.GET("/reports", handlers.GetCustomReports)
 		admin.POST("/reports", handlers.CreateCustomReport)
-		admin.GET("/reports/:id", handlers.GetCustomReport)
-		admin.PATCH("/reports/:id", handlers.UpdateCustomReport)
-		admin.DELETE("/reports/:id", handlers.DeleteCustomReport)
+		admin.GET(adminReportsIDRoute, handlers.GetCustomReport)
+		admin.PATCH(adminReportsIDRoute, handlers.UpdateCustomReport)
+		admin.DELETE(adminReportsIDRoute, handlers.DeleteCustomReport)
 		admin.POST("/reports/:id/execute", handlers.ExecuteCustomReport)
 		admin.GET("/reports/:id/export", handlers.ExportCustomReport)
 		admin.POST("/reports/:id/schedule", handlers.ScheduleCustomReport)
@@ -239,16 +243,16 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.GET("/search/content", handlers.SearchContent)
 
 		// Course action
-		admin.GET("/courses/action", handlers.AdminCourseAction)
-		admin.POST("/courses/action", handlers.AdminCourseAction)
-		admin.PATCH("/courses/action", handlers.AdminCourseAction)
-		admin.PUT("/courses/action", handlers.AdminCourseAction)
+		admin.GET(adminCoursesActionRoute, handlers.AdminCourseAction)
+		admin.POST(adminCoursesActionRoute, handlers.AdminCourseAction)
+		admin.PATCH(adminCoursesActionRoute, handlers.AdminCourseAction)
+		admin.PUT(adminCoursesActionRoute, handlers.AdminCourseAction)
 		admin.GET("/courses/export", handlers.AdminCourseAction)
 
 		// Setting
-		admin.GET("/settings", handlers.AdminSettings)
-		admin.PATCH("/settings", handlers.AdminSettings)
-		admin.PUT("/settings", handlers.AdminSettings)
+		admin.GET(adminSettingsRoute, handlers.AdminSettings)
+		admin.PATCH(adminSettingsRoute, handlers.AdminSettings)
+		admin.PUT(adminSettingsRoute, handlers.AdminSettings)
 
 		// Report content
 		admin.GET("/reports/content", handlers.AdminReportsContent)

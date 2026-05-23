@@ -3,15 +3,15 @@
 
 BEGIN;
 
-\set FAILED_STATUS 'failed'
-\set CANCELLED_STATUS 'cancelled'
-\set PENDING_STATUS 'pending'
-\set ACTIVE_STATUS 'active'
-\set COMPLETED_STATUS 'completed'
-\set DRAFT_STATUS 'draft'
-\set RESOLVED_STATUS 'resolved'
-\set MONTHLY_INTERVAL 'monthly'
-\set WEEKLY_INTERVAL 'weekly'
+\set FAILED_STATUS '''failed'''
+\set CANCELLED_STATUS '''cancelled'''
+\set PENDING_STATUS '''pending'''
+\set ACTIVE_STATUS '''active'''
+\set COMPLETED_STATUS '''completed'''
+\set DRAFT_STATUS '''draft'''
+\set RESOLVED_STATUS '''resolved'''
+\set MONTHLY_INTERVAL '''monthly'''
+\set WEEKLY_INTERVAL '''weekly'''
 
 -- ============================================================
 -- User table constraints
@@ -199,14 +199,14 @@ ALTER TABLE "Payment" ADD CONSTRAINT chk_payment_amount
   CHECK ("amount" >= 0);
 
 ALTER TABLE "Payment" ADD CONSTRAINT chk_payment_status
-  CHECK ("status" IN (:'PENDING_STATUS', 'paid', :'FAILED_STATUS', 'refunded', :'CANCELLED_STATUS'));
+  CHECK ("status" IN (:PENDING_STATUS, 'paid', :FAILED_STATUS, 'refunded', :CANCELLED_STATUS));
 
 -- ============================================================
 -- Subscription constraints
 -- ============================================================
 
 ALTER TABLE "UserSubscription" ADD CONSTRAINT chk_subscription_status
-  CHECK ("status" IN (:'ACTIVE_STATUS', :'CANCELLED_STATUS', 'expired', 'past_due', 'trialing'));
+  CHECK ("status" IN (:ACTIVE_STATUS, :CANCELLED_STATUS, 'expired', 'past_due', 'trialing'));
 
 ALTER TABLE "UserSubscription" ADD CONSTRAINT chk_subscription_auto_renew
   CHECK ("auto_renew" IN (true, false));
@@ -219,7 +219,7 @@ ALTER TABLE "SubscriptionPlan" ADD CONSTRAINT chk_plan_price
   CHECK ("price" >= 0);
 
 ALTER TABLE "SubscriptionPlan" ADD CONSTRAINT chk_plan_interval
-  CHECK ("interval" IN (:'MONTHLY_INTERVAL', 'yearly', 'quarterly', :'WEEKLY_INTERVAL'));
+  CHECK ("interval" IN (:MONTHLY_INTERVAL, 'yearly', 'quarterly', :WEEKLY_INTERVAL));
 
 -- ============================================================
 -- Notification constraints
@@ -229,7 +229,7 @@ ALTER TABLE "Notification" ADD CONSTRAINT chk_notification_priority
   CHECK ("priority" IN ('low', 'normal', 'high', 'urgent'));
 
 ALTER TABLE "Notification" ADD CONSTRAINT chk_notification_status
-  CHECK ("status" IN (:'PENDING_STATUS', 'sent', 'delivered', 'read', :'FAILED_STATUS'));
+  CHECK ("status" IN (:PENDING_STATUS, 'sent', 'delivered', 'read', :FAILED_STATUS));
 
 ALTER TABLE "Notification" ADD CONSTRAINT chk_notification_type
   CHECK ("type" IN ('info', 'warning', 'error', 'success', 'achievement', 'reminder', 'system'));
@@ -255,7 +255,7 @@ ALTER TABLE "Task" ADD CONSTRAINT chk_task_actual_time
 -- ============================================================
 
 ALTER TABLE "Challenge" ADD CONSTRAINT chk_challenge_type
-  CHECK ("type" IN ('daily', :'WEEKLY_INTERVAL', :'MONTHLY_INTERVAL', 'once', 'custom'));
+  CHECK ("type" IN ('daily', :WEEKLY_INTERVAL, :MONTHLY_INTERVAL, 'once', 'custom'));
 
 ALTER TABLE "Challenge" ADD CONSTRAINT chk_challenge_difficulty
   CHECK ("difficulty" IN ('EASY', 'MEDIUM', 'HARD', 'EXPERT'));
@@ -328,7 +328,7 @@ ALTER TABLE "Coupon" ADD CONSTRAINT chk_coupon_max_uses
 -- ============================================================
 
 ALTER TABLE "Contest" ADD CONSTRAINT chk_contest_status
-  CHECK ("status" IN (:'DRAFT_STATUS', :'ACTIVE_STATUS', :'COMPLETED_STATUS', :'CANCELLED_STATUS'));
+  CHECK ("status" IN (:DRAFT_STATUS, :ACTIVE_STATUS, :COMPLETED_STATUS, :CANCELLED_STATUS));
 
 ALTER TABLE "Contest" ADD CONSTRAINT chk_contest_questions_count
   CHECK ("questions_count" > 0);
@@ -420,7 +420,7 @@ ALTER TABLE "Book" ADD CONSTRAINT chk_book_downloads
 -- ============================================================
 
 ALTER TABLE "SupportTicket" ADD CONSTRAINT chk_ticket_status
-  CHECK ("status" IN ('open', 'in_progress', :'RESOLVED_STATUS', 'closed', 'reopened'));
+  CHECK ("status" IN ('open', 'in_progress', :RESOLVED_STATUS, 'closed', 'reopened'));
 
 ALTER TABLE "SupportTicket" ADD CONSTRAINT chk_ticket_priority
   CHECK ("priority" IN ('low', 'medium', 'high', 'critical')); -- NOSONAR
@@ -433,7 +433,7 @@ ALTER TABLE "Broadcast" ADD CONSTRAINT chk_broadcast_type
   CHECK ("type" IN ('info', 'warning', 'error', 'success', 'announcement'));
 
 ALTER TABLE "Broadcast" ADD CONSTRAINT chk_broadcast_status
-  CHECK ("status" IN (:'DRAFT_STATUS', 'scheduled', 'sent', :'CANCELLED_STATUS'));
+  CHECK ("status" IN (:DRAFT_STATUS, 'scheduled', 'sent', :CANCELLED_STATUS));
 
 -- ============================================================
 -- PushToken constraints
@@ -447,7 +447,7 @@ ALTER TABLE "PushToken" ADD CONSTRAINT chk_push_platform
 -- ============================================================
 
 ALTER TABLE "ContentReport" ADD CONSTRAINT chk_report_status
-  CHECK ("status" IN (:'PENDING_STATUS', 'reviewed', :'RESOLVED_STATUS', 'dismissed'));
+  CHECK ("status" IN (:PENDING_STATUS, 'reviewed', :RESOLVED_STATUS, 'dismissed'));
 
 -- ============================================================
 -- Automation constraints
@@ -464,7 +464,7 @@ ALTER TABLE "Campaign" ADD CONSTRAINT chk_campaign_type
   CHECK ("type" IN ('email', 'sms', 'push', 'in-app', 'webhook'));
 
 ALTER TABLE "Campaign" ADD CONSTRAINT chk_campaign_status
-  CHECK ("status" IN (:'DRAFT_STATUS', 'scheduled', 'running', :'COMPLETED_STATUS', :'CANCELLED_STATUS'));
+  CHECK ("status" IN (:DRAFT_STATUS, 'scheduled', 'running', :COMPLETED_STATUS, :CANCELLED_STATUS));
 
 ALTER TABLE "Campaign" ADD CONSTRAINT chk_campaign_target_role
   CHECK ("target_role" IN ('STUDENT', 'TEACHER', 'MODERATOR', 'ADMIN', 'ALL'));
@@ -484,10 +484,10 @@ ALTER TABLE "ScheduledItem" ADD CONSTRAINT chk_scheduled_type
   CHECK ("type" IN ('announcement', 'exam', 'task', 'post', 'content', 'event', 'reminder'));
 
 ALTER TABLE "ScheduledItem" ADD CONSTRAINT chk_scheduled_status
-  CHECK ("status" IN (:'PENDING_STATUS', 'processing', :'COMPLETED_STATUS', :'FAILED_STATUS', :'CANCELLED_STATUS'));
+  CHECK ("status" IN (:PENDING_STATUS, 'processing', :COMPLETED_STATUS, :FAILED_STATUS, :CANCELLED_STATUS));
 
 ALTER TABLE "ScheduledItem" ADD CONSTRAINT chk_scheduled_frequency
-  CHECK ("frequency" IN ('once', 'daily', :'WEEKLY_INTERVAL', :'MONTHLY_INTERVAL', 'yearly'));
+  CHECK ("frequency" IN ('once', 'daily', :WEEKLY_INTERVAL, :MONTHLY_INTERVAL, 'yearly'));
 
 -- ============================================================
 -- Security audit constraints
@@ -497,7 +497,7 @@ ALTER TABLE "security_audit_logs" ADD CONSTRAINT chk_security_audit_severity
   CHECK ("severity" IN ('low', 'medium', 'high', 'critical')); -- NOSONAR
 
 ALTER TABLE "security_audit_logs" ADD CONSTRAINT chk_security_audit_status
-  CHECK ("status" IN ('open', 'investigating', :'RESOLVED_STATUS', 'false_positive'));
+  CHECK ("status" IN ('open', 'investigating', :RESOLVED_STATUS, 'false_positive'));
 
 -- ============================================================
 -- IP whitelist constraints
@@ -507,7 +507,7 @@ ALTER TABLE "ip_whitelist_entries" ADD CONSTRAINT chk_ip_entry_type
   CHECK ("type" IN ('allow', 'block'));
 
 ALTER TABLE "ip_whitelist_entries" ADD CONSTRAINT chk_ip_entry_status
-  CHECK ("status" IN (:'ACTIVE_STATUS', 'inactive', 'expired'));
+  CHECK ("status" IN (:ACTIVE_STATUS, 'inactive', 'expired'));
 
 ALTER TABLE "ip_whitelist_settings" ADD CONSTRAINT chk_ip_default_action
   CHECK ("default_action" IN ('allow', 'block'));
@@ -527,6 +527,6 @@ ALTER TABLE "Backup" ADD CONSTRAINT chk_backup_type
   CHECK ("type" IN ('full', 'incremental', 'differential'));
 
 ALTER TABLE "Backup" ADD CONSTRAINT chk_backup_status
-  CHECK ("status" IN (:'PENDING_STATUS', 'running', :'COMPLETED_STATUS', :'FAILED_STATUS', :'CANCELLED_STATUS'));
+  CHECK ("status" IN (:PENDING_STATUS, 'running', :COMPLETED_STATUS, :FAILED_STATUS, :CANCELLED_STATUS));
 
 COMMIT;

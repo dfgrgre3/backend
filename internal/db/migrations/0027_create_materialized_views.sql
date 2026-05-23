@@ -4,6 +4,12 @@
 
 BEGIN;
 
+-- Helper function to avoid duplicating the '7 days' literal
+CREATE OR REPLACE FUNCTION pg_temp.weekly_interval()
+RETURNS INTERVAL AS $$
+    SELECT INTERVAL '7 days';
+$$ LANGUAGE sql IMMUTABLE;
+
 -- ============================================================
 -- 1. User Progress Summary: denormalized read model
 -- ============================================================
@@ -54,7 +60,7 @@ LEFT JOIN LATERAL (
         COUNT(*) AS weekly_sessions,
         COALESCE(AVG(ss.focus_score), 0) AS weekly_avg_focus
     FROM "StudySession" ss
-    WHERE ss."userId" = u.id AND ss.start_time >= NOW() - INTERVAL '7 days'
+    WHERE ss."userId" = u.id AND ss.start_time >= NOW() - pg_temp.weekly_interval()
 ) ss ON true
 LEFT JOIN LATERAL (
     SELECT
@@ -100,18 +106,18 @@ SELECT
         SELECT COALESCE(SUM(amount), 0) FROM "WalletTransaction" wt
         WHERE wt."userId" = u.id
         AND wt.type = 'xp_earned'
-        AND wt."createdAt" >= NOW() - INTERVAL '7 days'
+        AND wt."createdAt" >= NOW() - pg_temp.weekly_interval()
     ), 0) AS weekly_xp_earned,
 
     NOW() AS computed_at
 FROM "User" u
-LEFT JOIN "StudySession" ss ON ss."userId" = u.id AND ss.start_time >= NOW() - INTERVAL '7 days'
+LEFT JOIN "StudySession" ss ON ss."userId" = u.id AND ss.start_time >= NOW() - pg_temp.weekly_interval()
 LEFT JOIN LATERAL (
     SELECT
         COUNT(*) AS total_tasks,
         COUNT(*) FILTER (WHERE t.status = 'COMPLETED') AS completed_tasks
     FROM "Task" t
-    WHERE t."userId" = u.id AND (t."createdAt" >= NOW() - INTERVAL '7 days' OR t."updatedAt" >= NOW() - INTERVAL '7 days')
+    WHERE t."userId" = u.id AND (t."createdAt" >= NOW() - pg_temp.weekly_interval() OR t."updatedAt" >= NOW() - pg_temp.weekly_interval())
 ) tsk ON true
 WHERE u.deleted_at IS NULL
 GROUP BY u.id, tsk.total_tasks, tsk.completed_tasks;

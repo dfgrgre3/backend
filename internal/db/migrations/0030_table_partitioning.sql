@@ -6,8 +6,12 @@ BEGIN;
 
 CREATE OR REPLACE FUNCTION pg_temp.month_start(input_date DATE)
 RETURNS DATE AS $$
-    SELECT DATE_TRUNC('month', input_date)::DATE;
-$$ LANGUAGE sql IMMUTABLE;
+DECLARE
+    date_part CONSTANT TEXT := 'month';
+BEGIN
+    RETURN DATE_TRUNC(date_part, input_date)::DATE;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
 
 -- ============================================================
 -- Analytics Events Partitioning (Monthly)

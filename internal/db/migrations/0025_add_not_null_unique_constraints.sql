@@ -10,6 +10,7 @@ BEGIN;
 DO $$
 DECLARE
   schema_name CONSTANT TEXT := 'public';
+  user_id_column CONSTANT TEXT := 'userId';
   subject_id_column CONSTANT TEXT := 'subjectId';
   user_table CONSTANT TEXT := 'User';
   subject_table CONSTANT TEXT := 'Subject';
@@ -168,7 +169,7 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = schema_name AND table_name = enrollment_table
-    AND column_name = 'userId' AND is_nullable = 'YES'
+    AND column_name = user_id_column AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "SubjectEnrollment" WHERE "userId" IS NULL;
     ALTER TABLE "SubjectEnrollment" ALTER COLUMN "userId" SET NOT NULL;
@@ -190,7 +191,7 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = schema_name AND table_name = progress_table
-    AND column_name = 'userId' AND is_nullable = 'YES'
+    AND column_name = user_id_column AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "TopicProgress" WHERE "userId" IS NULL;
     ALTER TABLE "TopicProgress" ALTER COLUMN "userId" SET NOT NULL;
@@ -212,7 +213,7 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = schema_name AND table_name = payment_table
-    AND column_name = 'userId' AND is_nullable = 'YES'
+    AND column_name = user_id_column AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "Payment" WHERE "userId" IS NULL;
     ALTER TABLE "Payment" ALTER COLUMN "userId" SET NOT NULL;
@@ -234,7 +235,7 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = schema_name AND table_name = notification_table
-    AND column_name = 'userId' AND is_nullable = 'YES'
+    AND column_name = user_id_column AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "Notification" WHERE "userId" IS NULL;
     ALTER TABLE "Notification" ALTER COLUMN "userId" SET NOT NULL;
@@ -247,7 +248,7 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = schema_name AND table_name = task_table
-    AND column_name = 'userId' AND is_nullable = 'YES'
+    AND column_name = user_id_column AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "Task" WHERE "userId" IS NULL;
     ALTER TABLE "Task" ALTER COLUMN "userId" SET NOT NULL;
@@ -260,7 +261,7 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = schema_name AND table_name = study_session_table
-    AND column_name = 'userId' AND is_nullable = 'YES'
+    AND column_name = user_id_column AND is_nullable = 'YES'
   ) THEN
     DELETE FROM "StudySession" WHERE "userId" IS NULL;
     ALTER TABLE "StudySession" ALTER COLUMN "userId" SET NOT NULL;

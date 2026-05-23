@@ -23,6 +23,7 @@ const (
 	TypeGamificationSync   = "gamification:sync"
 	TypeBatchProgressFlush = "progress:batch_flush"
 	jsonUnmarshalFailedFmt = "json.Unmarshal failed: %v: %w"
+	errDatabaseNotConnected = "database not connected"
 )
 
 type ProgressUpdatePayload struct {
@@ -103,7 +104,7 @@ func (h *ProgressHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 
 func (h *ProgressHandler) handleLessonCompleted(ctx context.Context, p ProgressUpdatePayload) error {
 	if writeDB(ctx) == nil {
-		return fmt.Errorf("database not connected")
+		return fmt.Errorf(errDatabaseNotConnected)
 	}
 
 	now := time.Now()
@@ -129,7 +130,7 @@ func (h *ProgressHandler) handleLessonCompleted(ctx context.Context, p ProgressU
 
 func (h *ProgressHandler) handleLessonProgress(ctx context.Context, p ProgressUpdatePayload) error {
 	if writeDB(ctx) == nil {
-		return fmt.Errorf("database not connected")
+		return fmt.Errorf(errDatabaseNotConnected)
 	}
 
 	now := time.Now()
@@ -153,7 +154,7 @@ func (h *ProgressHandler) handleLessonProgress(ctx context.Context, p ProgressUp
 
 func (h *ProgressHandler) handleExamCompleted(ctx context.Context, p ProgressUpdatePayload) error {
 	if writeDB(ctx) == nil {
-		return fmt.Errorf("database not connected")
+		return fmt.Errorf(errDatabaseNotConnected)
 	}
 
 	now := time.Now()
@@ -174,7 +175,7 @@ func (h *ProgressHandler) handleExamCompleted(ctx context.Context, p ProgressUpd
 
 func (h *ProgressHandler) handleTaskCompleted(ctx context.Context, p ProgressUpdatePayload) error {
 	if writeDB(ctx) == nil {
-		return fmt.Errorf("database not connected")
+		return fmt.Errorf(errDatabaseNotConnected)
 	}
 
 	result := writeDB(ctx).Exec(`
@@ -195,7 +196,7 @@ func (h *ProgressHandler) handleTaskCompleted(ctx context.Context, p ProgressUpd
 
 func (h *ProgressHandler) handleStudySession(ctx context.Context, p ProgressUpdatePayload) error {
 	if writeDB(ctx) == nil {
-		return fmt.Errorf("database not connected")
+		return fmt.Errorf(errDatabaseNotConnected)
 	}
 
 	now := time.Now()
@@ -225,7 +226,7 @@ func (h *GamificationHandler) ProcessTask(ctx context.Context, t *asynq.Task) er
 		p.UserID, p.XPAmount, p.XPType, p.Source)
 
 	if writeDB(ctx) == nil {
-		return fmt.Errorf("database not connected")
+		return fmt.Errorf(errDatabaseNotConnected)
 	}
 
 	var updateColumn string
@@ -279,7 +280,7 @@ func (h *BatchProgressFlushHandler) ProcessTask(ctx context.Context, t *asynq.Ta
 	log.Printf("[BatchFlushWorker] Flushing aggregated progress for user %s", p.UserID)
 
 	if writeDB(ctx) == nil {
-		return fmt.Errorf("database not connected")
+		return fmt.Errorf(errDatabaseNotConnected)
 	}
 
 	result := writeDB(ctx).Exec(`
