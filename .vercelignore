@@ -1,26 +1,29 @@
 # .vercelignore
-# Exclude node_modules directory
+# Exclude development, secret, and build artifacts
+*.exe
+*.dll
 node_modules/
-# Exclude environment files
-.env*
-# Exclude build output directories
-dist/
-# Exclude Vercel specific config directory
-.vercel/
-# Exclude Git metadata
 .git/
-# Exclude logs and temporary files
-logs/
-*.log
-*.tmp
-# Exclude Go test artifacts
-*_test.go
-*.test
-# Exclude IDE/editor temporary files
+.env
+.env.*
 .vscode/
 .idea/
-*.sw?
-*~
-# Exclude compiled binaries and related directories
-*.exe
+*.log
+coverage/
+.dist/
+build/
+.tmp/
+*.sqlite
+*.db
+*.bak
+.DS_Store
+# Exclude large binaries and directories
+app/
 bin/
+uploads/
+pkg/
+static/
+public/
+# Next.js and Vercel build outputs
+.next/
+.vercel/
