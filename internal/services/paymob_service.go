@@ -264,6 +264,8 @@ func getNestedValue(data map[string]interface{}, key string) string {
 			}
 			
 			switch v := val.(type) {
+			case json.Number:
+				return v.String()
 			case float64:
 				// JSON numbers are parsed as float64. Format integers correctly to avoid scientific notation
 				// or trailing decimal points (e.g. 1.23456e+09 or 123456.0).

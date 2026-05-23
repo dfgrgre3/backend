@@ -2,6 +2,10 @@ package middleware
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
@@ -17,8 +21,49 @@ import (
 	"thanawy-backend/internal/services"
 
 	"github.com/gin-gonic/gin"
+	"github.com/patrickmn/go-cache"
 	"golang.org/x/sync/singleflight"
 )
+
+var impersonationSignKey []byte
+var impersonationKeyOnce sync.Once
+
+func getImpersonationSignKey() []byte {
+	impersonationKeyOnce.Do(func() {
+		impersonationSignKey = make([]byte, 32)
+		if _, err := rand.Read(impersonationSignKey); err != nil {
+			panic("failed to generate secure random key for impersonation signing")
+		}
+	})
+	return impersonationSignKey
+}
+
+func SignImpersonationToken(userID string) string {
+	key := getImpersonationSignKey()
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(userID))
+	signature := hex.EncodeToString(mac.Sum(nil))
+	return userID + "." + signature
+}
+
+func VerifyImpersonationToken(token string) (string, bool) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 2 {
+		return "", false
+	}
+	userID := parts[0]
+	signature := parts[1]
+
+	key := getImpersonationSignKey()
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(userID))
+	expectedSignature := hex.EncodeToString(mac.Sum(nil))
+
+	if hmac.Equal([]byte(signature), []byte(expectedSignature)) {
+		return userID, true
+	}
+	return "", false
+}
 
 var (
 	cachedConfig *config.Config
@@ -29,80 +74,8 @@ var (
 	localRolePermsMaxEntries = 10000
 )
 
-type InMemoryRolePerms struct {
-	Role        string
-	Permissions []string
-	ExpiresAt   time.Time
-}
-
-type LocalRolePermsCache struct {
-	mu    sync.RWMutex
-	items map[string]InMemoryRolePerms
-}
-
-func NewLocalRolePermsCache(cleanupInterval time.Duration) *LocalRolePermsCache {
-	c := &LocalRolePermsCache{
-		items: make(map[string]InMemoryRolePerms),
-	}
-	go c.startJanitor(cleanupInterval)
-	return c
-}
-
-func (c *LocalRolePermsCache) Get(key string) (*userAuthContext, bool) {
-	c.mu.RLock()
-	item, found := c.items[key]
-	c.mu.RUnlock()
-
-	if !found {
-		return nil, false
-	}
-
-	if time.Now().After(item.ExpiresAt) {
-		c.mu.Lock()
-		delete(c.items, key)
-		c.mu.Unlock()
-		return nil, false
-	}
-
-	return &userAuthContext{Role: item.Role, Permissions: item.Permissions}, true
-}
-
-func (c *LocalRolePermsCache) Add(key string, ctx *userAuthContext) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.items[key] = InMemoryRolePerms{
-		Role:        ctx.Role,
-		Permissions: ctx.Permissions,
-		ExpiresAt:   time.Now().Add(localRolePermsTTL),
-	}
-}
-
-func (c *LocalRolePermsCache) Remove(key string) {
-	c.mu.Lock()
-	delete(c.items, key)
-	c.mu.Unlock()
-}
-
-func (c *LocalRolePermsCache) startJanitor(interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	for range ticker.C {
-		c.cleanupExpired()
-	}
-}
-
-func (c *LocalRolePermsCache) cleanupExpired() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	now := time.Now()
-	for k, v := range c.items {
-		if now.After(v.ExpiresAt) {
-			delete(c.items, k)
-		}
-	}
-}
-
 var (
-	localRolePermsCache = NewLocalRolePermsCache(10 * time.Minute)
+	localRolePermsCache = cache.New(localRolePermsTTL, 10*time.Minute)
 	userContextSF       singleflight.Group
 )
 
@@ -113,7 +86,7 @@ type userAuthContext struct {
 
 // InvalidateRolePermsCache evicts a user's cached role/permissions
 func InvalidateRolePermsCache(userID string) {
-	localRolePermsCache.Remove(userID)
+	localRolePermsCache.Delete(userID)
 }
 
 // Context keys for storing user information in request context
@@ -188,7 +161,11 @@ func setContextPermissions(c *gin.Context, permissions models.JSONStringArray) {
 // fetchCachedRolePerms checks local in-memory cache for user role/permissions.
 // Returns the cached context and true if found and not expired.
 func fetchCachedRolePerms(userID string) (*userAuthContext, bool) {
-	return localRolePermsCache.Get(userID)
+	val, found := localRolePermsCache.Get(userID)
+	if !found {
+		return nil, false
+	}
+	return val.(*userAuthContext), true
 }
 
 // fetchRedisRolePerms attempts to retrieve user role/permissions from Redis cache.
@@ -221,7 +198,7 @@ func fetchRedisRolePerms(cacheKey string) (*userAuthContext, bool) {
 
 // storeInLocalCache populates the in-memory cache for the given user.
 func storeInLocalCache(userID string, ctx *userAuthContext) {
-	localRolePermsCache.Add(userID, ctx)
+	localRolePermsCache.Set(userID, ctx, cache.DefaultExpiration)
 }
 
 // fetchDatabaseRolePerms retrieves user role/permissions from the database.
@@ -315,12 +292,24 @@ func hydrateUserContext(c *gin.Context, userID, fallbackRole string) {
 // Helper to handle admin impersonation logic if applicable
 func processImpersonation(c *gin.Context, adminID string) {
 	currentRole, _ := c.Get("role")
-	if currentRole != "ADMIN" {
+	currentRoleStr, _ := currentRole.(string)
+	if currentRoleStr == "" {
+		currentRoleStr = "ADMIN" // Default fallback
+	}
+
+	if currentRoleStr != "ADMIN" && currentRoleStr != "SUPER_ADMIN" {
 		return
 	}
 
-	impersonatedID, err := c.Cookie("impersonate_user_id")
-	if err != nil || impersonatedID == "" {
+	impersonatedCookie, err := c.Cookie("impersonate_user_id")
+	if err != nil || impersonatedCookie == "" {
+		return
+	}
+
+	impersonatedID, ok := VerifyImpersonationToken(impersonatedCookie)
+	if !ok {
+		log.Printf("Security Warning: Admin %s attempted to impersonate with an invalid or tampered token: %s", adminID, impersonatedCookie)
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Invalid or tampered impersonation token"})
 		return
 	}
 
@@ -342,10 +331,18 @@ func processImpersonation(c *gin.Context, adminID string) {
 	}
 
 	if authCtx != nil && authCtx.Role != "" {
-		// Prevent privilege escalation: An ADMIN cannot impersonate another ADMIN or a SUPER_ADMIN.
-		if authCtx.Role == "ADMIN" || authCtx.Role == "SUPER_ADMIN" {
-			log.Printf("Security Warning: Admin %s attempted to impersonate administrative user %s with role %s", adminID, impersonatedID, authCtx.Role)
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Impersonating other administrative users is not allowed"})
+		// Prevent privilege escalation: An ADMIN/SUPER_ADMIN cannot impersonate another user of equal or higher rank
+		roleHierarchy := map[string]int{
+			"STUDENT":     1,
+			"TEACHER":     2,
+			"MODERATOR":   3,
+			"ADMIN":       4,
+			"SUPER_ADMIN": 5,
+		}
+
+		if roleHierarchy[currentRoleStr] <= roleHierarchy[authCtx.Role] {
+			log.Printf("Security Warning: Admin %s with role %s attempted to impersonate user %s with role %s", adminID, currentRoleStr, impersonatedID, authCtx.Role)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Impersonating users of equal or higher administrative rank is not allowed"})
 			return
 		}
 

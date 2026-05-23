@@ -18,8 +18,9 @@ const (
 	AuditEventPaymentFailed  = "payment.failed"
 	AuditEventExamStarted    = "exam.started"
 	AuditEventExamFinished   = "exam.finished"
-	AuditEventAdminAction    = "admin.action"
-	AuditEventDataDeletion   = "data.deletion"
+	AuditEventAdminAction        = "admin.action"
+	AuditEventDataDeletion       = "data.deletion"
+	AuditEventImpersonationStart = "admin.impersonation_start"
 )
 
 type AuditService struct{}

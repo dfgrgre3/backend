@@ -11,7 +11,9 @@ import (
 	"sync"
 	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
+	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/models"
+	"thanawy-backend/internal/services"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -319,18 +321,59 @@ func ImpersonateUser(c *gin.Context) {
 		return
 	}
 
-	// Prevent privilege escalation: Admin cannot impersonate another Admin or Super-Admin
-	if user.Role == models.RoleAdmin || user.Role == "SUPER_ADMIN" {
-		api_response.Error(c, http.StatusForbidden, "Cannot impersonate other administrative users")
+	// Enforce role hierarchy: Admin/Super-Admin cannot impersonate equal or higher rank users
+	adminID, existsAdmin := c.Get("userId")
+	if !existsAdmin || adminID == nil {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+
+	adminRole, existsRole := c.Get("role")
+	adminRoleStr, _ := adminRole.(string)
+	if !existsRole || adminRoleStr == "" {
+		adminRoleStr = "ADMIN" // Default fallback
+	}
+
+	roleHierarchy := map[string]int{
+		"STUDENT":     1,
+		"TEACHER":     2,
+		"MODERATOR":   3,
+		"ADMIN":       4,
+		"SUPER_ADMIN": 5,
+	}
+
+	targetRoleStr := string(user.Role)
+	if roleHierarchy[adminRoleStr] <= roleHierarchy[targetRoleStr] {
+		api_response.Error(c, http.StatusForbidden, "Cannot impersonate a user of equal or higher administrative rank")
+		return
+	}
+
+	// Generate securely signed token for cookie to prevent tampering
+	signedToken := middleware.SignImpersonationToken(req.TargetUserID)
 
 	// Set impersonation cookie with maximum security:
 	// HttpOnly=true — prevents JavaScript access (XSS protection)
 	// Secure=true — only sent over HTTPS
 	// SameSite=Strict — prevents CSRF attacks (never sent for cross-site requests)
 	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("impersonate_user_id", req.TargetUserID, 3600, "/", "", true, true)
+	c.SetCookie("impersonate_user_id", signedToken, 3600, "/", "", true, true)
+
+	// Force an immediate audit log entry for security tracking
+	services.GetAuditService().LogAsync(
+		adminID.(string),
+		services.AuditEventImpersonationStart,
+		"user",
+		req.TargetUserID,
+		map[string]interface{}{
+			"action":         "impersonation_start",
+			"target_user_id": req.TargetUserID,
+			"target_email":   user.Email,
+			"admin_role":     adminRoleStr,
+			"target_role":    targetRoleStr,
+		},
+		c.ClientIP(),
+		c.Request.UserAgent(),
+	)
 
 	api_response.Success(c, gin.H{
 		"success": true,

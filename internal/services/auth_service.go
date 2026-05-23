@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/repository"
@@ -33,14 +32,14 @@ func init() {
 }
 
 type AuthService struct {
-	repo     *repository.UserRepository
-	initOnce sync.Once
+	repo *repository.UserRepository
+}
+
+func NewAuthService(repo *repository.UserRepository) *AuthService {
+	return &AuthService{repo: repo}
 }
 
 func (s *AuthService) getRepo() *repository.UserRepository {
-	s.initOnce.Do(func() {
-		s.repo = repository.NewUserRepository(db.DB)
-	})
 	return s.repo
 }
 

@@ -160,8 +160,8 @@ type poolSettings struct {
 
 func getPoolSettings() poolSettings {
 	settings := poolSettings{
-		MaxIdleConns: 20,
-		MaxOpenConns: 100,
+		MaxIdleConns: 50,
+		MaxOpenConns: 300,
 		MaxLifetime:  15 * time.Minute,
 		MaxIdleTime:  5 * time.Minute,
 	}

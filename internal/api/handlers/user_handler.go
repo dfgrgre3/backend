@@ -34,8 +34,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var authService = &services.AuthService{}
+var authService *services.AuthService
 var tokenService = &services.TokenService{}
+
+func InitAuthService(repo *repository.UserRepository) {
+	authService = services.NewAuthService(repo)
+}
 
 var (
 	userRepo        *repository.UserRepository

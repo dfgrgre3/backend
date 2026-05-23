@@ -23,6 +23,7 @@ import (
 	"thanawy-backend/internal/app"
 	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/db"
+	"thanawy-backend/internal/repository"
 	"thanawy-backend/internal/router"
 	"thanawy-backend/internal/storage"
 	"thanawy-backend/internal/worker"
@@ -61,6 +62,9 @@ func main() {
 	if len(cfg.DatabaseReadReplicas) > 0 {
 		log.Printf("Database configured with %d read replica(s)", len(cfg.DatabaseReadReplicas))
 	}
+
+	// Initialize AuthService with UserRepository dependency (Dependency Injection)
+	handlers.InitAuthService(repository.NewUserRepository(db.DB))
 
 	// Initialize S3 Storage (Cloudflare R2 / AWS S3 / MinIO)
 	initS3Storage(cfg)

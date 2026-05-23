@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"thanawy-backend/internal/db"
@@ -18,7 +19,9 @@ import (
 // Paymob Callback Handler
 func PaymobWebhook(c *gin.Context) {
 	var payload map[string]interface{}
-	if err := c.ShouldBindJSON(&payload); err != nil {
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.UseNumber()
+	if err := decoder.Decode(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payload"})
 		return
 	}
@@ -65,14 +68,30 @@ func extractPaymobTransactionData(payload map[string]interface{}) paymobTransact
 	}
 	success, _ := obj["success"].(bool)
 	pending, _ := obj["pending"].(bool)
-	orderIDFloat, _ := obj["order"].(float64)
-	txnIDFloat, _ := obj["id"].(float64)
+
+	var orderID, txnID int64
+
+	if orderVal := obj["order"]; orderVal != nil {
+		if num, ok := orderVal.(json.Number); ok {
+			orderID, _ = num.Int64()
+		} else if f, ok := orderVal.(float64); ok {
+			orderID = int64(f)
+		}
+	}
+
+	if idVal := obj["id"]; idVal != nil {
+		if num, ok := idVal.(json.Number); ok {
+			txnID, _ = num.Int64()
+		} else if f, ok := idVal.(float64); ok {
+			txnID = int64(f)
+		}
+	}
 
 	return paymobTransactionData{
 		Success: success,
 		Pending: pending,
-		OrderID: int64(orderIDFloat),
-		TxnID:   int64(txnIDFloat),
+		OrderID: orderID,
+		TxnID:   txnID,
 	}
 }
 

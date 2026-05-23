@@ -20,10 +20,11 @@ type AuthServiceServer struct {
 }
 
 func NewAuthServiceServer() *AuthServiceServer {
+	userRepo := repository.NewUserRepository(db.DB)
 	return &AuthServiceServer{
-		authService:  &services.AuthService{},
+		authService:  services.NewAuthService(userRepo),
 		tokenService: &services.TokenService{},
-		userRepo:     repository.NewUserRepository(db.DB),
+		userRepo:     userRepo,
 	}
 }
 
