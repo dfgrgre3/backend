@@ -1,9 +1,12 @@
 package services
 
 import (
+	"bytes"
 	"fmt"
+	"html/template"
 	"net/smtp"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -112,10 +115,73 @@ func (s *EmailService) SendBulkEmail(to []string, subject, body string, isHTML b
 
 // SendTemplateEmail sends an email using a template
 func (s *EmailService) SendTemplateEmail(to, subject, templateName string, data map[string]interface{}) error {
-	// TODO: Implement template rendering
-	// For now, just send a simple message
-	body := fmt.Sprintf("رسالة من المنصة التعليمية\nالقالب: %s\nالبيانات: %v", templateName, data)
-	return s.SendEmail(to, subject, body, false)
+	if !s.enabled {
+		fmt.Printf("[Email] Service disabled, skipping template email to %s: %s (Template: %s)\n", to, subject, templateName)
+		return nil
+	}
+
+	templatesDir := os.Getenv("EMAIL_TEMPLATES_DIR")
+	if templatesDir == "" {
+		templatesDir = "templates"
+	}
+
+	templatePath := filepath.Join(templatesDir, templateName+".html")
+
+	var body bytes.Buffer
+
+	// Check if template file exists
+	if _, statErr := os.Stat(templatePath); statErr == nil {
+		tmpl, parseErr := template.ParseFiles(templatePath)
+		if parseErr != nil {
+			return fmt.Errorf("failed to parse email template %s: %w", templateName, parseErr)
+		}
+		if executeErr := tmpl.Execute(&body, data); executeErr != nil {
+			return fmt.Errorf("failed to execute email template %s: %w", templateName, executeErr)
+		}
+	} else {
+		// Fallback: render from a default HTML template string
+		fallbackTmplSrc := `
+			<div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
+				<h2 style="color: #333;">{{.Title}}</h2>
+				<div style="color: #666; line-height: 1.6; margin-top: 20px;">
+					{{.Message}}
+				</div>
+				{{if .ActionURL}}
+				<div style="margin-top: 25px; text-align: center;">
+					<a href="{{.ActionURL}}" style="display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">{{if .ActionText}}{{.ActionText}}{{else}}تحقق من التفاصيل{{end}}</a>
+				</div>
+				{{end}}
+				<hr style="border: none; border-top: 1px solid #eee; margin: 25px 0;">
+				<p style="color: #999; font-size: 12px; text-align: center;">هذه رسالة آلية من منصة التعلّم</p>
+			</div>
+		`
+		tmpl, parseErr := template.New("fallback").Parse(fallbackTmplSrc)
+		if parseErr != nil {
+			return fmt.Errorf("failed to parse fallback template: %w", parseErr)
+		}
+
+		// Ensure title and message have fallback values if not present
+		if _, ok := data["Title"]; !ok {
+			data["Title"] = subject
+		}
+		if _, ok := data["Message"]; !ok {
+			if msg, ok := data["message"].(string); ok {
+				data["Message"] = msg
+			} else {
+				var fields []string
+				for k, v := range data {
+					fields = append(fields, fmt.Sprintf("<strong>%s:</strong> %v", k, v))
+				}
+				data["Message"] = strings.Join(fields, "<br>")
+			}
+		}
+
+		if executeErr := tmpl.Execute(&body, data); executeErr != nil {
+			return fmt.Errorf("failed to execute fallback template: %w", executeErr)
+		}
+	}
+
+	return s.SendEmail(to, subject, body.String(), true)
 }
 
 // BuildNotificationEmail builds a notification email body

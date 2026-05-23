@@ -213,7 +213,7 @@ func applySubjectUpdates(subject *Subject, input UpdateSubjectInput) {
 	assignSliceIfPresent(&subject.LearningObjectives, input.LearningObjectives)
 }
 
-func assignValueIfPresent[T any](target *T, value *T) {
+func assignValueIfPresent[T any](target, value *T) {
 	if value != nil {
 		*target = *value
 	}
