@@ -7,8 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,9 +16,7 @@ import (
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/services"
 
-	"github.com/MicahParks/keyfunc/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -28,20 +24,85 @@ var (
 	cachedConfig *config.Config
 	configOnce   sync.Once
 
-	// JWKS cache with TTL to allow refresh
-	jwksCache    *keyfunc.JWKS
-	jwksCacheErr error
-	jwksLastLoad time.Time
-	jwksMutex    sync.RWMutex
-	jwksTTL      = 1 * time.Hour // Default TTL, can be overridden by JWKS_CACHE_TTL_HOURS env var
-
 	localRolePermsTTL        = 5 * time.Minute
 	rolePermsRedisTTL        = 5 * time.Minute
 	localRolePermsMaxEntries = 10000
 )
 
+type InMemoryRolePerms struct {
+	Role        string
+	Permissions []string
+	ExpiresAt   time.Time
+}
+
+type LocalRolePermsCache struct {
+	mu    sync.RWMutex
+	items map[string]InMemoryRolePerms
+}
+
+func NewLocalRolePermsCache(cleanupInterval time.Duration) *LocalRolePermsCache {
+	c := &LocalRolePermsCache{
+		items: make(map[string]InMemoryRolePerms),
+	}
+	go c.startJanitor(cleanupInterval)
+	return c
+}
+
+func (c *LocalRolePermsCache) Get(key string) (*userAuthContext, bool) {
+	c.mu.RLock()
+	item, found := c.items[key]
+	c.mu.RUnlock()
+
+	if !found {
+		return nil, false
+	}
+
+	if time.Now().After(item.ExpiresAt) {
+		c.mu.Lock()
+		delete(c.items, key)
+		c.mu.Unlock()
+		return nil, false
+	}
+
+	return &userAuthContext{Role: item.Role, Permissions: item.Permissions}, true
+}
+
+func (c *LocalRolePermsCache) Add(key string, ctx *userAuthContext) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.items[key] = InMemoryRolePerms{
+		Role:        ctx.Role,
+		Permissions: ctx.Permissions,
+		ExpiresAt:   time.Now().Add(localRolePermsTTL),
+	}
+}
+
+func (c *LocalRolePermsCache) Remove(key string) {
+	c.mu.Lock()
+	delete(c.items, key)
+	c.mu.Unlock()
+}
+
+func (c *LocalRolePermsCache) startJanitor(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	for range ticker.C {
+		c.cleanupExpired()
+	}
+}
+
+func (c *LocalRolePermsCache) cleanupExpired() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := time.Now()
+	for k, v := range c.items {
+		if now.After(v.ExpiresAt) {
+			delete(c.items, k)
+		}
+	}
+}
+
 var (
-	localRolePermsCache = expirable.NewLRU[string, *userAuthContext](localRolePermsMaxEntries, nil, localRolePermsTTL)
+	localRolePermsCache = NewLocalRolePermsCache(10 * time.Minute)
 	userContextSF       singleflight.Group
 )
 
@@ -69,62 +130,6 @@ func getConfig() *config.Config {
 		cachedConfig = config.Load()
 	})
 	return cachedConfig
-}
-
-func getJWKS() (*keyfunc.JWKS, error) {
-	// Check cache with read lock first
-	jwksMutex.RLock()
-	if jwksCache != nil && jwksCacheErr == nil && time.Since(jwksLastLoad) < jwksTTL {
-		cached := jwksCache
-		err := jwksCacheErr
-		jwksMutex.RUnlock()
-		return cached, err
-	}
-	jwksMutex.RUnlock()
-
-	// Cache expired or invalid, acquire write lock to reload
-	jwksMutex.Lock()
-	defer jwksMutex.Unlock()
-
-	// Double-check after acquiring write lock to avoid redundant reloads
-	if jwksCache != nil && jwksCacheErr == nil && time.Since(jwksLastLoad) < jwksTTL {
-		return jwksCache, jwksCacheErr
-	}
-
-	// Reload JWKS
-	jwksURL := os.Getenv("CLERK_JWKS_URL")
-	if jwksURL == "" {
-		jwksCacheErr = fmt.Errorf("CLERK_JWKS_URL environment variable is not set")
-		jwksCache = nil
-		jwksLastLoad = time.Now()
-		return nil, jwksCacheErr
-	}
-
-	// Allow TTL override via environment variable
-	ttl := jwksTTL
-	if ttlStr := os.Getenv("JWKS_CACHE_TTL_HOURS"); ttlStr != "" {
-		if hours, err := strconv.Atoi(ttlStr); err == nil && hours > 0 {
-			ttl = time.Duration(hours) * time.Hour
-		}
-	}
-
-	options := keyfunc.Options{
-		RefreshInterval:  ttl,
-		RefreshRateLimit: time.Minute * 5,
-		RefreshTimeout:   time.Second * 10,
-	}
-
-	newJwks, err := keyfunc.Get(jwksURL, options)
-	if err != nil {
-		jwksCacheErr = err
-		jwksCache = nil
-	} else {
-		jwksCache = newJwks
-		jwksCacheErr = nil
-	}
-	jwksLastLoad = time.Now()
-
-	return jwksCache, jwksCacheErr
 }
 
 func Auth() gin.HandlerFunc {
@@ -337,6 +342,13 @@ func processImpersonation(c *gin.Context, adminID string) {
 	}
 
 	if authCtx != nil && authCtx.Role != "" {
+		// Prevent privilege escalation: An ADMIN cannot impersonate another ADMIN or a SUPER_ADMIN.
+		if authCtx.Role == "ADMIN" || authCtx.Role == "SUPER_ADMIN" {
+			log.Printf("Security Warning: Admin %s attempted to impersonate administrative user %s with role %s", adminID, impersonatedID, authCtx.Role)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Impersonating other administrative users is not allowed"})
+			return
+		}
+
 		c.Set("originalAdminId", adminID)
 		c.Set("userId", impersonatedID)
 		c.Set("role", authCtx.Role)

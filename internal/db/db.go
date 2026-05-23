@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -95,29 +96,41 @@ func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
 
 // ReadDB returns a GORM session explicitly routed to a read replica.
 // Use this in all query (read) handlers to enforce CQRS read path.
-func ReadDB() *gorm.DB {
+func ReadDB(ctxs ...context.Context) *gorm.DB {
 	if DB == nil {
 		return nil
 	}
-	return DB.Session(&gorm.Session{}).Clauses(dbresolver.Read)
+	db := DB.Session(&gorm.Session{}).Clauses(dbresolver.Read)
+	if len(ctxs) > 0 && ctxs[0] != nil {
+		db = db.WithContext(ctxs[0])
+	}
+	return db
 }
 
 // WriteDB returns a GORM session explicitly routed to the write source.
 // Use this in all command (write) handlers to enforce CQRS write path.
-func WriteDB() *gorm.DB {
+func WriteDB(ctxs ...context.Context) *gorm.DB {
 	if DB == nil {
 		return nil
 	}
-	return DB.Session(&gorm.Session{}).Clauses(dbresolver.Write)
+	db := DB.Session(&gorm.Session{}).Clauses(dbresolver.Write)
+	if len(ctxs) > 0 && ctxs[0] != nil {
+		db = db.WithContext(ctxs[0])
+	}
+	return db
 }
 
 // WithWriteTx executes fn within a write-routed transaction.
 // This guarantees all operations in fn go to the write source.
-func WithWriteTx(fn func(tx *gorm.DB) error) error {
+func WithWriteTx(fn func(tx *gorm.DB) error, ctxs ...context.Context) error {
 	if DB == nil {
 		return fmt.Errorf("database connection is not initialized")
 	}
-	return DB.Session(&gorm.Session{}).Clauses(dbresolver.Write).Transaction(fn)
+	session := DB.Session(&gorm.Session{}).Clauses(dbresolver.Write)
+	if len(ctxs) > 0 && ctxs[0] != nil {
+		session = session.WithContext(ctxs[0])
+	}
+	return session.Transaction(fn)
 }
 
 func getGormLogLevel() logger.LogLevel {
@@ -147,8 +160,8 @@ type poolSettings struct {
 
 func getPoolSettings() poolSettings {
 	settings := poolSettings{
-		MaxIdleConns: 10,
-		MaxOpenConns: 25,
+		MaxIdleConns: 20,
+		MaxOpenConns: 100,
 		MaxLifetime:  15 * time.Minute,
 		MaxIdleTime:  5 * time.Minute,
 	}

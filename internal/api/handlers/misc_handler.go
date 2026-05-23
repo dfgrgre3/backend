@@ -319,6 +319,12 @@ func ImpersonateUser(c *gin.Context) {
 		return
 	}
 
+	// Prevent privilege escalation: Admin cannot impersonate another Admin or Super-Admin
+	if user.Role == models.RoleAdmin || user.Role == "SUPER_ADMIN" {
+		api_response.Error(c, http.StatusForbidden, "Cannot impersonate other administrative users")
+		return
+	}
+
 	// Set impersonation cookie with maximum security:
 	// HttpOnly=true — prevents JavaScript access (XSS protection)
 	// Secure=true — only sent over HTTPS

@@ -112,33 +112,12 @@ func (s *PaymobService) GetPaymentKey(authToken string, orderID, amountCents int
 			billingData[f] = "N/A"
 		}
 	}
-	// Defaults if missing
-	if billingData["apartment"] == "" {
-		billingData["apartment"] = "803"
-	}
-	if billingData["floor"] == "" {
-		billingData["floor"] = "42"
-	}
-	if billingData["street"] == "" {
-		billingData["street"] = "Ethan Hunt"
-	}
-	if billingData["building"] == "" {
-		billingData["building"] = "8028"
-	}
-	if billingData["shipping_method"] == "" {
-		billingData["shipping_method"] = "PKG"
-	}
-	if billingData["postal_code"] == "" {
-		billingData["postal_code"] = "01898"
-	}
-	if billingData["city"] == "" {
-		billingData["city"] = "Cairo"
-	}
-	if billingData["country"] == "" {
-		billingData["country"] = "EG"
-	}
-	if billingData["state"] == "" {
-		billingData["state"] = "Cairo"
+	// Defaults for optional fields using neutral placeholder (N/A)
+	optionalFields := []string{"apartment", "floor", "street", "building", "shipping_method", "postal_code", "city", "country", "state"}
+	for _, f := range optionalFields {
+		if billingData[f] == "" {
+			billingData[f] = "N/A"
+		}
 	}
 
 	payload := map[string]interface{}{
@@ -224,6 +203,13 @@ func (s *PaymobService) VerifyHMAC(payload map[string]interface{}) bool {
 		return false
 	}
 
+	// Paymob puts transaction data inside the "obj" field of the webhook payload.
+	// If "obj" is present, extract it. Otherwise fallback to root payload.
+	obj, ok := payload["obj"].(map[string]interface{})
+	if !ok {
+		obj = payload
+	}
+
 	// Build the string to hash according to Paymob's documentation
 	// The fields are concatenated with empty strings for missing values
 	fields := []string{
@@ -251,7 +237,7 @@ func (s *PaymobService) VerifyHMAC(payload map[string]interface{}) bool {
 
 	var builder strings.Builder
 	for _, field := range fields {
-		val := getNestedValue(payload, field)
+		val := getNestedValue(obj, field)
 		builder.WriteString(val)
 	}
 
@@ -264,7 +250,8 @@ func (s *PaymobService) VerifyHMAC(payload map[string]interface{}) bool {
 	return hmac.Equal([]byte(expectedHMAC), []byte(hmacFromPayload))
 }
 
-// getNestedValue extracts a value from a nested map using dot notation
+// getNestedValue extracts a value from a nested map using dot notation.
+// Converts values to strings, handling float64 serialization carefully (e.g. avoiding scientific notation).
 func getNestedValue(data map[string]interface{}, key string) string {
 	keys := strings.Split(key, ".")
 	current := data
@@ -272,10 +259,34 @@ func getNestedValue(data map[string]interface{}, key string) string {
 		if i == len(keys)-1 {
 			// Last key
 			val, ok := current[k]
-			if !ok {
+			if !ok || val == nil {
 				return ""
 			}
-			return fmt.Sprintf("%v", val)
+			
+			switch v := val.(type) {
+			case float64:
+				// JSON numbers are parsed as float64. Format integers correctly to avoid scientific notation
+				// or trailing decimal points (e.g. 1.23456e+09 or 123456.0).
+				if v == float64(int64(v)) {
+					return fmt.Sprintf("%d", int64(v))
+				}
+				return fmt.Sprintf("%f", v)
+			case float32:
+				if v == float32(int32(v)) {
+					return fmt.Sprintf("%d", int32(v))
+				}
+				return fmt.Sprintf("%f", v)
+			case int:
+				return fmt.Sprintf("%d", v)
+			case int64:
+				return fmt.Sprintf("%d", v)
+			case bool:
+				return fmt.Sprintf("%v", v)
+			case string:
+				return v
+			default:
+				return fmt.Sprintf("%v", v)
+			}
 		}
 		// Navigate deeper
 		next, ok := current[k].(map[string]interface{})
