@@ -1,9 +1,14 @@
 {
   "version": 2,
-  "framework": "go",
-  "build": {
-    "env": {
-      "GO_BUILD_FLAGS": "-ldflags '-s -w'"
+  "functions": {
+    "api/index.go": {
+      "maxDuration": 30
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index.go"
+    }
+  ]
 }
