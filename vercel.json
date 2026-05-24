@@ -3,6 +3,7 @@
   "framework": "custom",
   "buildCommand": "go build -ldflags '-s -w' -buildvcs=false -o /tmp/api/api ./api",
   "outputDirectory": ".",
+  "cleanUrls": true,
   "rewrites": [
     {
       "source": "/(.*)",

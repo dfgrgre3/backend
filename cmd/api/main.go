@@ -212,15 +212,22 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	}
 	r := gin.New()
 
-	// Public health check routes (bypass configuration validation and rate limits)
-	r.GET("/", func(c *gin.Context) {
+	// Vercel rewrites all paths to /api, so we must respond for both / and /api.
+	rootHandler := func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status":  "UP",
 			"message": "Thanawy Backend API is running",
 			"version": "1.0",
 		})
-	})
+	}
+	r.GET("/", rootHandler)
+	r.GET("/api", rootHandler)
+
+	// Public health check routes (bypass configuration validation and rate limits)
 	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "UP"})
+	})
+	r.GET("/api/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "UP"})
 	})
 	r.GET("/api/healthz", func(c *gin.Context) {

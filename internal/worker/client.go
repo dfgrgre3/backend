@@ -11,11 +11,23 @@ import (
 
 var client *asynq.Client
 
+// isRedisDisabled returns true when Redis should not be used or is unavailable.
+func isRedisDisabled() bool {
+	if os.Getenv("DISABLE_REDIS") == "true" {
+		return true
+	}
+	if os.Getenv("VERCEL") != "" {
+		return true
+	}
+	return false
+}
+
+// GetClient returns the asynq client, or nil if Redis is disabled/unavailable.
 func GetClient() *asynq.Client {
 	if client == nil {
 		redisAddr := os.Getenv("REDIS_URL")
-		if redisAddr == "" {
-			redisAddr = "localhost:6379"
+		if redisAddr == "" || isRedisDisabled() {
+			return nil
 		}
 
 		var opts asynq.RedisConnOpt
@@ -23,10 +35,9 @@ func GetClient() *asynq.Client {
 			parsedOpts, err := asynq.ParseRedisURI(redisAddr)
 			if err != nil {
 				log.Printf("failed to parse redis uri for worker client: %v", err)
-				opts = asynq.RedisClientOpt{Addr: redisAddr}
-			} else {
-				opts = parsedOpts
+				return nil
 			}
+			opts = parsedOpts
 		} else {
 			opts = asynq.RedisClientOpt{Addr: redisAddr}
 		}
@@ -42,7 +53,11 @@ func EnqueueNotification(payload NotificationPayload) error {
 		return err
 	}
 
-	_, err = GetClient().Enqueue(task)
+	cl := GetClient()
+	if cl == nil {
+		return nil
+	}
+	_, err = cl.Enqueue(task)
 	return err
 }
 
@@ -52,7 +67,11 @@ func EnqueueProgressUpdate(payload ProgressUpdatePayload) error {
 		return err
 	}
 
-	_, err = GetClient().Enqueue(task, asynq.Queue("progress"), asynq.ProcessIn(5*time.Second))
+	cl := GetClient()
+	if cl == nil {
+		return nil
+	}
+	_, err = cl.Enqueue(task, asynq.Queue("progress"), asynq.ProcessIn(5*time.Second))
 	return err
 }
 
@@ -62,7 +81,11 @@ func EnqueueGamificationSync(payload GamificationSyncPayload) error {
 		return err
 	}
 
-	_, err = GetClient().Enqueue(task, asynq.Queue("gamification"), asynq.ProcessIn(5*time.Second))
+	cl := GetClient()
+	if cl == nil {
+		return nil
+	}
+	_, err = cl.Enqueue(task, asynq.Queue("gamification"), asynq.ProcessIn(5*time.Second))
 	return err
 }
 
@@ -73,6 +96,10 @@ func EnqueueBatchProgressFlush(userID string) error {
 		return err
 	}
 
-	_, err = GetClient().Enqueue(task, asynq.Queue("progress"), asynq.ProcessIn(5*time.Second))
+	cl := GetClient()
+	if cl == nil {
+		return nil
+	}
+	_, err = cl.Enqueue(task, asynq.Queue("progress"), asynq.ProcessIn(5*time.Second))
 	return err
 }

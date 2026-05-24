@@ -15,8 +15,12 @@ import (
 )
 
 func GetTeachers(c *gin.Context) {
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
 	var teachers []models.User
-	if err := db.DB.Where("role = ?", models.RoleTeacher).Find(&teachers).Error; err != nil {
+	if err := database.Where("role = ?", models.RoleTeacher).Find(&teachers).Error; err != nil {
 		apiresponse.Error(c, http.StatusInternalServerError, "Failed to fetch teachers")
 		return
 	}
@@ -25,8 +29,12 @@ func GetTeachers(c *gin.Context) {
 }
 
 func GetTeachersForAdmin(c *gin.Context) {
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
 	var teachers []models.User
-	if err := db.DB.Where("role = ?", models.RoleTeacher).Find(&teachers).Error; err != nil {
+	if err := database.Where("role = ?", models.RoleTeacher).Find(&teachers).Error; err != nil {
 		apiresponse.Error(c, http.StatusInternalServerError, "Failed to fetch teachers")
 		return
 	}

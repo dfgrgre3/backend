@@ -2,8 +2,13 @@ package handlers
 
 import (
 	"errors"
+	"net/http"
 	"strings"
 
+	api_response "thanawy-backend/internal/api/response"
+	"thanawy-backend/internal/db"
+
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -27,9 +32,36 @@ const (
 
 // Shared error message constants
 const (
-	errUserNotFound = "User not found"
-	authRequired    = "Authentication required"
+	errUserNotFound        = "User not found"
+	authRequired           = "Authentication required"
+	errDBUnavailable       = "Database is temporarily unavailable"
+	errServiceUnavailable  = "Service temporarily unavailable"
 )
+
+// safeDB returns a non-nil *gorm.DB instance after checking db.DB.
+// Returns true (abort) if DB is nil and writes a 503 response.
+// Use at the top of any handler that needs DB access.
+func safeDB(c *gin.Context) (*gorm.DB, bool) {
+	if db.DB == nil {
+		api_response.Error(c, http.StatusServiceUnavailable, errDBUnavailable)
+		return nil, true
+	}
+	return db.DB, false
+}
+
+// safeReadDB returns a ReadDB or falls back to db.DB, checking for nil.
+// Returns true (abort) if DB is nil.
+func safeReadDB(c *gin.Context) (*gorm.DB, bool) {
+	if db.DB == nil {
+		api_response.Error(c, http.StatusServiceUnavailable, errDBUnavailable)
+		return nil, true
+	}
+	database := db.ReadDB()
+	if database == nil {
+		database = db.DB
+	}
+	return database, false
+}
 
 // stringOrEmpty safely dereferences a *string pointer, returning "" if nil.
 func stringOrEmpty(s *string) string {

@@ -35,8 +35,8 @@ func GetSettings(c *gin.Context) {
 		return
 	}
 
-	if db.DB == nil {
-		respondSettingsDBError(c)
+	_, aborted := safeDB(c)
+	if aborted {
 		return
 	}
 
@@ -61,12 +61,6 @@ func extractUserID(c *gin.Context) (string, error) {
 	return userID.(string), nil
 }
 
-func respondSettingsDBError(c *gin.Context) {
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"success": false,
-		"error":   "Database connection is not initialized",
-	})
-}
 
 func trySettingsL1Cache(c *gin.Context, uid string) bool {
 	if raw, ok := userSettingsL1.Load(uid); ok {

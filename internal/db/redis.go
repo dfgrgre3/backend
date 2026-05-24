@@ -14,6 +14,10 @@ var Redis *redis.Client
 var ctx = context.Background()
 
 func ConnectRedis(url string) {
+	if url == "" || os.Getenv("DISABLE_REDIS") == "true" {
+		log.Println("Redis is disabled via DISABLE_REDIS or empty URL")
+		return
+	}
 	opts, err := redis.ParseURL(url)
 	if err != nil {
 		log.Printf("Failed to parse Redis URL: %v", err)

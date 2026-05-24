@@ -68,11 +68,11 @@ func buildSubjectFilters(query *gorm.DB, c *gin.Context) *gorm.DB {
 
 // Public handlers
 func GetSubjects(c *gin.Context) {
-	var subjects []models.Subject
-	readDB := db.ReadDB()
-	if readDB == nil {
-		readDB = db.DB
+	readDB, aborted := safeReadDB(c)
+	if aborted {
+		return
 	}
+	var subjects []models.Subject
 	query := readDB.Model(&models.Subject{})
 
 	// Pagination
@@ -187,11 +187,15 @@ func GetSubjects(c *gin.Context) {
 }
 
 func GetSubject(c *gin.Context) {
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
 	id := c.Param("id")
 	var subject models.Subject
 
 	// Support both ID (UUID) and Slug
-	query := db.DB.Preload("Topics.SubTopics.Attachments").Preload("Topics.SubTopics.Exam")
+	query := database.Preload("Topics.SubTopics.Attachments").Preload("Topics.SubTopics.Exam")
 
 	// Check if it's a UUID or Slug
 	query = applyIDOrSlugQuery(query, id)
@@ -212,10 +216,14 @@ func GetSubject(c *gin.Context) {
 }
 
 func GetCourseLessons(c *gin.Context) {
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
 	id := c.Param("id")
 	var subject models.Subject
 
-	query := db.DB.Preload(preloadTopicsSubTopics)
+	query := database.Preload(preloadTopicsSubTopics)
 	query = applyIDOrSlugQuery(query, id)
 
 	if err := query.First(&subject).Error; err != nil {

@@ -13,10 +13,14 @@ import (
 )
 
 func GetCategories(c *gin.Context) {
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
 	categoryType := c.Query("type")
 	var categories []models.Category
 
-	query := db.DB.Select("id", "name", "slug", "icon", "description", "type", "created_at")
+	query := database.Select("id", "name", "slug", "icon", "description", "type", "created_at")
 	if categoryType != "" {
 		query = query.Where("type = ?", categoryType)
 	}

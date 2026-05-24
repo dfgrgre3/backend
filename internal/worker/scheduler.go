@@ -12,8 +12,9 @@ import (
 // It runs CQRS materialized view refresh every 5 minutes.
 func StartScheduler() {
 	redisAddr := os.Getenv("REDIS_URL")
-	if redisAddr == "" {
-		redisAddr = "localhost:6379"
+	if redisAddr == "" || isRedisDisabled() {
+		log.Println("[Scheduler] Redis not configured or disabled, skipping scheduler start")
+		return
 	}
 
 	var opts asynq.RedisConnOpt
