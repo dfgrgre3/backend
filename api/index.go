@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"encoding/json"
@@ -55,42 +55,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appHandler.ServeHTTP(w, r)
-}
-
-// main is required for `go build` of a main package.
-// On Vercel, main() exits quickly and the Handler function handles all requests.
-// For local development, main() starts the HTTP server normally.
-func main() {
-	// For Vercel: if the VERCEL environment variable is set, exit quickly.
-	// The Handler function will be used instead for each request.
-	if os.Getenv("VERCEL") != "" {
-		log.Println("Running on Vercel serverless - Handler will be used for each request")
-		return
-	}
-
-	// Local development: initialize and start HTTP server
-	handler, err := initializeApp()
-	if err != nil {
-		log.Fatalf("Failed to initialize: %v", err)
-	}
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8082"
-	}
-
-	srv := &http.Server{
-		Addr:         ":" + port,
-		Handler:      handler,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
-	}
-
-	log.Printf("HTTP server starting on port %s", port)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Failed to start server: %v", err)
-	}
 }
 
 func initializeApp() (http.Handler, error) {
