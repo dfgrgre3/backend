@@ -1,11 +1,16 @@
 {
   "version": 2,
-  "buildCommand": "go build -ldflags '-s -w' -buildvcs=false -o /tmp/api/api ./api",
-  "cleanUrls": true,
+  "builds": [
+    {
+      "src": "api/*.go",
+      "use": "@vercel/go"
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",
       "destination": "/api"
     }
-  ]
+  ],
+  "cleanUrls": true
 }
