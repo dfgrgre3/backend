@@ -1,19 +1,10 @@
 {
   "version": 2,
-  "builds": [
+  "framework": "go",
+  "rewrites": [
     {
-      "src": "api/index.go",
-      "use": "@vercel/go"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/",
-      "dest": "/api/index.go"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/api/index.go"
+      "source": "/(.*)",
+      "destination": "/api"
     }
   ]
 }
