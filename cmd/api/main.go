@@ -184,8 +184,9 @@ func main() {
 }
 
 func initS3Storage(cfg *config.Config) {
-	if cfg.StorageType != "s3" {
-		log.Fatalf("FATAL: Only S3-compatible storage is supported. Set STORAGE_TYPE=s3 (Cloudflare R2 / AWS S3 / MinIO).")
+	if cfg.StorageType != "s3" || cfg.S3.Endpoint == "" {
+		log.Println("S3 storage not configured or endpoint is empty, skipping initialization")
+		return
 	}
 
 	storageSvc, err := storage.NewS3Storage(
@@ -198,7 +199,8 @@ func initS3Storage(cfg *config.Config) {
 		cfg.S3.PublicURL,
 	)
 	if err != nil {
-		log.Fatalf("Failed to initialize S3 storage: %v", err)
+		log.Printf("Failed to initialize S3 storage: %v", err)
+		return
 	}
 	storage.GlobalStorage = storageSvc
 	log.Println("Storage initialized with S3 provider (Cloudflare R2)")
@@ -210,15 +212,7 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	}
 	r := gin.New()
 
-	r.Use(gin.Logger())
-	r.Use(gin.Recovery())
-	r.Use(middleware.CORS())
-	r.Use(middleware.ValidateSecrets(middleware.DefaultSecretsValidatorConfig()))
-	r.Use(middleware.PerformanceMonitor())
-	r.Use(middleware.GlobalRateLimiter(200, time.Minute))
-	r.Use(middleware.CSRFMiddleware())
-	r.Use(middleware.DBConsistencyMiddleware(db.DB))
-
+	// Public health check routes (bypass configuration validation and rate limits)
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "UP"})
 	})
@@ -228,6 +222,15 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	r.GET("/api/readyz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ready"})
 	})
+
+	r.Use(gin.Logger())
+	r.Use(gin.Recovery())
+	r.Use(middleware.CORS())
+	r.Use(middleware.ValidateSecrets(middleware.DefaultSecretsValidatorConfig()))
+	r.Use(middleware.PerformanceMonitor())
+	r.Use(middleware.GlobalRateLimiter(200, time.Minute))
+	r.Use(middleware.CSRFMiddleware())
+	r.Use(middleware.DBConsistencyMiddleware(db.DB))
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 

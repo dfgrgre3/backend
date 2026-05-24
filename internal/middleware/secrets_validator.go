@@ -19,7 +19,6 @@ func DefaultSecretsValidatorConfig() SecretsValidatorConfig {
 		RequiredVars: []string{
 			"DATABASE_URL",
 			"JWT_SECRET",
-			"CLERK_WEBHOOK_SECRET",
 		},
 		SkipInDev: true,
 	}
