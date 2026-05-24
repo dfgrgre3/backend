@@ -213,6 +213,13 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	r := gin.New()
 
 	// Public health check routes (bypass configuration validation and rate limits)
+	r.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"status":  "UP",
+			"message": "Thanawy Backend API is running",
+			"version": "1.0",
+		})
+	})
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "UP"})
 	})
