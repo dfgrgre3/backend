@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "framework": "go",
+  "build": {
+    "env": {
+      "GO_BUILD_FLAGS": "-ldflags '-s -w'"
+    }
+  }
+}
