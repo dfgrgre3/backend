@@ -1,13 +1,10 @@
 {
   "version": 2,
-  "framework": "go",
-  "buildCommand": "go build -ldflags '-s -w' -buildvcs=false -o /tmp/api/api ./cmd/api",
-  "outputDirectory": ".",
-  "cleanUrls": true,
-  "rewrites": [
+  "buildCommand": "go build -buildvcs=false -ldflags '-s -w' -o /tmp/api/api ./cmd/api",
+  "routes": [
     {
-      "source": "/(.*)",
-      "destination": "/api"
+      "src": "/(.*)",
+      "dest": "cmd/api/main.go"
     }
   ]
 }
