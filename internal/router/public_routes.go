@@ -83,6 +83,9 @@ func SetupPublicRoutes(router *gin.Engine) {
 	router.GET("/api/chat/messages/:userId/:chatUserId", middleware.Auth(), handlers.GetChatMessages)
 	router.POST("/api/chat/messages", middleware.Auth(), handlers.SendChatMessage)
 
+	// Metrics endpoints (admin auth required for detailed metrics)
+	router.GET("/api/metrics", middleware.AdminRequired(), handlers.GetMetricsEndpoint)
+
 	// Public Library routes
 	router.GET("/api/library/categories", handlers.GetLibraryCategories)
 }

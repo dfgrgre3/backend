@@ -212,6 +212,11 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	}
 	r := gin.New()
 
+	// Login redirect to /api/auth/login (for backward compatibility)
+	r.GET("/login", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/api/auth/login")
+	})
+
 	// Vercel rewrites all paths to /api, so we must respond for both / and /api.
 	rootHandler := func(c *gin.Context) {
 		c.JSON(200, gin.H{

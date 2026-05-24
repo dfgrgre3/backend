@@ -107,6 +107,11 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	}
 	r := gin.New()
 
+	// Login redirect to /api/auth/login (for backward compatibility)
+	r.GET("/login", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/api/auth/login")
+	})
+
 	// Public health check routes (bypass configuration validation and rate limits)
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "UP"})
