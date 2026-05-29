@@ -53,15 +53,40 @@ END $$;
 
 DO $$
 BEGIN
-    IF to_regclass('public."Notification"') IS NOT NULL THEN
-        CREATE INDEX IF NOT EXISTS idx_notification_user_created_covering
-            ON public."Notification" (user_id, created_at DESC)
-            INCLUDE (id, type, title, message, "isRead")
-            WHERE deleted_at IS NULL;
+    IF to_regclass('public."Notification"') IS NOT NULL
+       AND EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'Notification' AND column_name = 'user_id'
+       )
+       AND EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'Notification' AND column_name = 'deleted_at'
+       ) THEN
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'Notification' AND column_name = 'is_read'
+        ) THEN
+            CREATE INDEX IF NOT EXISTS idx_notification_user_created_covering
+                ON public."Notification" (user_id, created_at DESC)
+                INCLUDE (id, type, title, message, is_read)
+                WHERE deleted_at IS NULL;
 
-        CREATE INDEX IF NOT EXISTS idx_notification_user_unread_active
-            ON public."Notification" (user_id, created_at DESC)
-            WHERE deleted_at IS NULL AND "isRead" = false;
+            CREATE INDEX IF NOT EXISTS idx_notification_user_unread_active
+                ON public."Notification" (user_id, created_at DESC)
+                WHERE deleted_at IS NULL AND is_read = false;
+        ELSIF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'Notification' AND column_name = 'isRead'
+        ) THEN
+            CREATE INDEX IF NOT EXISTS idx_notification_user_created_covering
+                ON public."Notification" (user_id, created_at DESC)
+                INCLUDE (id, type, title, message, "isRead")
+                WHERE deleted_at IS NULL;
+
+            CREATE INDEX IF NOT EXISTS idx_notification_user_unread_active
+                ON public."Notification" (user_id, created_at DESC)
+                WHERE deleted_at IS NULL AND "isRead" = false;
+        END IF;
     END IF;
 END $$;
 
@@ -77,10 +102,27 @@ END $$;
 DO $$
 BEGIN
     IF to_regclass('public."UserAchievement"') IS NOT NULL THEN
-        CREATE INDEX IF NOT EXISTS idx_achievement_user_unlocked_active
-            ON public."UserAchievement" (user_id, unlocked_at DESC)
-            INCLUDE ("achievementKey")
-            WHERE deleted_at IS NULL;
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'UserAchievement' AND column_name = 'achievement_key'
+        ) THEN
+            CREATE INDEX IF NOT EXISTS idx_achievement_user_unlocked_active
+                ON public."UserAchievement" (user_id, unlocked_at DESC)
+                INCLUDE (achievement_key)
+                WHERE deleted_at IS NULL;
+        ELSIF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'UserAchievement' AND column_name = 'achievementKey'
+        ) THEN
+            CREATE INDEX IF NOT EXISTS idx_achievement_user_unlocked_active
+                ON public."UserAchievement" (user_id, unlocked_at DESC)
+                INCLUDE ("achievementKey")
+                WHERE deleted_at IS NULL;
+        ELSE
+            CREATE INDEX IF NOT EXISTS idx_achievement_user_unlocked_active
+                ON public."UserAchievement" (user_id, unlocked_at DESC)
+                WHERE deleted_at IS NULL;
+        END IF;
     END IF;
 END $$;
 
