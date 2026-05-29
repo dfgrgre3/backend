@@ -10,6 +10,7 @@
 *.so
 *.dylib
 bin/
+.gocache/
 
 # Root-level built binaries (Unix/Linux/macOS)
 /api
@@ -42,8 +43,7 @@ bin/
 go.work
 go.work.sum
 
-# Go vendor directory (uncomment if you do not want to commit vendored dependencies)
-# vendor/
+vendor/
 
 # ==========================================
 # Node / Javascript / Frontend
@@ -99,6 +99,7 @@ env/
 # ==========================================
 uploads/
 backups/
+tmp/
 *.log
 logs/
 

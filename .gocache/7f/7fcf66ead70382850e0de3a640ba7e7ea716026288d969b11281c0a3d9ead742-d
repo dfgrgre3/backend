@@ -1,5 +1,0 @@
-./db_inspect.go
-./inspect_enum_tmp.go
-./inspect_locks_tmp.go
-./inspect_migrations_tmp.go
-./inspect_user_cols_tmp.go

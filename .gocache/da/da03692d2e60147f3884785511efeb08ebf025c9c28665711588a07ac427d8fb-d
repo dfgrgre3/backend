@@ -1,4 +1,0 @@
-./db.go
-./migrations.go
-./redis.go
-./migrations_test.go

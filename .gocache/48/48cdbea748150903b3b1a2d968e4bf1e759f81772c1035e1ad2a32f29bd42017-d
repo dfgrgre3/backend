@@ -1,8 +1,0 @@
-./batch_analytics.go
-./client.go
-./cqrs_refresh.go
-./idempotency.go
-./notification.go
-./progress.go
-./scheduler.go
-./server.go
