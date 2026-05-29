@@ -32,6 +32,7 @@ import (
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"gorm.io/gorm"
 
 	internalgrpc "thanawy-backend/internal/api/grpc"
 	"thanawy-backend/internal/api/handlers"
@@ -56,7 +57,7 @@ func main() {
 	config.GlobalConfig = cfg
 
 	// Initialize Database with explicit Read/Write DSNs for CQRS
-	_, err := db.ConnectWithWriteDSN(cfg.DatabaseURL, cfg.DatabaseWriteURL)
+	_, err := connectDatabaseWithRetry(cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -105,7 +106,7 @@ func main() {
 		grpcServer = startGRPCServer(courseSvc, authSvc, analyticsSvc)
 	}
 
-	if runWorkers {
+	if runWorkers && db.Redis != nil {
 		// Start Background Worker and Periodic Scheduler
 		go func() {
 			log.Println("Starting background worker...")
@@ -119,11 +120,18 @@ func main() {
 		}()
 	}
 
-	if runScheduler {
+	if runWorkers && db.Redis == nil {
+		log.Println("Redis is not connected; background workers are disabled for this process")
+	}
+
+	if runScheduler && db.Redis != nil {
 		go func() {
 			log.Println("Starting periodic task scheduler...")
 			worker.StartScheduler()
 		}()
+	}
+	if runScheduler && db.Redis == nil {
+		log.Println("Redis is not connected; periodic scheduler is disabled for this process")
 	}
 
 	if runAPI {
@@ -181,6 +189,32 @@ func main() {
 	}
 
 	log.Println("Process exited")
+}
+
+func connectDatabaseWithRetry(cfg *config.Config) (*gorm.DB, error) {
+	attempts := getEnvInt("DB_CONNECT_ATTEMPTS", 5)
+	delay := time.Duration(getEnvInt("DB_CONNECT_RETRY_SECONDS", 2)) * time.Second
+
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		database, err := db.ConnectWithWriteDSN(cfg.DatabaseURL, cfg.DatabaseWriteURL)
+		if err == nil {
+			if attempt > 1 {
+				log.Printf("Database connected after %d attempts", attempt)
+			}
+			return database, nil
+		}
+
+		lastErr = err
+		if attempt == attempts {
+			break
+		}
+
+		log.Printf("Database is not ready yet (attempt %d/%d): %v. Retrying in %s...", attempt, attempts, err, delay)
+		time.Sleep(delay)
+	}
+
+	return nil, lastErr
 }
 
 func initS3Storage(cfg *config.Config) {
@@ -306,6 +340,18 @@ func getEnvBool(key string, defaultVal bool) bool {
 	}
 	val, err := strconv.ParseBool(valStr)
 	if err != nil {
+		return defaultVal
+	}
+	return val
+}
+
+func getEnvInt(key string, defaultVal int) int {
+	valStr := os.Getenv(key)
+	if valStr == "" {
+		return defaultVal
+	}
+	val, err := strconv.Atoi(valStr)
+	if err != nil || val <= 0 {
 		return defaultVal
 	}
 	return val

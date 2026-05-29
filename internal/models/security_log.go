@@ -28,7 +28,7 @@ const (
 
 type SecurityLog struct {
 	ID        string            `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	UserID    string            `gorm:"type:uuid;not null;index:idx_security_logs_user_created,priority:1;column:user_id" json:"userId"`
+	UserID    *string           `gorm:"type:uuid;index:idx_security_logs_user_created,priority:1;column:user_id" json:"userId"`
 	EventType SecurityEventType `gorm:"not null;index;column:event_type" json:"eventType"`
 	IP        string            `gorm:"column:ip;not null" json:"ip"`
 	UserAgent string            `gorm:"type:text;column:user_agent" json:"userAgent"`

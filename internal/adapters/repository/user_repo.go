@@ -119,19 +119,19 @@ type userRecord struct {
 	Avatar        *string    `gorm:"column:avatar"`
 	Role          string     `gorm:"column:role"`
 	Status        string     `gorm:"column:status"`
-	PasswordHash  string     `gorm:"column:passwordHash"`
-	EmailVerified bool       `gorm:"column:emailVerified"`
+	PasswordHash  string     `gorm:"column:password_hash"`
+	EmailVerified bool       `gorm:"column:email_verified"`
 	Bio           *string    `gorm:"column:bio"`
 	Balance       float64    `gorm:"column:balance"`
-	AiCredits     int        `gorm:"column:aiCredits"`
-	ExamCredits   int        `gorm:"column:examCredits"`
-	TotalXP       int        `gorm:"column:totalXP"`
+	AiCredits     int        `gorm:"column:ai_credits"`
+	ExamCredits   int        `gorm:"column:exam_credits"`
+	TotalXP       int        `gorm:"column:total_xp"`
 	Level         int        `gorm:"column:level"`
-	CurrentStreak int        `gorm:"column:currentStreak"`
-	LongestStreak int        `gorm:"column:longestStreak"`
-	CreatedAt     time.Time  `gorm:"column:createdAt"`
-	UpdatedAt     time.Time  `gorm:"column:updatedAt"`
-	LastLogin     *time.Time `gorm:"column:lastLogin"`
+	CurrentStreak int        `gorm:"column:current_streak"`
+	LongestStreak int        `gorm:"column:longest_streak"`
+	CreatedAt     time.Time  `gorm:"column:created_at"`
+	UpdatedAt     time.Time  `gorm:"column:updated_at"`
+	LastLogin     *time.Time `gorm:"column:last_login"`
 }
 
 func (userRecord) TableName() string {

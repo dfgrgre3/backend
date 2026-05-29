@@ -348,6 +348,9 @@ func executeMigrationStatements(tx *gorm.DB, id, contents, checksum string) erro
 		if trimmed == "" || strings.HasPrefix(trimmed, "--") {
 			continue
 		}
+		if shouldSkipMigrationStatement(id, trimmed) {
+			continue
+		}
 
 		if err := tx.Exec(stmt).Error; err != nil {
 			return fmt.Errorf("apply migration %s statement %d: %w\nStatement: %.200s", id, i+1, err, stmt)
@@ -355,4 +358,18 @@ func executeMigrationStatements(tx *gorm.DB, id, contents, checksum string) erro
 	}
 
 	return tx.Create(&migrationRecord{ID: id, Checksum: checksum, AppliedAt: time.Now().UTC()}).Error
+}
+
+func shouldSkipMigrationStatement(id, stmt string) bool {
+	if id != "0000_baseline_schema" {
+		return false
+	}
+
+	normalized := strings.ToLower(strings.Join(strings.Fields(stmt), " "))
+	return strings.HasPrefix(normalized, "create table public.schema_migrations ") ||
+		strings.HasPrefix(normalized, "alter table only public.schema_migrations add constraint schema_migrations_pkey ") ||
+		strings.Contains(normalized, `public."deletedrecordarchive"`) ||
+		strings.HasPrefix(normalized, "create index ") ||
+		strings.HasPrefix(normalized, "create unique index ") ||
+		strings.HasPrefix(normalized, "alter index ")
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/db"
 
@@ -16,9 +17,10 @@ func main() {
 
 	// Initialize Configuration
 	cfg := config.Load()
+	databaseURL := migrationDatabaseURL(cfg)
 
 	// Initialize Database
-	database, err := db.Connect(cfg.DatabaseURL)
+	database, err := db.Connect(databaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -37,4 +39,16 @@ func main() {
 	}
 
 	log.Println("Migration and seeding process completed.")
+}
+
+func migrationDatabaseURL(cfg *config.Config) string {
+	if directURL := os.Getenv("DATABASE_URL_DIRECT"); directURL != "" {
+		log.Println("Using DATABASE_URL_DIRECT for migrations.")
+		return directURL
+	}
+	if cfg.DatabaseWriteURL != "" {
+		log.Println("Using DATABASE_WRITE_DSN for migrations.")
+		return cfg.DatabaseWriteURL
+	}
+	return cfg.DatabaseURL
 }

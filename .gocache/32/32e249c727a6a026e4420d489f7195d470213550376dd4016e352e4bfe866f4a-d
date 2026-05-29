@@ -1,0 +1,4 @@
+./analytics_query.go
+./gamification_query.go
+./progress_query.go
+./readmodels.go

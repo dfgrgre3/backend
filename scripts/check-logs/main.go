@@ -29,6 +29,10 @@ func main() {
 	db.DB.Where("\"eventType\" LIKE ?", "LOGIN_%").Order("\"createdAt\" desc").Limit(20).Find(&logs)
 	fmt.Printf("Total LOGIN events found: %d\n", len(logs))
 	for _, l := range logs {
-		fmt.Printf("Event: %s - UserID: %s - IP: %s - Metadata: %v - Time: %s\n", l.EventType, l.UserID, l.IP, l.Metadata, l.CreatedAt)
+		userID := "<anonymous>"
+		if l.UserID != nil {
+			userID = *l.UserID
+		}
+		fmt.Printf("Event: %s - UserID: %s - IP: %s - Metadata: %v - Time: %s\n", l.EventType, userID, l.IP, l.Metadata, l.CreatedAt)
 	}
 }

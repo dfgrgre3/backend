@@ -1,0 +1,5 @@
+./ai_conversation_repo.go
+./security_log_repo.go
+./session_repo.go
+./subject_repo.go
+./user_repo.go

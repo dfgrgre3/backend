@@ -41,6 +41,7 @@ SELECT
     -- Metadata
     NOW() AS computed_at
 FROM "User" u
+CROSS JOIN week_interval wi
 LEFT JOIN LATERAL (
     SELECT
         COUNT(*) FILTER (WHERE tp.completed) AS lessons_completed,
@@ -56,7 +57,7 @@ LEFT JOIN LATERAL (
         COALESCE(AVG(ss.focus_score), 0) AS weekly_avg_focus
     FROM "StudySession" ss
     WHERE ss.user_id = u.id AND ss.start_time >= NOW() - wi.value
-) ss ON true, week_interval wi
+) ss ON true
 LEFT JOIN LATERAL (
     SELECT
         COUNT(*) AS total_exams_taken,
@@ -99,16 +100,12 @@ SELECT
         ELSE 0
     END AS completion_rate,
 
-    -- XP earned this week
-    COALESCE((
-        SELECT COALESCE(SUM(amount), 0) FROM "WalletTransaction" wt
-        WHERE wt.user_id = u.id
-        AND wt.type = 'xp_earned'
-        AND wt.created_at >= NOW() - wi.value
-    ), 0) AS weekly_xp_earned,
+    -- XP is stored on user/progress records; wallet transactions only track monetary/credit movements.
+    0 AS weekly_xp_earned,
 
     NOW() AS computed_at
-FROM "User" u, week_interval wi
+FROM "User" u
+CROSS JOIN week_interval wi
 LEFT JOIN "StudySession" ss ON ss.user_id = u.id AND ss.start_time >= NOW() - wi.value
 LEFT JOIN LATERAL (
     SELECT

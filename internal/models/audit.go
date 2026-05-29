@@ -8,7 +8,7 @@ import (
 
 type AuditLog struct {
 	ID         string    `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	UserID     string    `gorm:"index;type:uuid;column:user_id" json:"userId"`
+	UserID     *string   `gorm:"index;type:uuid;column:user_id" json:"userId"`
 	User       *User     `json:"user"`
 	EventType  string    `gorm:"index;not null;column:event_type" json:"eventType"` // alias for Action
 	Action     string    `gorm:"column:action" json:"action"`                       // legacy support

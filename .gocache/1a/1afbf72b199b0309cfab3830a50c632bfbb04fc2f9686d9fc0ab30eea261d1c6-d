@@ -1,0 +1,10 @@
+./connection.go
+./discovery.go
+./doc.go
+./elastictransport.go
+./gzip.go
+./instrumentation.go
+./interceptor.go
+./logger.go
+./metrics.go
+./option.go

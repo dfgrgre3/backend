@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
@@ -58,8 +59,13 @@ func GetSecurityLogs(c *gin.Context) {
 // This can be called from other handlers after successful operations
 // Note: Errors are silently ignored if table doesn't exist (migration pending)
 func LogSecurityEvent(userID string, eventType models.SecurityEventType, ip, userAgent string, location *string, metadata *string) error {
+	var nullableUserID *string
+	if strings.TrimSpace(userID) != "" {
+		nullableUserID = &userID
+	}
+
 	log := &models.SecurityLog{
-		UserID:    userID,
+		UserID:    nullableUserID,
 		EventType: eventType,
 		IP:        ip,
 		UserAgent: userAgent,

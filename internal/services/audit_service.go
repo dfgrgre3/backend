@@ -2,22 +2,23 @@ package services
 
 import (
 	"encoding/json"
+	"strings"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 )
 
 // Audit Event Types
 const (
-	AuditEventLogin          = "auth.login"
-	AuditEventLogout         = "auth.logout"
-	AuditEventLoginFailed    = "auth.login_failed"
-	AuditEventPasswordChange = "user.password_change"
-	AuditEventProfileUpdate  = "user.profile_update"
-	AuditEventPaymentStarted = "payment.started"
-	AuditEventPaymentSuccess = "payment.success"
-	AuditEventPaymentFailed  = "payment.failed"
-	AuditEventExamStarted    = "exam.started"
-	AuditEventExamFinished   = "exam.finished"
+	AuditEventLogin              = "auth.login"
+	AuditEventLogout             = "auth.logout"
+	AuditEventLoginFailed        = "auth.login_failed"
+	AuditEventPasswordChange     = "user.password_change"
+	AuditEventProfileUpdate      = "user.profile_update"
+	AuditEventPaymentStarted     = "payment.started"
+	AuditEventPaymentSuccess     = "payment.success"
+	AuditEventPaymentFailed      = "payment.failed"
+	AuditEventExamStarted        = "exam.started"
+	AuditEventExamFinished       = "exam.finished"
 	AuditEventAdminAction        = "admin.action"
 	AuditEventDataDeletion       = "data.deletion"
 	AuditEventImpersonationStart = "admin.impersonation_start"
@@ -36,6 +37,11 @@ func GetAuditService() *AuditService {
 
 // LogEvent records a new audit log entry
 func (s *AuditService) LogEvent(userID, eventType, resource, resourceID string, metadata interface{}, ip, userAgent string) {
+	var nullableUserID *string
+	if strings.TrimSpace(userID) != "" {
+		nullableUserID = &userID
+	}
+
 	metadataJSON := ""
 	if metadata != nil {
 		bytes, err := json.Marshal(metadata)
@@ -45,7 +51,7 @@ func (s *AuditService) LogEvent(userID, eventType, resource, resourceID string, 
 	}
 
 	auditLog := models.AuditLog{
-		UserID:     userID,
+		UserID:     nullableUserID,
 		EventType:  eventType,
 		Action:     eventType,
 		Resource:   resource,

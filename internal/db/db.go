@@ -45,7 +45,7 @@ func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
 			IgnoreRecordNotFoundError: true,
 			ParameterizedQueries:      true,
 		}),
-		PrepareStmt:    true, // Enable prepared statement cache for performance
+		PrepareStmt:    !usesPgBouncer(dsn), // PgBouncer transaction pooling cannot safely cache prepared statements.
 		NamingStrategy: PrismaNamingStrategy{},
 	})
 
@@ -68,12 +68,12 @@ func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
 	if len(replicaDialectors) > 0 {
 		replicas = replicaDialectors
 	} else {
-		replicas = []gorm.Dialector{postgres.Open(dsn)}
+		replicas = []gorm.Dialector{postgresDialector(dsn)}
 	}
 
 	// Register DBResolver with explicit source/replica splitting for CQRS
 	resolver := dbresolver.Register(dbresolver.Config{
-		Sources:  []gorm.Dialector{postgres.Open(sourceDSN)},
+		Sources:  []gorm.Dialector{postgresDialector(sourceDSN)},
 		Replicas: replicas,
 		Policy:   dbresolver.RandomPolicy{},
 	}).
@@ -145,10 +145,26 @@ func getReplicaDialectors() []gorm.Dialector {
 	var replicaDialectors []gorm.Dialector
 	if replicas != "" {
 		for _, replicaDSN := range strings.Split(replicas, ",") {
-			replicaDialectors = append(replicaDialectors, postgres.Open(replicaDSN))
+			replicaDialectors = append(replicaDialectors, postgresDialector(replicaDSN))
 		}
 	}
 	return replicaDialectors
+}
+
+func postgresDialector(dsn string) gorm.Dialector {
+	if usesPgBouncer(dsn) {
+		return postgres.New(postgres.Config{
+			DSN:                  dsn,
+			PreferSimpleProtocol: true,
+		})
+	}
+	return postgres.Open(dsn)
+}
+
+func usesPgBouncer(dsn string) bool {
+	lowerDSN := strings.ToLower(dsn)
+	return strings.Contains(lowerDSN, "pgbouncer=true") ||
+		strings.Contains(lowerDSN, ".pooler.supabase.com:6543")
 }
 
 type poolSettings struct {

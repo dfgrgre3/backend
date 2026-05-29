@@ -1,0 +1,6 @@
+./analytics.pb.go
+./analytics_grpc.pb.go
+./auth.pb.go
+./auth_grpc.pb.go
+./course.pb.go
+./course_grpc.pb.go

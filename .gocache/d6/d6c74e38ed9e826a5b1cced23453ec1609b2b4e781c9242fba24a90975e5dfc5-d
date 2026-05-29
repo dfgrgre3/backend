@@ -1,0 +1,5 @@
+./admin_routes.go
+./auth_routes.go
+./hexagonal_routes.go
+./protected_routes.go
+./public_routes.go

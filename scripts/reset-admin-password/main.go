@@ -43,13 +43,13 @@ func main() {
 		log.Fatalf("Failed to hash password: %v", err)
 	}
 
-	result := db.Exec(`UPDATE "User" SET "passwordHash" = ? WHERE email = ?`, string(hash), email)
+	result := db.Exec(`UPDATE "User" SET password_hash = ? WHERE email = ?`, string(hash), email)
 	if result.Error != nil {
 		log.Fatalf("Failed to update password: %v", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		log.Printf("No user found with email %s. Creating admin user...", email)
-		result = db.Exec(`INSERT INTO "User" (id, email, "passwordHash", role, status, created_at, updated_at, version)
+		result = db.Exec(`INSERT INTO "User" (id, email, password_hash, role, status, created_at, updated_at, version)
 			VALUES (gen_random_uuid(), ?, ?, 'ADMIN', 'ACTIVE', NOW(), NOW(), 1)`, email, string(hash))
 		if result.Error != nil {
 			log.Fatalf("Failed to create admin: %v", result.Error)
