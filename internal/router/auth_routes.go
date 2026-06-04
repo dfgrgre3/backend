@@ -22,6 +22,10 @@ func SetupAuthRoutes(router *gin.Engine) {
 		auth.GET("/verify-email", handlers.VerifyEmail)
 		auth.POST("/resend-verification", middleware.AuthRateLimiter(), handlers.ResendVerification)
 
+		// Google OAuth
+		auth.GET("/oauth/google", handlers.OAuthGoogleRedirect)
+		auth.GET("/oauth/google/callback", handlers.OAuthGoogleCallback)
+
 		// Protected auth routes
 		auth.Use(middleware.Auth())
 		{
