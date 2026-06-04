@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base32"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"image/png"
 	"log"
@@ -18,7 +19,9 @@ import (
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/pquerna/otp/totp"
+	"gorm.io/gorm"
 	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/middleware"
@@ -142,15 +145,29 @@ func InitiateTwoFactorSetup(c *gin.Context) {
 		}
 
 		// Store pending setup
-		settings := models.TwoFactorSettings{
-			UserID:       userIDStr,
-			Method:       "authenticator",
-			Secret:       secretKey,
-			IsEnabled:    false, // Not enabled until verified
-			PendingSetup: true,
-			CreatedAt:    time.Now(),
+		var settings models.TwoFactorSettings
+		err = db.DB.Where(userIDQuery, userIDStr).First(&settings).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				settings = models.TwoFactorSettings{
+					ID:           uuid.NewString(),
+					UserID:       userIDStr,
+					Method:       "authenticator",
+					Secret:       secretKey,
+					IsEnabled:    false,
+					PendingSetup: true,
+					CreatedAt:    time.Now(),
+					UpdatedAt:    time.Now(),
+				}
+				db.DB.Create(&settings)
+			}
+		} else {
+			settings.Secret = secretKey
+			settings.Method = "authenticator"
+			settings.PendingSetup = true
+			settings.UpdatedAt = time.Now()
+			db.DB.Save(&settings)
 		}
-		db.DB.Where(userIDQuery, userIDStr).Assign(settings).FirstOrCreate(&settings)
 
 	case "sms":
 		if userPhone == nil || userPhone == "" {
@@ -894,19 +911,37 @@ func InitiateUser2FASetup(c *gin.Context) {
 	}
 
 	// Store pending setup
-	settings := models.TwoFactorSettings{
-		UserID:       userIDStr,
-		Method:       "authenticator",
-		Secret:       secretKey,
-		IsEnabled:    false, // Not enabled until verified
-		PendingSetup: true,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
-	}
-
-	if err := db.DB.Where(userIDQuery, userIDStr).Assign(settings).FirstOrCreate(&settings).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store pending 2FA setup"})
-		return
+	var settings models.TwoFactorSettings
+	err = db.DB.Where(userIDQuery, userIDStr).First(&settings).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			settings = models.TwoFactorSettings{
+				ID:           uuid.NewString(),
+				UserID:       userIDStr,
+				Method:       "authenticator",
+				Secret:       secretKey,
+				IsEnabled:    false,
+				PendingSetup: true,
+				CreatedAt:    time.Now(),
+				UpdatedAt:    time.Now(),
+			}
+			if err := db.DB.Create(&settings).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store pending 2FA setup"})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+			return
+		}
+	} else {
+		settings.Secret = secretKey
+		settings.Method = "authenticator"
+		settings.PendingSetup = true
+		settings.UpdatedAt = time.Now()
+		if err := db.DB.Save(&settings).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store pending 2FA setup"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
