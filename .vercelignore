@@ -25,3 +25,23 @@ public/
 # Next.js and Vercel build outputs
 .next/
 .vercel/
+
+# Additional excludes to prevent upload failures
+.gocache/
+.agents/
+backups/
+tmp/
+logs/
+*.test
+*.out
+*.prof
+*.cover
+*.tmp
+*.go.*
+/api
+/backend
+/clear-rate-limits
+/main
+/targeted_migrate
+/thanawy-backend
+/findstr

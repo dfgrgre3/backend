@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "go build -buildvcs=false -ldflags '-s -w' -o /tmp/api/api ./cmd/api",
+  "buildCommand": "go build -buildvcs=false -ldflags '-s -w' -o $VERCEL_OUTPUT_FILE ./cmd/api",
   "routes": [
     {
       "src": "/(.*)",
