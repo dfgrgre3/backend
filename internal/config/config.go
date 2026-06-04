@@ -20,7 +20,7 @@ type Config struct {
 	Environment          string
 
 	// Storage Configuration
-	StorageType string // "s3" (Cloudflare R2 / AWS S3 / MinIO)
+	StorageType string // "s3" (Cloudflare R2 / AWS S3 / MinIO) or "local"
 	S3          struct {
 		Endpoint  string
 		AccessKey string
@@ -28,6 +28,10 @@ type Config struct {
 		Bucket    string
 		Region    string
 		UseSSL    bool
+		PublicURL string
+	}
+	LocalStorage struct {
+		BaseDir   string
 		PublicURL string
 	}
 	ClerkWebhookSecret string
@@ -60,6 +64,10 @@ func Load() *Config {
 		Environment:          environment,
 		StorageType:          getEnv("STORAGE_TYPE", "s3"),
 	}
+
+	// Local Storage Config
+	c.LocalStorage.BaseDir = getEnv("LOCAL_STORAGE_BASE_DIR", "uploads")
+	c.LocalStorage.PublicURL = getEnv("LOCAL_STORAGE_PUBLIC_URL", "http://localhost:8082/uploads")
 
 	// S3 Storage Config
 	c.S3.Endpoint = getEnv("S3_ENDPOINT", "")
@@ -121,6 +129,10 @@ func LoadSafe() (*Config, error) {
 		Environment:          environment,
 		StorageType:          getEnv("STORAGE_TYPE", "s3"),
 	}
+
+	// Local Storage Config
+	c.LocalStorage.BaseDir = getEnv("LOCAL_STORAGE_BASE_DIR", "uploads")
+	c.LocalStorage.PublicURL = getEnv("LOCAL_STORAGE_PUBLIC_URL", "http://localhost:8082/uploads")
 
 	c.S3.Endpoint = getEnv("S3_ENDPOINT", "")
 	c.S3.AccessKey = getEnv("S3_ACCESS_KEY", "")

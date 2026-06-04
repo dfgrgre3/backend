@@ -78,7 +78,7 @@ func AdminUpdateBook(c *gin.Context) {
 		SubjectID   *string                 `json:"subjectId" form:"subjectId"`
 		Price       *float64                `json:"price" form:"price"`
 		IsFree      *bool                   `json:"isFree" form:"isFree"`
-		Tags        *models.JSONStringArray `json:"tags" form:"tags"`
+		Tags        *models.PGStringArray `json:"tags" form:"tags"`
 	}
 
 	if err := c.ShouldBind(&input); err != nil {

@@ -3,8 +3,10 @@ package models
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -49,6 +51,46 @@ type PushToken struct {
 // StringArray is a custom type for storing string arrays in JSONB
 type StringArray []string
 
+// UnmarshalJSON implements the json.Unmarshaler interface
+func (a *StringArray) UnmarshalJSON(data []byte) error {
+	// First, try to unmarshal as standard array of strings
+	var arr []string
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*a = arr
+		return nil
+	}
+
+	// If that fails, it might be a JSON string
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+
+	// The string itself might be a JSON-encoded array
+	var nestedArr []string
+	if err := json.Unmarshal([]byte(str), &nestedArr); err == nil {
+		*a = nestedArr
+		return nil
+	}
+
+	// Otherwise, treat it as a multiline or comma-separated string
+	if str == "" {
+		*a = []string{}
+		return nil
+	}
+
+	lines := strings.Split(str, "\n")
+	var result []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	*a = result
+	return nil
+}
+
 // Value implements the driver.Valuer interface
 func (a StringArray) Value() (driver.Value, error) {
 	if a == nil {
@@ -70,6 +112,67 @@ func (a *StringArray) Scan(value interface{}) error {
 	}
 
 	return json.Unmarshal(bytes, a)
+}
+
+// PGStringArray is a custom type for storing string arrays in PostgreSQL text[]
+type PGStringArray []string
+
+// UnmarshalJSON implements the json.Unmarshaler interface
+func (a *PGStringArray) UnmarshalJSON(data []byte) error {
+	// First, try to unmarshal as standard array of strings
+	var arr []string
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*a = arr
+		return nil
+	}
+
+	// If that fails, it might be a JSON string
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+
+	// The string itself might be a JSON-encoded array
+	var nestedArr []string
+	if err := json.Unmarshal([]byte(str), &nestedArr); err == nil {
+		*a = nestedArr
+		return nil
+	}
+
+	// Otherwise, treat it as a multiline or comma-separated string
+	if str == "" {
+		*a = []string{}
+		return nil
+	}
+
+	lines := strings.Split(str, "\n")
+	var result []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	*a = result
+	return nil
+}
+
+// Value implements the driver.Valuer interface using pq.StringArray
+func (a PGStringArray) Value() (driver.Value, error) {
+	if a == nil {
+		return nil, nil
+	}
+	return pq.StringArray(a).Value()
+}
+
+// Scan implements the sql.Scanner interface using pq.StringArray
+func (a *PGStringArray) Scan(value interface{}) error {
+	var pqArr pq.StringArray
+	if err := pqArr.Scan(value); err != nil {
+		return err
+	}
+	*a = PGStringArray(pqArr)
+	return nil
 }
 
 // JSONMap is a custom type for storing JSON objects

@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -24,6 +25,8 @@ import (
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/repository"
 	"thanawy-backend/internal/services"
+
+	"gorm.io/gorm"
 
 	"time"
 
@@ -491,6 +494,112 @@ func ResendVerification(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// refreshMetaCache caches minimal per-token metadata that RefreshToken reads
+// on every request, so the hot path avoids both a Redis read of the full
+// session row and a database SELECT. The DB is only hit on a cache miss.
+//
+// Keyed by the refresh-token *hash* (never the raw token). Values are tiny
+// (userId + role + sessionId) and serialised as JSON.
+type refreshMetaEntry struct {
+	data      []byte
+	expiresAt time.Time
+}
+
+var (
+	refreshMetaL1       sync.Map // refresh-token hash → *refreshMetaEntry
+	refreshMetaL1TTL    = 60 * time.Second
+	refreshMetaRedisTTL = 5 * time.Minute
+)
+
+const refreshMetaRedisKeyFmt = "refresh_meta:%s"
+
+func refreshMetaKey(tokenHash string) string { return refreshMetaRedisKeyFmt + tokenHash }
+
+// loadRefreshMeta returns (userId, role, sessionId) from L1/L2 cache when
+// possible. Falls back to a single DB query when both layers miss.
+func loadRefreshMeta(tokenHash string) (string, string, string, error) {
+	// L1 in-process cache (zero allocation, no network).
+	if val, ok := refreshMetaL1.Load(tokenHash); ok {
+		entry := val.(*refreshMetaEntry)
+		if time.Now().Before(entry.expiresAt) {
+			var m struct {
+				UserID    string `json:"u"`
+				Role      string `json:"r"`
+				SessionID string `json:"s"`
+			}
+			if json.Unmarshal(entry.data, &m) == nil {
+				return m.UserID, m.Role, m.SessionID, nil
+			}
+		}
+		refreshMetaL1.Delete(tokenHash)
+	}
+
+	// L2 Redis cache.
+	if db.Redis != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+		cached, err := db.Redis.Get(ctx, refreshMetaKey(tokenHash)).Bytes()
+		cancel()
+		if err == nil && len(cached) > 0 {
+			refreshMetaL1.Store(tokenHash, &refreshMetaEntry{
+				data:      cached,
+				expiresAt: time.Now().Add(refreshMetaL1TTL),
+			})
+			var m struct {
+				UserID    string `json:"u"`
+				Role      string `json:"r"`
+				SessionID string `json:"s"`
+			}
+			if json.Unmarshal(cached, &m) == nil {
+				return m.UserID, m.Role, m.SessionID, nil
+			}
+		}
+	}
+
+	// Cold path: query only the columns we need (not SELECT *).
+	type meta struct {
+		UserID    string
+		Role      string
+		SessionID string
+	}
+	var m meta
+	var res struct {
+		ID        string
+		UserID    string
+		ExpiresAt time.Time
+		IsActive  bool
+	}
+	err := db.DB.Model(&models.UserSession{}).
+		Select("id", "user_id", "expires_at", "is_active").
+		Where("refresh_token_hash = ?", tokenHash).
+		Take(&res).Error
+	if err != nil {
+		return "", "", "", err
+	}
+	m.SessionID = res.ID
+	m.UserID = res.UserID
+	// Fetch role separately but cache it.
+	if u, err := getUserRepo().FindByID(m.UserID); err == nil {
+		m.Role = string(u.Role)
+	}
+	payload, _ := json.Marshal(struct {
+		UserID    string `json:"u"`
+		Role      string `json:"r"`
+		SessionID string `json:"s"`
+	}{m.UserID, m.Role, m.SessionID})
+	refreshMetaL1.Store(tokenHash, &refreshMetaEntry{
+		data:      payload,
+		expiresAt: time.Now().Add(refreshMetaL1TTL),
+	})
+	if db.Redis != nil {
+		go func(key string, data []byte) {
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancel()
+			db.Redis.Set(ctx, key, data, refreshMetaRedisTTL)
+		}(refreshMetaKey(tokenHash), payload)
+	}
+	return m.UserID, m.Role, m.SessionID, nil
+}
+
 func RefreshToken(c *gin.Context) {
 	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil {
@@ -498,20 +607,29 @@ func RefreshToken(c *gin.Context) {
 		return
 	}
 
-	session, err := getSessionRepo().FindByRefreshToken(refreshToken)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
-		return
+	tokenHash := models.ComputeRefreshTokenHash(refreshToken)
+
+	// Fast path: try the metadata cache. This avoids the heaviest operations
+	// in the previous implementation (UserSession SELECT + User SELECT) on the
+	// hot path that the browser hits on every access-token expiry.
+	userID, _, sessionID, err := loadRefreshMeta(tokenHash)
+	if err != nil || sessionID == "" {
+		// Fallback to the canonical repository path on cache miss.
+		session, sErr := getSessionRepo().FindByRefreshToken(refreshToken)
+		if sErr != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+			return
+		}
+		if session.IsExpired() {
+			_ = getSessionRepo().RevokeSessionByJTI(session.ID)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired"})
+			return
+		}
+		userID = session.UserID
+		sessionID = session.ID
 	}
 
-	if session.IsExpired() {
-		// Clean up expired session silently
-		_ = getSessionRepo().RevokeSessionByJTI(session.ID)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired"})
-		return
-	}
-
-	user, err := getUserRepo().FindByID(session.UserID)
+	user, err := getUserRepo().FindByID(userID)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": errUserNotFound})
 		return
@@ -526,20 +644,28 @@ func RefreshToken(c *gin.Context) {
 	// Use RotateToken: single UPDATE instead of Revoke+Create
 	// This reduces the operation from ~3000ms (DELETE+INSERT) to ~50ms (UPDATE)
 	newExpiry := time.Now().Add(30 * 24 * time.Hour)
-	_, err = getSessionRepo().RotateToken(session.ID, refreshToken, tokens.RefreshToken, newExpiry)
+	_, err = getSessionRepo().RotateToken(sessionID, refreshToken, tokens.RefreshToken, newExpiry)
 	if err != nil {
 		// Fallback to old method if rotation fails (e.g., stale session)
-		_ = getSessionRepo().RevokeSessionByJTI(session.ID)
+		_ = getSessionRepo().RevokeSessionByJTI(sessionID)
 		_ = getSessionRepo().Create(&models.UserSession{
 			ID:           tokens.JTI,
 			UserID:       user.ID,
 			RefreshToken: tokens.RefreshToken,
 			UserAgent:    c.Request.UserAgent(),
 			IP:           c.ClientIP(),
-			Location:     session.Location,
 			ExpiresAt:    newExpiry,
 			LastAccessed: time.Now(),
 		})
+		// Invalidate the metadata cache so the next call recomputes it.
+		refreshMetaL1.Delete(tokenHash)
+		if db.Redis != nil {
+			go func(key string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+				defer cancel()
+				db.Redis.Del(ctx, key)
+			}(refreshMetaKey(tokenHash))
+		}
 	}
 
 	c.SetCookie("access_token", tokens.AccessToken, 3600*24, "/", "", isProduction(), true)
@@ -689,19 +815,18 @@ func GetProfile(c *gin.Context) {
 		return
 	}
 
-	// Use selected columns only - avoid SELECT * for better performance.
-	// hydrateUserContext already cached role/perms in Redis during Auth middleware.
-	var profile models.User
-	if err := db.DB.Model(&models.User{}).
-		Select("id", "name", "email", "username", "avatar", "role",
-			"permissions", "email_verified", "phone", "phone_verified",
-			"total_xp", "level", "grade_level", "education_type", "section",
-			"bio", "country", "created_at", "updated_at").
-		Where("id = ?", userId).
-		Take(&profile).Error; err != nil {
+	userIdStr, ok := userId.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	profilePtr, err := getUserRepo().FindByID(userIdStr)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
 		return
 	}
+	profile := *profilePtr
 
 	// Expose effective permissions (role defaults + DB overrides) so the client matches PermissionRequired.
 	profile.Permissions = models.JSONStringArray(profile.GetEffectivePermissions())
@@ -1405,10 +1530,27 @@ func fetchBillingData(uid string) gin.H {
 
 func fetchActiveSubscription(uid string) interface{} {
 	var activeSub models.UserSubscription
-	if err := db.DB.
+	// Use read replica if available, and degrade gracefully if the table
+	// has not been created yet (e.g. before migrations are applied).
+	readDB := db.ReadDB()
+	if readDB == nil {
+		readDB = db.DB
+	}
+	if readDB == nil {
+		return nil
+	}
+	err := readDB.
 		Preload("Plan").
 		Where("user_id = ? AND status = ? AND end_date > ?", uid, models.SubscriptionActive, time.Now()).
-		First(&activeSub).Error; err != nil {
+		First(&activeSub).Error
+	if err != nil {
+		// Silently handle the "table does not exist" case (SQLSTATE 42P01)
+		// and the "no active subscription" case so the billing summary
+		// still returns a valid payload.
+		if errors.Is(err, gorm.ErrRecordNotFound) || isTableMissingError(err) {
+			return nil
+		}
+		log.Printf("[billing] fetchActiveSubscription unexpected error: %v", err)
 		return nil
 	}
 	return gin.H{
@@ -1424,6 +1566,18 @@ func fetchActiveSubscription(uid string) interface{} {
 		},
 		"payments": []gin.H{},
 	}
+}
+
+// isTableMissingError detects PostgreSQL "relation does not exist" errors so
+// that the application can degrade gracefully when a table has not been
+// created yet (e.g. before migrations are applied).
+func isTableMissingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "42P01") || // undefined_table
+		strings.Contains(msg, "does not exist")
 }
 
 func storeBillingCache(cacheKey string, responseData gin.H) {

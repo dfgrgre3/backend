@@ -94,9 +94,5 @@ func (s *S3Storage) GeneratePresignedUploadURL(ctx context.Context, filename str
 		return "", fmt.Errorf("failed to generate presigned upload url: %w", err)
 	}
 
-	if s.publicURL != "" {
-		return fmt.Sprintf("%s/%s", s.publicURL, filename), nil
-	}
-
 	return presignedURL.String(), nil
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"runtime"
+	"sync"
 )
 
 const uploadMetadataKeyPrefix = "upload_metadata:"
@@ -1014,32 +1015,104 @@ func DeleteImpersonation(c *gin.Context) {
 }
 
 func GetAdminDashboard(c *gin.Context) {
-	var totalUsers int64
-	var totalSubjects int64
-	var totalExams int64
-	var completedTasks int64
-	var totalStudySessions int64
-	var newUsersToday int64
-	var newUsersThisWeek int64
-	var studyMinutes int64
-	var examsTaken int64
+	timeParam := c.Query("time")
+	cacheKey := "admin:dashboard:stats"
+	if timeParam != "" {
+		cacheKey = fmt.Sprintf("admin:dashboard:stats:%s", timeParam)
+	}
+
+	if db.Redis != nil {
+		cachedData, err := db.Redis.Get(c.Request.Context(), cacheKey).Result()
+		if err == nil {
+			var cachedResponse map[string]interface{}
+			if json.Unmarshal([]byte(cachedData), &cachedResponse) == nil {
+				api_response.Success(c, cachedResponse)
+				return
+			}
+		}
+	}
+	var (
+		totalUsers         int64
+		totalSubjects      int64
+		totalExams         int64
+		completedTasks     int64
+		totalStudySessions int64
+		newUsersToday      int64
+		newUsersThisWeek   int64
+		studyMinutes       int64
+		examsTaken         int64
+		recentTasks        []models.Task
+		upcomingExams      []models.Exam
+		totalResources     int64
+		activeChallenges   int64
+		achievementsEarned int64
+	)
 
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	weekAgo := now.AddDate(0, 0, -7)
 
-	db.DB.Model(&models.User{}).Count(&totalUsers)
-	db.DB.Model(&models.User{}).Where(createdAtGte, todayStart).Count(&newUsersToday)
-	db.DB.Model(&models.User{}).Where(createdAtGte, weekAgo).Count(&newUsersThisWeek)
-	db.DB.Model(&models.Subject{}).Count(&totalSubjects)
-	db.DB.Model(&models.Exam{}).Count(&totalExams)
-	db.DB.Model(&models.Task{}).Where(statusQuery, models.TaskCompleted).Count(&completedTasks)
-	db.DB.Model(&models.StudySession{}).Count(&totalStudySessions)
-	db.DB.Model(&models.StudySession{}).Select(coalesceSumDuration).Scan(&studyMinutes)
-	db.DB.Model(&models.ExamResult{}).Count(&examsTaken)
+	var wg sync.WaitGroup
+	wg.Add(14)
 
-	var recentTasks []models.Task
-	db.DB.Order(createdAtDescSort).Limit(10).Find(&recentTasks)
+	go func() {
+		defer wg.Done()
+		db.DB.Model(&models.User{}).Count(&totalUsers)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Model(&models.User{}).Where(createdAtGte, todayStart).Count(&newUsersToday)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Model(&models.User{}).Where(createdAtGte, weekAgo).Count(&newUsersThisWeek)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Model(&models.Subject{}).Count(&totalSubjects)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Model(&models.Exam{}).Count(&totalExams)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Model(&models.Task{}).Where(statusQuery, models.TaskCompleted).Count(&completedTasks)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Model(&models.StudySession{}).Count(&totalStudySessions)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Model(&models.StudySession{}).Select(coalesceSumDuration).Scan(&studyMinutes)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Model(&models.ExamResult{}).Count(&examsTaken)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Order(createdAtDescSort).Limit(10).Find(&recentTasks)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Order(createdAtDescSort).Limit(5).Find(&upcomingExams)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Model(&models.SubTopic{}).Where("type != ?", models.SubTopicQuiz).Count(&totalResources)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Model(&models.Challenge{}).Where(isActiveQuery, true).Count(&activeChallenges)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Model(&models.UserAchievement{}).Count(&achievementsEarned)
+	}()
+
+	wg.Wait()
 
 	// Batch fetch users for recent tasks to avoid N+1 queries
 	taskUserIDs := make([]string, 0, len(recentTasks))
@@ -1072,8 +1145,6 @@ func GetAdminDashboard(c *gin.Context) {
 		})
 	}
 
-	var upcomingExams []models.Exam
-	db.DB.Order(createdAtDescSort).Limit(5).Find(&upcomingExams)
 	upcomingEvents := make([]gin.H, 0, len(upcomingExams))
 	for _, e := range upcomingExams {
 		upcomingEvents = append(upcomingEvents, gin.H{
@@ -1083,15 +1154,6 @@ func GetAdminDashboard(c *gin.Context) {
 			"type":  "exam",
 		})
 	}
-
-	var totalResources int64
-	db.DB.Model(&models.SubTopic{}).Where("type != ?", models.SubTopicQuiz).Count(&totalResources)
-
-	var activeChallenges int64
-	db.DB.Model(&models.Challenge{}).Where(isActiveQuery, true).Count(&activeChallenges)
-
-	var achievementsEarned int64
-	db.DB.Model(&models.UserAchievement{}).Count(&achievementsEarned)
 
 	sixMonthsAgo := now.AddDate(0, -5, 0)
 	startOfSixMonths := time.Date(sixMonthsAgo.Year(), sixMonthsAgo.Month(), 1, 0, 0, 0, 0, sixMonthsAgo.Location())
@@ -1149,7 +1211,7 @@ func GetAdminDashboard(c *gin.Context) {
 		})
 	}
 
-	api_response.Success(c, gin.H{
+	responsePayload := gin.H{
 		"stats": gin.H{
 			"totalUsers":       totalUsers,
 			"totalSubjects":    totalSubjects,
@@ -1175,7 +1237,16 @@ func GetAdminDashboard(c *gin.Context) {
 		},
 		"recentActivity": recentActivityItems,
 		"upcomingEvents": upcomingEvents,
-	})
+	}
+
+	if db.Redis != nil {
+		dataBytes, err := json.Marshal(responsePayload)
+		if err == nil {
+			db.Redis.Set(c.Request.Context(), cacheKey, dataBytes, 5*time.Minute)
+		}
+	}
+
+	api_response.Success(c, responsePayload)
 }
 
 type liveActivitySummary struct {

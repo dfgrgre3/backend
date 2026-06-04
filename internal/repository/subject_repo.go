@@ -133,6 +133,7 @@ func (r *SubjectRepository) InvalidateSubjectCache(id string) {
 		// Delete both the single subject cache and any list caches that might contain it
 		db.Redis.Del(ctx, fmt.Sprintf(subjectCacheKeyFormat, SubjectCachePrefix, id))
 		db.Redis.Del(ctx, fmt.Sprintf("%slist:*", SubjectCachePrefix))
+		db.Redis.Del(ctx, "admin:dashboard:stats")
 	}
 }
 
@@ -144,6 +145,7 @@ func (r *SubjectRepository) InvalidateAllSubjectCache() {
 		for iter.Next(ctx) {
 			db.Redis.Del(ctx, iter.Val())
 		}
+		db.Redis.Del(ctx, "admin:dashboard:stats")
 		// No Close method needed for ScanIterator
 	}
 }

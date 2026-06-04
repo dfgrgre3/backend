@@ -83,7 +83,7 @@ type Book struct {
 	Rating      float64         `gorm:"default:0;column:rating" json:"rating"`
 	Views       int             `gorm:"default:0;column:views" json:"views"`
 	Downloads   int             `gorm:"default:0;column:downloads" json:"downloads"`
-	Tags        JSONStringArray `gorm:"type:jsonb;column:tags" json:"tags"`
+	Tags        PGStringArray   `gorm:"type:text[];column:tags" json:"tags"`
 	CreatedAt   time.Time       `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt   time.Time       `gorm:"column:updated_at" json:"updatedAt"`
 	DeletedAt   gorm.DeletedAt  `gorm:"index;column:deleted_at" json:"-"`

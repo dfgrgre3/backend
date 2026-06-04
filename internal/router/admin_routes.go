@@ -202,6 +202,17 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.PATCH(adminSubjectsRoute, handlers.UpdateSubject)
 		admin.DELETE(adminSubjectsRoute, handlers.DeleteSubject)
 
+		// Course aliases for Admin panel compatibility
+		admin.GET("/courses", handlers.GetSubjects)
+		admin.POST("/courses", handlers.CreateSubject)
+		admin.PATCH("/courses", handlers.UpdateSubject)
+		admin.DELETE("/courses", handlers.DeleteSubject)
+		admin.GET("/courses/:id/curriculum", handlers.GetSubjectCurriculum)
+		admin.PUT("/courses/:id/curriculum", handlers.UpdateCourseCurriculum)
+		admin.PATCH("/courses/:id/curriculum", handlers.UpdateCourseCurriculum)
+		admin.POST("/courses/duplicate", handlers.DuplicateCourse)
+		admin.POST("/courses/batch", handlers.BatchCourseAction)
+
 		// Curriculum
 		admin.PATCH("/subjects/:id/curriculum", handlers.UpdateCourseCurriculum)
 		admin.GET("/subjects/:id/curriculum", handlers.GetSubjectCurriculum)

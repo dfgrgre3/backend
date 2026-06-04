@@ -45,9 +45,9 @@ type Subject struct {
 	Language               string  `gorm:"default:'ar';index;column:language" json:"language"`
 
 	// New fields to match DB and frontend
-	CoursePrerequisites StringArray `gorm:"type:text[];column:course_prerequisites" json:"coursePrerequisites"`
-	TargetAudience      StringArray `gorm:"type:text[];column:target_audience" json:"targetAudience"`
-	WhatYouLearn        StringArray `gorm:"type:text[];column:what_you_learn" json:"whatYouLearn"`
+	CoursePrerequisites PGStringArray `gorm:"type:text[];column:course_prerequisites" json:"coursePrerequisites"`
+	TargetAudience      PGStringArray `gorm:"type:text[];column:target_audience" json:"targetAudience"`
+	WhatYouLearn        PGStringArray `gorm:"type:text[];column:what_you_learn" json:"whatYouLearn"`
 	CompletionRate      float64     `gorm:"default:0;column:completion_rate" json:"completionRate"`
 	VideoCount          int         `gorm:"default:0;column:video_count" json:"videoCount"`
 	Type                string      `gorm:"default:'COURSE';column:type" json:"type"`

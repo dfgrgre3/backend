@@ -19,7 +19,7 @@ type NotificationRequest struct {
 	Message      string     `json:"message" binding:"required,max=2000"`
 	Type         string     `json:"type" binding:"omitempty,oneof=info success warning error"`
 	Channels     []string   `json:"channels" binding:"required,min=1"`
-	ActionURL    string     `json:"actionUrl" binding:"omitempty,url"`
+	ActionURL    string     `json:"actionUrl" binding:"omitempty"`
 	Priority     string     `json:"priority" binding:"omitempty,oneof=high normal low"`
 	ScheduledFor *time.Time `json:"scheduledFor,omitempty"`
 }
@@ -55,9 +55,12 @@ func SendNotificationBroadcast(c *gin.Context) {
 		return
 	}
 
-	// Get admin user info
-	adminID, _ := c.Get("user_id")
-	adminRole, _ := c.Get("user_role")
+	adminID, ok := contextString(c, "userId", "user_id")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
+	adminRole, _ := contextString(c, "role", "user_role")
 
 	// Log critical operation
 	middleware.LogCriticalOperation(c, "notification_broadcast", map[string]interface{}{
@@ -75,7 +78,7 @@ func SendNotificationBroadcast(c *gin.Context) {
 		Channels:    req.Channels,
 		TargetCount: len(req.UserIDs),
 		Status:      "sending",
-		CreatedBy:   adminID.(string),
+		CreatedBy:   adminID,
 		CreatedAt:   time.Now(),
 	}
 
@@ -85,7 +88,7 @@ func SendNotificationBroadcast(c *gin.Context) {
 	}
 
 	if err := SafeCreate(db.DB, &broadcast); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create broadcast"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create broadcast: " + err.Error()})
 		return
 	}
 
@@ -190,7 +193,14 @@ func ScheduleNotificationBroadcast(c *gin.Context) {
 // @Router /api/admin/notifications/broadcast/{broadcastId}/cancel [post]
 func CancelScheduledBroadcast(c *gin.Context) {
 	broadcastID := c.Param("broadcastId")
-	adminID, _ := c.Get("user_id")
+	if broadcastID == "" {
+		broadcastID = c.Param("id")
+	}
+	adminID, ok := contextString(c, "userId", "user_id")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
 
 	var broadcast models.Broadcast
 	if err := db.DB.First(&broadcast, "id = ?", broadcastID).Error; err != nil {
@@ -206,7 +216,7 @@ func CancelScheduledBroadcast(c *gin.Context) {
 
 	// Update status
 	broadcast.Status = "cancelled"
-	broadcast.CancelledBy = ptrString(adminID.(string))
+	broadcast.CancelledBy = ptrString(adminID)
 	now := time.Now()
 	broadcast.CancelledAt = &now
 
@@ -416,4 +426,13 @@ func SendPushNotification(c *gin.Context) {
 
 func ptrString(s string) *string {
 	return &s
+}
+
+func contextString(c *gin.Context, keys ...string) (string, bool) {
+	for _, key := range keys {
+		if value := c.GetString(key); value != "" {
+			return value, true
+		}
+	}
+	return "", false
 }

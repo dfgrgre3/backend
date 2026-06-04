@@ -121,6 +121,7 @@ func Auth() gin.HandlerFunc {
 		}
 
 		c.Set("userId", claims.Subject)
+		c.Set("user_id", claims.Subject)
 		c.Set("jti", claims.JTI)
 		if claims.ExpiresAt != nil {
 			c.Set("accessTokenExpiresAt", claims.ExpiresAt.Time.UnixMilli())
@@ -265,6 +266,7 @@ func hydrateUserContext(c *gin.Context, userID, fallbackRole string) {
 	if db.DB == nil {
 		log.Printf("WARN: Database connection is nil in hydrateUserContext for user %s", userID)
 		c.Set("role", strings.ToUpper(fallbackRole))
+		c.Set("user_role", strings.ToUpper(fallbackRole))
 		c.Set("permissions", []string{})
 		return
 	}
@@ -272,6 +274,7 @@ func hydrateUserContext(c *gin.Context, userID, fallbackRole string) {
 	// 1. Try local in-memory cache first to bypass Redis cloud network latency
 	if cached, ok := fetchCachedRolePerms(userID); ok {
 		c.Set("role", cached.Role)
+		c.Set("user_role", cached.Role)
 		c.Set("permissions", cached.Permissions)
 		return
 	}
@@ -282,9 +285,11 @@ func hydrateUserContext(c *gin.Context, userID, fallbackRole string) {
 	if err == nil {
 		authCtx := res.(*userAuthContext)
 		c.Set("role", authCtx.Role)
+		c.Set("user_role", authCtx.Role)
 		c.Set("permissions", authCtx.Permissions)
 	} else {
 		c.Set("role", strings.ToUpper(fallbackRole))
+		c.Set("user_role", strings.ToUpper(fallbackRole))
 		c.Set("permissions", []string{})
 	}
 }
@@ -348,7 +353,9 @@ func processImpersonation(c *gin.Context, adminID string) {
 
 		c.Set("originalAdminId", adminID)
 		c.Set("userId", impersonatedID)
+		c.Set("user_id", impersonatedID)
 		c.Set("role", authCtx.Role)
+		c.Set("user_role", authCtx.Role)
 		c.Set("isImpersonating", true)
 		c.Set("permissions", authCtx.Permissions)
 	}

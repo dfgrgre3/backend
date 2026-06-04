@@ -121,7 +121,7 @@ func GetSubjects(c *gin.Context) {
 	}
 	var topicCounts []countResult
 	if len(subjectIDs) > 0 {
-		readDB.Model(&models.Topic{}).
+		db.ReadDB(c.Request.Context()).Table("Topic").
 			Select("subject_id, count(*) as count").
 			Where("subject_id IN ?", subjectIDs).
 			Group("subject_id").
@@ -691,10 +691,15 @@ func UpdateSubject(c *gin.Context) {
 	}
 
 	normalizeInputMap(input)
-	updates := mapInputToSubjectUpdates(input)
+	updates, err := mapInputToSubjectUpdatesMap(input)
+	if err != nil {
+		log.Printf("UpdateSubject: mapping error: %v", err)
+		api_response.Error(c, http.StatusBadRequest, "Invalid array input format: "+err.Error())
+		return
+	}
 
 	if err := db.DB.Model(&models.Subject{}).Where(idQuery, subject.ID).
-		Updates(&updates).Error; err != nil {
+		Updates(updates).Error; err != nil {
 		log.Printf("UpdateSubject: Database error: %v", err)
 		api_response.Error(c, http.StatusInternalServerError, getUpdateSubjectErrorMessage(err))
 		return
@@ -709,31 +714,96 @@ func UpdateSubject(c *gin.Context) {
 	api_response.Success(c, gin.H{"course": subject})
 }
 
-type subjectUpdates struct {
-	Name                   *string  `gorm:"column:name"`
-	NameAr                 *string  `gorm:"column:name_ar"`
-	Description            *string  `gorm:"column:description"`
-	CategoryID             *string  `gorm:"column:category_id"`
-	Color                  *string  `gorm:"column:color"`
-	Image                  *string  `gorm:"column:image"`
-	IsPublished            *bool    `gorm:"column:is_published"`
-	IsFree                 *bool    `gorm:"column:is_free"`
-	Price                  *float64 `gorm:"column:price"`
-	Code                   *string  `gorm:"column:code"`
-	Icon                   *string  `gorm:"column:icon"`
-	InstructorName         *string  `gorm:"column:instructor_name"`
-	InstructorID           *string  `gorm:"column:instructor_id"`
-	Slug                   *string  `gorm:"column:slug"`
-	ThumbnailUrl           *string  `gorm:"column:thumbnail_url"`
-	TrailerUrl             *string  `gorm:"column:trailer_url"`
-	SeoTitle               *string  `gorm:"column:seo_title"`
-	SeoDescription         *string  `gorm:"column:seo_description"`
-	TrailerDurationMinutes *int     `gorm:"column:trailer_duration_minutes"`
-	Level                  *string  `gorm:"column:level"`
-	DurationHours          *float64 `gorm:"column:duration_hours"`
-	IsFeatured             *bool    `gorm:"column:is_featured"`
-	Language               *string  `gorm:"column:language"`
-	Type                   *string  `gorm:"column:type"`
+func mapInputToSubjectUpdatesMap(input map[string]interface{}) (map[string]interface{}, error) {
+	updates := make(map[string]interface{})
+
+	// Field mapping from input key (camelCase) to db column (snake_case)
+	mappings := map[string]string{
+		"name":            "name",
+		"nameAr":          "name_ar",
+		"description":     "description",
+		"categoryId":      "category_id",
+		"color":           "color",
+		"image":           "image",
+		"code":            "code",
+		"icon":            "icon",
+		"instructorName":  "instructor_name",
+		"instructorId":    "instructor_id",
+		"slug":            "slug",
+		"thumbnailUrl":    "thumbnail_url",
+		"trailerUrl":      "trailer_url",
+		"seoTitle":        "seo_title",
+		"seoDescription":  "seo_description",
+		"level":           "level",
+		"language":        "language",
+		"type":            "type",
+	}
+
+	for inputKey, dbCol := range mappings {
+		if val, exists := input[inputKey]; exists {
+			updates[dbCol] = val
+		}
+	}
+
+	// Boolean & numeric type-safe conversions or direct mappings
+	numMappings := map[string]string{
+		"price":                  "price",
+		"durationHours":          "duration_hours",
+		"trailerDurationMinutes": "trailer_duration_minutes",
+	}
+	for inputKey, dbCol := range numMappings {
+		if val, exists := input[inputKey]; exists {
+			updates[dbCol] = val
+		}
+	}
+
+	boolMappings := map[string]string{
+		"isActive":    "is_active",
+		"isPublished": "is_published",
+		"isFree":      "is_free",
+		"isFeatured":  "is_featured",
+	}
+	for inputKey, dbCol := range boolMappings {
+		if val, exists := input[inputKey]; exists {
+			updates[dbCol] = val
+		}
+	}
+
+	// PGStringArray fields
+	arrayFields := map[string]string{
+		"coursePrerequisites": "course_prerequisites",
+		"targetAudience":      "target_audience",
+		"whatYouLearn":        "what_you_learn",
+	}
+	for inputKey, dbCol := range arrayFields {
+		if val, exists := input[inputKey]; exists {
+			sa, err := parseStringArray(val)
+			if err != nil {
+				return nil, err
+			}
+			if sa != nil {
+				updates[dbCol] = *sa
+			}
+		}
+	}
+
+	return updates, nil
+}
+
+
+func parseStringArray(val interface{}) (*models.PGStringArray, error) {
+	if val == nil {
+		return nil, nil
+	}
+	bytes, err := json.Marshal(val)
+	if err != nil {
+		return nil, err
+	}
+	var sa models.PGStringArray
+	if err := json.Unmarshal(bytes, &sa); err != nil {
+		return nil, err
+	}
+	return &sa, nil
 }
 
 func normalizeInputMap(input map[string]interface{}) {
@@ -744,97 +814,6 @@ func normalizeInputMap(input map[string]interface{}) {
 				input[field] = nil
 			}
 		}
-	}
-}
-
-func mapInputToSubjectUpdates(input map[string]interface{}) subjectUpdates {
-	updates := subjectUpdates{}
-	mapBasicSubjectFields(input, &updates)
-	mapSubjectMediaAndInstructorFields(input, &updates)
-	mapSubjectMetadataFields(input, &updates)
-	mapSubjectFinancialAndStatusFields(input, &updates)
-	return updates
-}
-
-func mapBasicSubjectFields(input map[string]interface{}, updates *subjectUpdates) {
-	if v, ok := input["name"].(string); ok {
-		updates.Name = &v
-	}
-	if v, ok := input["nameAr"].(string); ok {
-		updates.NameAr = &v
-	}
-	if v, ok := input["description"].(string); ok {
-		updates.Description = &v
-	}
-	if v, ok := input["categoryId"].(string); ok {
-		updates.CategoryID = &v
-	}
-	if v, ok := input["color"].(string); ok {
-		updates.Color = &v
-	}
-	if v, ok := input["icon"].(string); ok {
-		updates.Icon = &v
-	}
-	if v, ok := input["code"].(string); ok {
-		updates.Code = &v
-	}
-	if v, ok := input["slug"].(string); ok {
-		updates.Slug = &v
-	}
-}
-
-func mapSubjectMediaAndInstructorFields(input map[string]interface{}, updates *subjectUpdates) {
-	if v, ok := input["thumbnailUrl"].(string); ok {
-		updates.ThumbnailUrl = &v
-	}
-	if v, ok := input["trailerUrl"].(string); ok {
-		updates.TrailerUrl = &v
-	}
-	if v, ok := input["instructorName"].(string); ok {
-		updates.InstructorName = &v
-	}
-	if v, ok := input["instructorId"].(string); ok {
-		updates.InstructorID = &v
-	}
-}
-
-func mapSubjectMetadataFields(input map[string]interface{}, updates *subjectUpdates) {
-	if v, ok := input["seoTitle"].(string); ok {
-		updates.SeoTitle = &v
-	}
-	if v, ok := input["seoDescription"].(string); ok {
-		updates.SeoDescription = &v
-	}
-	if v, ok := input["level"].(string); ok {
-		updates.Level = &v
-	}
-	if v, ok := input["language"].(string); ok {
-		updates.Language = &v
-	}
-	if v, ok := input["type"].(string); ok {
-		updates.Type = &v
-	}
-}
-
-func mapSubjectFinancialAndStatusFields(input map[string]interface{}, updates *subjectUpdates) {
-	if v, ok := input["price"].(float64); ok {
-		updates.Price = &v
-	}
-	if v, ok := input["durationHours"].(float64); ok {
-		updates.DurationHours = &v
-	}
-	if v, ok := input["trailerDurationMinutes"].(float64); ok {
-		i := int(v)
-		updates.TrailerDurationMinutes = &i
-	}
-	if v, ok := input["isPublished"].(bool); ok {
-		updates.IsPublished = &v
-	}
-	if v, ok := input["isFree"].(bool); ok {
-		updates.IsFree = &v
-	}
-	if v, ok := input["isFeatured"].(bool); ok {
-		updates.IsFeatured = &v
 	}
 }
 
@@ -1147,7 +1126,7 @@ func clearSubjectCurriculum(tx *gorm.DB, subjectId string) {
 	var existingTopics []models.Topic
 	tx.Where(subjectIDQuotedQuery, subjectId).Find(&existingTopics)
 	for _, t := range existingTopics {
-		tx.Where("\"topicId\" = ?", t.ID).Delete(&models.SubTopic{})
+		tx.Where("topic_id = ?", t.ID).Delete(&models.SubTopic{})
 	}
 	tx.Where(subjectIDQuotedQuery, subjectId).Delete(&models.Topic{})
 }
@@ -1358,4 +1337,189 @@ func UnenrollUser(c *gin.Context) {
 	}
 
 	api_response.Success(c, nil)
+}
+
+// DuplicateCourse duplicates an existing course (Subject) along with its topics, subtopics, and attachments
+func DuplicateCourse(c *gin.Context) {
+	var input struct {
+		CourseID string `json:"courseId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Course ID is required")
+		return
+	}
+
+	var oldSubject models.Subject
+	if err := db.DB.Preload("Topics.SubTopics.Attachments").First(&oldSubject, "id = ?", input.CourseID).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Course not found")
+		return
+	}
+
+	// Generate unique Code and Slug
+	uniqueSuffix := fmt.Sprintf("-%d", time.Now().Unix()%10000)
+	var newCode *string
+	if oldSubject.Code != nil {
+		codeVal := *oldSubject.Code + uniqueSuffix
+		newCode = &codeVal
+	}
+	var newSlug *string
+	if oldSubject.Slug != nil {
+		slugVal := *oldSubject.Slug + uniqueSuffix
+		newSlug = &slugVal
+	}
+
+	nameCopy := oldSubject.Name + " (Copy)"
+	var nameArCopy *string
+	if oldSubject.NameAr != nil {
+		valAr := *oldSubject.NameAr + " (نسخة)"
+		nameArCopy = &valAr
+	}
+
+	newSubject := models.Subject{
+		Name:                   nameCopy,
+		NameAr:                 nameArCopy,
+		Code:                   newCode,
+		Slug:                   newSlug,
+		Description:            oldSubject.Description,
+		Icon:                   oldSubject.Icon,
+		Color:                  oldSubject.Color,
+		IsActive:               true,
+		IsPublished:            false, // default to draft
+		Price:                  oldSubject.Price,
+		Level:                  oldSubject.Level,
+		InstructorName:         oldSubject.InstructorName,
+		InstructorId:           oldSubject.InstructorId,
+		CategoryId:             oldSubject.CategoryId,
+		DurationHours:          oldSubject.DurationHours,
+		Requirements:           oldSubject.Requirements,
+		LearningObjectives:     oldSubject.LearningObjectives,
+		ThumbnailUrl:           oldSubject.ThumbnailUrl,
+		TrailerUrl:             oldSubject.TrailerUrl,
+		TrailerDurationMinutes: oldSubject.TrailerDurationMinutes,
+		SeoTitle:               oldSubject.SeoTitle,
+		SeoDescription:         oldSubject.SeoDescription,
+		Language:               oldSubject.Language,
+		Type:                   oldSubject.Type,
+		CoursePrerequisites:    oldSubject.CoursePrerequisites,
+		TargetAudience:         oldSubject.TargetAudience,
+		WhatYouLearn:           oldSubject.WhatYouLearn,
+	}
+
+	if err := db.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&newSubject).Error; err != nil {
+			return err
+		}
+
+		for _, topic := range oldSubject.Topics {
+			newTopic := models.Topic{
+				SubjectID:   newSubject.ID,
+				Title:       topic.Title,
+				Description: topic.Description,
+				Order:       topic.Order,
+			}
+			if err := tx.Create(&newTopic).Error; err != nil {
+				return err
+			}
+
+			for _, subTopic := range topic.SubTopics {
+				newSubTopic := models.SubTopic{
+					TopicID:         newTopic.ID,
+					Title:           subTopic.Title,
+					Description:     subTopic.Description,
+					Content:         subTopic.Content,
+					VideoUrl:        subTopic.VideoUrl,
+					Type:            subTopic.Type,
+					ExamID:          subTopic.ExamID,
+					Order:           subTopic.Order,
+					DurationMinutes: subTopic.DurationMinutes,
+					IsFree:          subTopic.IsFree,
+				}
+				if err := tx.Create(&newSubTopic).Error; err != nil {
+					return err
+				}
+
+				for _, att := range subTopic.Attachments {
+					newAtt := models.LessonAttachment{
+						SubTopicID: newSubTopic.ID,
+						Title:      att.Title,
+						FileUrl:    att.FileUrl,
+						FileType:   att.FileType,
+						FileSize:   att.FileSize,
+					}
+					if err := tx.Create(&newAtt).Error; err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to duplicate course: "+err.Error())
+		return
+	}
+
+	getSubjectRepo().InvalidateSubjectCache(newSubject.ID)
+	cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), newSubject.ID)
+
+	api_response.Success(c, gin.H{
+		"message": "Course duplicated successfully",
+		"course":  newSubject,
+	})
+}
+
+// BatchCourseAction performs batch operations (publish, unpublish, activate, deactivate, delete) on multiple courses
+func BatchCourseAction(c *gin.Context) {
+	var input struct {
+		IDs    []string `json:"ids" binding:"required"`
+		Action string   `json:"action" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		api_response.Error(c, http.StatusBadRequest, "IDs and Action are required")
+		return
+	}
+
+	if len(input.IDs) == 0 {
+		api_response.Success(c, gin.H{"message": "No courses selected"})
+		return
+	}
+
+	var err error
+	switch input.Action {
+	case "publish":
+		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Update("is_published", true).Error
+	case "unpublish":
+		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Update("is_published", false).Error
+	case "activate":
+		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Update("is_active", true).Error
+	case "deactivate":
+		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Update("is_active", false).Error
+	case "delete":
+		// Ensure none of the subjects have active enrollments
+		var count int64
+		db.DB.Model(&models.Enrollment{}).Where("subject_id IN ?", input.IDs).Count(&count)
+		if count > 0 {
+			api_response.Error(c, http.StatusBadRequest, "Cannot delete courses with enrolled students")
+			return
+		}
+		err = db.DB.Where("id IN ?", input.IDs).Delete(&models.Subject{}).Error
+	default:
+		api_response.Error(c, http.StatusBadRequest, "Invalid action")
+		return
+	}
+
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to execute batch action: "+err.Error())
+		return
+	}
+
+	// Invalidate caches
+	invalidator := cache.NewCacheInvalidator()
+	for _, id := range input.IDs {
+		getSubjectRepo().InvalidateSubjectCache(id)
+		invalidator.InvalidateSubject(c.Request.Context(), id)
+	}
+
+	api_response.Success(c, gin.H{
+		"message": "Batch action executed successfully",
+	})
 }

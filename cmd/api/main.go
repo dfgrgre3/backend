@@ -11,12 +11,15 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -68,8 +71,8 @@ func main() {
 	// Initialize AuthService with UserRepository dependency (Dependency Injection)
 	handlers.InitAuthService(repository.NewUserRepository(db.DB))
 
-	// Initialize S3 Storage (Cloudflare R2 / AWS S3 / MinIO)
-	initS3Storage(cfg)
+	// Initialize Storage (Local or S3)
+	initStorage(cfg)
 
 	// SQL migrations and seeding are now handled by a separate process (cmd/migrate/main.go)
 	// to avoid race conditions in distributed environments.
@@ -217,27 +220,37 @@ func connectDatabaseWithRetry(cfg *config.Config) (*gorm.DB, error) {
 	return nil, lastErr
 }
 
-func initS3Storage(cfg *config.Config) {
-	if cfg.StorageType != "s3" || cfg.S3.Endpoint == "" {
-		log.Println("S3 storage not configured or endpoint is empty, skipping initialization")
+func initStorage(cfg *config.Config) {
+	if cfg.StorageType == "local" {
+		storageSvc, err := storage.NewLocalStorage(cfg.LocalStorage.BaseDir, cfg.LocalStorage.PublicURL)
+		if err != nil {
+			log.Fatalf("Failed to initialize local storage: %v", err)
+		}
+		storage.GlobalStorage = storageSvc
+		log.Printf("Storage initialized with Local provider (baseDir: %s, publicURL: %s)", cfg.LocalStorage.BaseDir, cfg.LocalStorage.PublicURL)
 		return
 	}
 
-	storageSvc, err := storage.NewS3Storage(
-		cfg.S3.Endpoint,
-		cfg.S3.AccessKey,
-		cfg.S3.SecretKey,
-		cfg.S3.Bucket,
-		cfg.S3.Region,
-		cfg.S3.UseSSL,
-		cfg.S3.PublicURL,
-	)
-	if err != nil {
-		log.Printf("Failed to initialize S3 storage: %v", err)
+	if cfg.StorageType == "s3" && cfg.S3.Endpoint != "" {
+		storageSvc, err := storage.NewS3Storage(
+			cfg.S3.Endpoint,
+			cfg.S3.AccessKey,
+			cfg.S3.SecretKey,
+			cfg.S3.Bucket,
+			cfg.S3.Region,
+			cfg.S3.UseSSL,
+			cfg.S3.PublicURL,
+		)
+		if err != nil {
+			log.Printf("Failed to initialize S3 storage: %v", err)
+			return
+		}
+		storage.GlobalStorage = storageSvc
+		log.Println("Storage initialized with S3 provider (Cloudflare R2)")
 		return
 	}
-	storage.GlobalStorage = storageSvc
-	log.Println("Storage initialized with S3 provider (Cloudflare R2)")
+
+	log.Println("No storage provider initialized")
 }
 
 func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *internalgrpc.CourseServiceServer, authSvc *internalgrpc.AuthServiceServer, analyticsSvc *internalgrpc.AnalyticsServiceServer) *gin.Engine {
@@ -245,6 +258,49 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
+
+	r.Use(gin.Logger())
+	r.Use(gin.Recovery())
+	r.Use(middleware.CORS())
+	r.Use(middleware.ValidateSecrets(middleware.DefaultSecretsValidatorConfig()))
+	r.Use(middleware.PerformanceMonitor())
+	r.Use(middleware.GlobalRateLimiter(200, time.Minute))
+	r.Use(middleware.CSRFMiddleware())
+	r.Use(middleware.DBConsistencyMiddleware(db.DB))
+
+	// Serve uploaded files statically
+	r.Static("/uploads", cfg.LocalStorage.BaseDir)
+
+	// Support raw PUT uploads for local dev simulation of direct S3 upload
+	r.PUT("/uploads/:filename", func(c *gin.Context) {
+		if cfg.StorageType != "local" {
+			c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Method not allowed"})
+			return
+		}
+		filename := c.Param("filename")
+		cleaned := filepath.Clean(filename)
+		if strings.HasPrefix(cleaned, "..") || strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "\\") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid filename"})
+			return
+		}
+		targetPath := filepath.Join(cfg.LocalStorage.BaseDir, cleaned)
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		dst, err := os.Create(targetPath)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer dst.Close()
+		_, err = io.Copy(dst, c.Request.Body)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "uploaded"})
+	})
 
 	// Login redirect to /api/auth/login (for backward compatibility)
 	r.GET("/login", func(c *gin.Context) {
@@ -275,15 +331,6 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	r.GET("/api/readyz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ready"})
 	})
-
-	r.Use(gin.Logger())
-	r.Use(gin.Recovery())
-	r.Use(middleware.CORS())
-	r.Use(middleware.ValidateSecrets(middleware.DefaultSecretsValidatorConfig()))
-	r.Use(middleware.PerformanceMonitor())
-	r.Use(middleware.GlobalRateLimiter(200, time.Minute))
-	r.Use(middleware.CSRFMiddleware())
-	r.Use(middleware.DBConsistencyMiddleware(db.DB))
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 

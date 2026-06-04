@@ -72,11 +72,8 @@ func LogSecurityEvent(userID string, eventType models.SecurityEventType, ip, use
 		Location:  location,
 		Metadata:  metadata,
 	}
-	err := getSecurityLogRepo().Create(log)
-	if err != nil {
-		// Silently ignore errors - table/column might not exist yet
-		// fmt.Printf("Security log not saved (table may not exist): %v\n", err)
-		return nil
-	}
+	go func() {
+		_ = getSecurityLogRepo().Create(log)
+	}()
 	return nil
 }

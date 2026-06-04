@@ -53,14 +53,14 @@ func GetCategoriesForAdmin(c *gin.Context) {
 	}
 
 	type countResult struct {
-		CategoryID string
-		Count      int64
+		CategoryID string `gorm:"column:category_id"`
+		Count      int64  `gorm:"column:count"`
 	}
 	var counts []countResult
-	db.DB.Model(&models.Subject{}).
-		Select("\"categoryId\", count(*) as count").
-		Where("\"categoryId\" IN ?", categoryIDs).
-		Group("\"categoryId\"").
+	db.ReadDB(c.Request.Context()).Table("Subject").
+		Select("category_id, count(*) as count").
+		Where("category_id IN ?", categoryIDs).
+		Group("category_id").
 		Scan(&counts)
 
 	countMap := make(map[string]int64)
