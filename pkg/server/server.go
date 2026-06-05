@@ -3,9 +3,12 @@
 package server
 
 import (
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,8 +58,16 @@ func initApp() {
 		// Initialize AuthService with UserRepository dependency
 		handlers.InitAuthService(repository.NewUserRepository(db.DB))
 
-		// Initialize S3 Storage (Cloudflare R2 / AWS S3 / MinIO)
-		if cfg.StorageType == "s3" {
+		// Initialize Storage (S3 or Local)
+		if cfg.StorageType == "local" {
+			storageSvc, err := storage.NewLocalStorage(cfg.LocalStorage.BaseDir, cfg.LocalStorage.PublicURL)
+			if err != nil {
+				log.Printf("Failed to initialize local storage: %v", err)
+			} else {
+				storage.GlobalStorage = storageSvc
+				log.Printf("Storage initialized with Local provider (baseDir: %s, publicURL: %s)", cfg.LocalStorage.BaseDir, cfg.LocalStorage.PublicURL)
+			}
+		} else if cfg.StorageType == "s3" {
 			storageSvc, err := storage.NewS3Storage(
 				cfg.S3.Endpoint,
 				cfg.S3.AccessKey,
@@ -70,6 +81,7 @@ func initApp() {
 				log.Printf("Failed to initialize S3 storage: %v", err)
 			} else {
 				storage.GlobalStorage = storageSvc
+				log.Println("Storage initialized with S3 provider (Cloudflare R2)")
 			}
 		}
 
@@ -131,6 +143,40 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	r.Use(middleware.GlobalRateLimiter(200, time.Minute))
 	r.Use(middleware.CSRFMiddleware())
 	r.Use(middleware.DBConsistencyMiddleware(db.DB))
+
+	// Serve uploaded files statically
+	r.Static("/uploads", cfg.LocalStorage.BaseDir)
+
+	// Support raw PUT uploads for local dev simulation of direct S3 upload
+	r.PUT("/uploads/:filename", func(c *gin.Context) {
+		if cfg.StorageType != "local" {
+			c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Method not allowed"})
+			return
+		}
+		filename := c.Param("filename")
+		cleaned := filepath.Clean(filename)
+		if strings.HasPrefix(cleaned, "..") || strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "\\") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid filename"})
+			return
+		}
+		targetPath := filepath.Join(cfg.LocalStorage.BaseDir, cleaned)
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		dst, err := os.Create(targetPath)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer dst.Close()
+		_, err = io.Copy(dst, c.Request.Body)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "uploaded"})
+	})
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 

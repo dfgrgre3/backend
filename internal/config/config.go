@@ -78,6 +78,16 @@ func Load() *Config {
 	c.S3.UseSSL = getEnv("S3_USE_SSL", "true") == "true"
 	c.S3.PublicURL = getEnv("S3_PUBLIC_URL", "")
 
+	// Check if S3 credentials are placeholders or empty, and fallback to local
+	isS3Placeholder := c.S3.AccessKey == "" ||
+		strings.Contains(strings.ToLower(c.S3.AccessKey), "placeholder") ||
+		strings.Contains(strings.ToLower(c.S3.AccessKey), "your-")
+
+	if c.StorageType == "s3" && isS3Placeholder {
+		log.Println("WARNING: S3 credentials are placeholders or empty. Falling back to local storage.")
+		c.StorageType = "local"
+	}
+
 	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SECRET", "")
 
 	// IP Whitelist Config
@@ -141,6 +151,16 @@ func LoadSafe() (*Config, error) {
 	c.S3.Region = getEnv("S3_REGION", "us-east-1")
 	c.S3.UseSSL = getEnv("S3_USE_SSL", "true") == "true"
 	c.S3.PublicURL = getEnv("S3_PUBLIC_URL", "")
+
+	// Check if S3 credentials are placeholders or empty, and fallback to local
+	isS3Placeholder := c.S3.AccessKey == "" ||
+		strings.Contains(strings.ToLower(c.S3.AccessKey), "placeholder") ||
+		strings.Contains(strings.ToLower(c.S3.AccessKey), "your-")
+
+	if c.StorageType == "s3" && isS3Placeholder {
+		log.Println("WARNING: S3 credentials are placeholders or empty. Falling back to local storage.")
+		c.StorageType = "local"
+	}
 
 	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SECRET", "")
 
