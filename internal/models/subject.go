@@ -184,5 +184,6 @@ func (cr *CourseReview) BeforeCreate(tx *gorm.DB) (err error) {
 	if cr.ID == "" {
 		cr.ID = uuid.New().String()
 	}
+	cr.IsVisible = true
 	return
 }

@@ -170,9 +170,14 @@ func (r *UserRepository) Update(user *models.User) error {
 	return err
 }
 
-// InvalidateCache manually evicts a user from the in-memory cache
+// InvalidateCache manually evicts a user from the in-memory cache and Redis
 func (r *UserRepository) InvalidateCache(id string) {
 	localUserCache.Delete(id)
+	if db.Redis != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		db.Redis.Del(ctx, fmt.Sprintf(userIDCacheKeyFormat, UserCachePrefix, id))
+	}
 }
 
 func (r *UserRepository) cacheUser(user *models.User) {

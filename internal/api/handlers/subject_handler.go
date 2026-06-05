@@ -11,6 +11,7 @@ import (
 	"sync"
 	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/cache"
+	"thanawy-backend/internal/cqrs/commands"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/repository"
@@ -1091,18 +1092,28 @@ func UpdateCourseCurriculum(c *gin.Context) {
 	api_response.Success(c, gin.H{"curriculum": subject.Topics})
 }
 
-type incomingLesson struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Title       string  `json:"title"`
-	Order       int     `json:"order"`
-	Type        string  `json:"type"`
-	VideoUrl    *string `json:"videoUrl"`
-	Duration    int     `json:"duration"`
-	DurationMin int     `json:"durationMinutes"`
-	IsFree      bool    `json:"isFree"`
-	Description *string `json:"description"`
+type incomingAttachment struct {
+	ID       string  `json:"id"`
+	Title    string  `json:"title"`
+	FileUrl  string  `json:"fileUrl"`
+	FileType *string `json:"fileType"`
+	FileSize *int64  `json:"fileSize"`
 }
+
+type incomingLesson struct {
+	ID          string               `json:"id"`
+	Name        string               `json:"name"`
+	Title       string               `json:"title"`
+	Order       int                  `json:"order"`
+	Type        string               `json:"type"`
+	VideoUrl    *string              `json:"videoUrl"`
+	Duration    int                  `json:"duration"`
+	DurationMin int                  `json:"durationMinutes"`
+	IsFree      bool                 `json:"isFree"`
+	Description *string              `json:"description"`
+	Attachments []incomingAttachment `json:"attachments"`
+}
+
 
 type incomingChapter struct {
 	ID        string           `json:"id"`
@@ -1124,11 +1135,29 @@ func extractChaptersRaw(raw map[string]json.RawMessage) (json.RawMessage, error)
 
 func clearSubjectCurriculum(tx *gorm.DB, subjectId string) {
 	var existingTopics []models.Topic
-	tx.Where(subjectIDQuotedQuery, subjectId).Find(&existingTopics)
-	for _, t := range existingTopics {
-		tx.Where("topic_id = ?", t.ID).Delete(&models.SubTopic{})
+	if err := tx.Where(subjectIDQuotedQuery, subjectId).Find(&existingTopics).Error; err != nil {
+		return
 	}
-	tx.Where(subjectIDQuotedQuery, subjectId).Delete(&models.Topic{})
+
+	var topicIDs []string
+	for _, t := range existingTopics {
+		topicIDs = append(topicIDs, t.ID)
+	}
+
+	if len(topicIDs) > 0 {
+		var existingSubTopics []models.SubTopic
+		if err := tx.Where("topic_id IN ?", topicIDs).Find(&existingSubTopics).Error; err == nil {
+			var subTopicIDs []string
+			for _, st := range existingSubTopics {
+				subTopicIDs = append(subTopicIDs, st.ID)
+			}
+			if len(subTopicIDs) > 0 {
+				tx.Unscoped().Where("sub_topic_id IN ?", subTopicIDs).Delete(&models.LessonAttachment{})
+			}
+		}
+		tx.Unscoped().Where("topic_id IN ?", topicIDs).Delete(&models.SubTopic{})
+	}
+	tx.Unscoped().Where(subjectIDQuotedQuery, subjectId).Delete(&models.Topic{})
 }
 
 func createTopicFromIncoming(tx *gorm.DB, subjectId string, chapter incomingChapter, order int) error {
@@ -1185,7 +1214,31 @@ func createSubTopicFromIncoming(tx *gorm.DB, topicId string, lesson incomingLess
 		st.ID = lesson.ID
 	}
 
-	return tx.Create(&st).Error
+	if err := tx.Create(&st).Error; err != nil {
+		return err
+	}
+
+	for _, att := range lesson.Attachments {
+		newAtt := models.LessonAttachment{
+			SubTopicID: st.ID,
+			Title:      att.Title,
+			FileUrl:    att.FileUrl,
+		}
+		if att.FileType != nil {
+			newAtt.FileType = *att.FileType
+		}
+		if att.FileSize != nil {
+			newAtt.FileSize = *att.FileSize
+		}
+		if att.ID != "" && !strings.HasPrefix(att.ID, "new-") {
+			newAtt.ID = att.ID
+		}
+		if err := tx.Create(&newAtt).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func AddLessonAttachment(c *gin.Context) {
@@ -1219,6 +1272,14 @@ func CreateCourseReview(c *gin.Context) {
 	userId, _ := c.Get("userId")
 	subjectId := c.Param("id")
 
+	var subject models.Subject
+	query := db.DB.Select("id")
+	query = applyIDOrSlugQuery(query, subjectId)
+	if err := query.First(&subject).Error; err != nil {
+		handleSubjectError(c, subjectId, err, "resolving subject for review creation")
+		return
+	}
+
 	var review models.CourseReview
 	if err := c.ShouldBindJSON(&review); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": msgInvalidInput})
@@ -1226,7 +1287,7 @@ func CreateCourseReview(c *gin.Context) {
 	}
 
 	review.UserID = userId.(string)
-	review.SubjectID = subjectId
+	review.SubjectID = subject.ID
 
 	if err := SafeCreate(db.DB, &review); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create review"})
@@ -1235,12 +1296,28 @@ func CreateCourseReview(c *gin.Context) {
 
 	// Update subject rating (simplified calculation)
 	var avg float64
-	db.DB.Model(&models.CourseReview{}).Where(subjectIDQuotedQuery, subjectId).Select("avg(rating)").Scan(&avg)
-	db.DB.Model(&models.Subject{}).Where(idQuery, subjectId).Update("rating", avg)
+	db.DB.Model(&models.CourseReview{}).Where(subjectIDQuotedQuery, subject.ID).Select("avg(rating)").Scan(&avg)
+	db.DB.Model(&models.Subject{}).Where(idQuery, subject.ID).Update("rating", avg)
 
-	cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), subjectId)
+	// Award 10 XP points for submitting a course review
+	xpAmount := 10
+	gamificationService := commands.NewGamificationCommandService()
+	_ = gamificationService.AwardXP(commands.AwardXPCommand{
+		UserID:   review.UserID,
+		XPType:   "quest", // categorizes under quest/other XP
+		XPAmount: xpAmount,
+		Source:   "course_review",
+		SourceID: review.ID,
+	})
 
-	c.JSON(http.StatusCreated, review)
+	cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), subject.ID)
+
+	c.JSON(http.StatusCreated, gin.H{
+		"data": gin.H{
+			"review":    review,
+			"xpAwarded": xpAmount,
+		},
+	})
 }
 
 func GetCourseReviews(c *gin.Context) {

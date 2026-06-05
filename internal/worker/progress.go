@@ -285,16 +285,22 @@ func (h *BatchProgressFlushHandler) ProcessTask(ctx context.Context, t *asynq.Ta
 
 	result := writeDB(ctx).Exec(`
 		UPDATE "User" SET
-			total_study_time = total_study_time + COALESCE((
+			total_study_time = COALESCE((
 				SELECT SUM(time_spent_seconds) / 60
 				FROM "TopicProgress"
-				WHERE user_id = $1 AND updated_at > NOW() - INTERVAL '5 minutes'
+				WHERE user_id = $1 AND deleted_at IS NULL
+			), 0) + COALESCE((
+				SELECT SUM(duration_min)
+				FROM "StudySession"
+				WHERE user_id = $1 AND deleted_at IS NULL
 			), 0),
 			tasks_completed = (
-				SELECT COUNT(*) FROM "Task" WHERE user_id = $1 AND status = 'DONE'
+				SELECT COUNT(*) FROM "Task"
+				WHERE user_id = $1 AND (status = 'DONE' OR status = 'COMPLETED') AND deleted_at IS NULL
 			),
 			exams_passed = (
-				SELECT COUNT(*) FROM "ExamResult" WHERE user_id = $1 AND passed = true
+				SELECT COUNT(*) FROM "ExamResult"
+				WHERE user_id = $1 AND passed = true AND deleted_at IS NULL
 			),
 			updated_at = NOW()
 		WHERE id = $1

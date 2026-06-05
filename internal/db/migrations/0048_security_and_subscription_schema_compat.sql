@@ -29,19 +29,64 @@ ALTER TABLE IF EXISTS public."SubscriptionPlan"
     ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),
     ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
 
-UPDATE public."SubscriptionPlan"
-SET name_ar = COALESCE(name_ar, "nameAr", name)
-WHERE name_ar IS NULL;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'SubscriptionPlan'
+          AND column_name = 'nameAr'
+    ) THEN
+        UPDATE public."SubscriptionPlan"
+        SET name_ar = COALESCE(name_ar, "nameAr", name);
+    ELSE
+        UPDATE public."SubscriptionPlan"
+        SET name_ar = COALESCE(name_ar, name);
+    END IF;
 
-UPDATE public."SubscriptionPlan"
-SET is_active = COALESCE(is_active, "isActive", true)
-WHERE is_active IS NULL;
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'SubscriptionPlan'
+          AND column_name = 'isActive'
+    ) THEN
+        UPDATE public."SubscriptionPlan"
+        SET is_active = COALESCE(is_active, "isActive", true);
+    ELSE
+        UPDATE public."SubscriptionPlan"
+        SET is_active = COALESCE(is_active, true);
+    END IF;
 
-UPDATE public."SubscriptionPlan"
-SET created_at = COALESCE(created_at, "createdAt", now()),
-    updated_at = COALESCE(updated_at, "updatedAt", now())
-WHERE created_at IS NULL
-   OR updated_at IS NULL;
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'SubscriptionPlan'
+          AND column_name = 'createdAt'
+    ) THEN
+        UPDATE public."SubscriptionPlan"
+        SET created_at = COALESCE(created_at, "createdAt", now());
+    ELSE
+        UPDATE public."SubscriptionPlan"
+        SET created_at = COALESCE(created_at, now());
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'SubscriptionPlan'
+          AND column_name = 'updatedAt'
+    ) THEN
+        UPDATE public."SubscriptionPlan"
+        SET updated_at = COALESCE(updated_at, "updatedAt", now());
+    ELSE
+        UPDATE public."SubscriptionPlan"
+        SET updated_at = COALESCE(updated_at, now());
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_subscription_plan_is_active
     ON public."SubscriptionPlan" (is_active)
