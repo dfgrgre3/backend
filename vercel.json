@@ -1,16 +1,13 @@
 {
   "version": 2,
-  "functions": {
-    "api/index.go": {
-      "maxDuration": 25,
-      "memory": 512
-    }
-  },
   "buildCommand": "go build -buildvcs=false -ldflags '-s -w' -o $VERCEL_OUTPUT_FILE ./cmd/api",
   "routes": [
     {
       "src": "/(.*)",
       "dest": "cmd/api/main.go"
     }
-  ]
+  ],
+  "env": {
+    "REDIS_URL": "@redis_url"
+  }
 }
