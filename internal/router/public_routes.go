@@ -39,6 +39,12 @@ func SetupPublicRoutes(router *gin.Engine) {
 	ai.Use(middleware.Auth())
 	{
 		ai.POST("/exam", handlers.AIExamProxy)
+		// Polling endpoint for the async exam generation job queue.
+		// The frontend receives a {jobId} from POST /api/ai/exam and then
+		// calls this every ~1.5s until it sees status="completed".
+		// Defined BEFORE the /conversation/:id route so the literal segment
+		// "exam" doesn't get matched as an id.
+		ai.GET("/exam/status/:jobId", handlers.GetExamStatus)
 		ai.POST("/suggest", handlers.AISuggestProxy)
 		ai.POST("/chat", handlers.AIChatProxy)
 		ai.POST("/tips", handlers.AITipsProxy)
@@ -48,7 +54,11 @@ func SetupPublicRoutes(router *gin.Engine) {
 		ai.POST("/explain-mistake", handlers.ExplainMistakeProxy)
 		ai.POST("/study-planner", handlers.GenerateStudyPlanProxy)
 		ai.POST("/summarize", handlers.SummarizeLessonProxy)
+		// Polling for async lesson summarization
+		ai.GET("/summarize/status/:jobId", handlers.GetSummarizeStatus)
 		ai.POST("/grade-essay", handlers.GradeEssayProxy)
+		// Polling for async essay grading
+		ai.GET("/grade-essay/status/:jobId", handlers.GetEssayGradeStatus)
 		ai.GET("/recommendations", handlers.GetAIRecommendations)
 		ai.POST("/recommendations/track", handlers.TrackAIRecommendation)
 	}
