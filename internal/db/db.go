@@ -94,6 +94,19 @@ func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
 	return db, nil
 }
 
+// Close closes the underlying sql.DB connections cleanly.
+func Close() error {
+	if DB == nil {
+		return nil
+	}
+	sqlDB, err := DB.DB()
+	if err != nil {
+		return err
+	}
+	log.Println("Closing underlying database connection pool...")
+	return sqlDB.Close()
+}
+
 // ReadDB returns a GORM session explicitly routed to a read replica.
 // Use this in all query (read) handlers to enforce CQRS read path.
 func ReadDB(ctxs ...context.Context) *gorm.DB {

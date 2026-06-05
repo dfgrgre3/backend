@@ -335,14 +335,26 @@ func Upload(c *gin.Context) {
 		return
 	}
 
-	filename := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
-
 	f, err := file.Open()
 	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to open file")
 		return
 	}
 	defer f.Close()
+
+	// Perform strict Magic Number validation
+	allowedMimes := []string{
+		"image/jpeg", "image/png", "image/gif", "image/webp",
+		"application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		"video/mp4", "audio/mpeg",
+	}
+	isValid, detectedMime, err := db.ValidateMagicNumber(f, allowedMimes)
+	if err != nil || !isValid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File content does not match its extension (Magic Number mismatch)", "detected": detectedMime})
+		return
+	}
+
+	filename := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
 
 	url, err := storage.GlobalStorage.Upload(c.Request.Context(), filename, f, file.Size, file.Header.Get("Content-Type"))
 	if err != nil {
@@ -946,13 +958,24 @@ func handleBookFileUpload(c *gin.Context, fieldName, prefix string) string {
 	if err != nil {
 		return ""
 	}
-	ext := filepath.Ext(file.Filename)
+	ext := strings.ToLower(filepath.Ext(file.Filename))
 	filename := fmt.Sprintf("%s_%d%s", prefix, time.Now().UnixNano(), ext)
-	dst := filepath.Join("uploads", filename)
-	if err := c.SaveUploadedFile(file, dst); err == nil {
-		return "/uploads/" + filename
+
+	f, err := file.Open()
+	if err != nil {
+		return ""
 	}
-	return ""
+	defer f.Close()
+
+	if storage.GlobalStorage == nil {
+		return ""
+	}
+
+	url, err := storage.GlobalStorage.Upload(c.Request.Context(), filename, f, file.Size, file.Header.Get("Content-Type"))
+	if err != nil {
+		return ""
+	}
+	return url
 }
 
 func parseBookMultipartForm(c *gin.Context) models.Book {

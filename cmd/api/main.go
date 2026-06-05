@@ -191,6 +191,11 @@ func main() {
 		grpcServer.GracefulStop()
 	}
 
+	// Close database connections gracefully
+	if err := db.Close(); err != nil {
+		log.Printf("Error closing database connection pool: %v", err)
+	}
+
 	log.Println("Process exited")
 }
 
