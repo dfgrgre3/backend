@@ -6,8 +6,5 @@
       "src": "/(.*)",
       "dest": "cmd/api/main.go"
     }
-  ],
-  "env": {
-    "REDIS_URL": "@redis_url"
-  }
+  ]
 }
