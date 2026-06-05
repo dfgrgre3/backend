@@ -84,8 +84,22 @@ func Load() *Config {
 		strings.Contains(strings.ToLower(c.S3.AccessKey), "your-")
 
 	if c.StorageType == "s3" && isS3Placeholder {
-		log.Println("WARNING: S3 credentials are placeholders or empty. Falling back to local storage.")
+		if environment == "production" {
+			// CRITICAL: Refuse to start in production without valid cloud storage.
+			// LocalStorage on a container/pod is ephemeral — all uploads would be lost
+			// on every container restart, redeployment, or autoscaling event.
+			log.Fatal("FATAL: S3_ACCESS_KEY is not set or is a placeholder in production. " +
+				"LocalStorage is NOT allowed in production (stateless cloud architecture). " +
+				"Set S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET env vars.")
+		}
+		log.Println("WARNING: S3 credentials are placeholders or empty. Falling back to local storage (dev only).")
 		c.StorageType = "local"
+	}
+
+	// Extra safety: explicitly block local storage in production even if STORAGE_TYPE is set directly.
+	if c.StorageType == "local" && environment == "production" {
+		log.Fatal("FATAL: STORAGE_TYPE=local is not allowed in production. " +
+			"All uploads must use cloud storage (S3/Supabase) to ensure data durability.")
 	}
 
 	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SECRET", "")
@@ -158,8 +172,19 @@ func LoadSafe() (*Config, error) {
 		strings.Contains(strings.ToLower(c.S3.AccessKey), "your-")
 
 	if c.StorageType == "s3" && isS3Placeholder {
-		log.Println("WARNING: S3 credentials are placeholders or empty. Falling back to local storage.")
+		if environment == "production" {
+			return nil, fmt.Errorf("FATAL: S3_ACCESS_KEY is not set or is a placeholder in production. " +
+				"LocalStorage is NOT allowed in production (stateless cloud architecture). " +
+				"Set S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET env vars")
+		}
+		log.Println("WARNING: S3 credentials are placeholders or empty. Falling back to local storage (dev only).")
 		c.StorageType = "local"
+	}
+
+	// Extra safety: explicitly block local storage in production even if STORAGE_TYPE is set directly.
+	if c.StorageType == "local" && environment == "production" {
+		return nil, fmt.Errorf("FATAL: STORAGE_TYPE=local is not allowed in production. " +
+			"All uploads must use cloud storage (S3/Supabase) to ensure data durability")
 	}
 
 	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SECRET", "")

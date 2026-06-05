@@ -52,7 +52,14 @@ func initApp() {
 		// Initialize Database with explicit Read/Write DSNs for CQRS
 		_, err := db.ConnectWithWriteDSN(cfg.DatabaseURL, cfg.DatabaseWriteURL)
 		if err != nil {
-			log.Printf("Failed to connect to database: %v", err)
+			// CRITICAL: Do not silently start without a DB — every handler would panic.
+			// Instead, expose a degraded router that returns 503 with a clear message.
+			// Vercel will retry on the next invocation; once DB recovers, a fresh Lambda
+			// cold start will succeed.
+			log.Printf("[CRITICAL] Database connection failed: %v", err)
+			log.Println("[CRITICAL] Starting in DEGRADED mode — all /api/* routes return 503")
+			engine = buildDegradedRouter(err)
+			return
 		}
 
 		// Initialize AuthService with UserRepository dependency
@@ -107,6 +114,40 @@ func initApp() {
 	})
 }
 
+// buildDegradedRouter returns a minimal Gin engine that serves only the health
+// check endpoint and returns 503 Service Unavailable for everything else.
+// This is used when the database connection fails at startup so that:
+//  1. /health returns 200 (telling Vercel the process is alive)
+//  2. /api/healthz returns 503 (signalling degraded state to monitoring)
+//  3. All other routes return 503 with a clear JSON body
+func buildDegradedRouter(dbErr error) *gin.Engine {
+	if os.Getenv("GIN_MODE") == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	r := gin.New()
+	r.Use(gin.Recovery())
+
+	errMsg := "Service temporarily unavailable"
+	if dbErr != nil {
+		errMsg = dbErr.Error()
+	}
+
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "UP", "database": "degraded"})
+	})
+	r.GET("/api/healthz", func(c *gin.Context) {
+		c.JSON(503, gin.H{"status": "degraded", "error": errMsg})
+	})
+	r.NoRoute(func(c *gin.Context) {
+		c.JSON(503, gin.H{
+			"error":   "Service temporarily unavailable — database connection failed",
+			"hint":    "The backend failed to connect to the database. Check DATABASE_URL and Supabase connection limits.",
+			"details": errMsg,
+		})
+	})
+	return r
+}
+
 // Handler is the entrypoint for Vercel Serverless Functions
 func Handler(w http.ResponseWriter, r *http.Request) {
 	initApp()
@@ -144,39 +185,47 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	r.Use(middleware.CSRFMiddleware())
 	r.Use(middleware.DBConsistencyMiddleware(db.DB))
 
-	// Serve uploaded files statically
-	r.Static("/uploads", cfg.LocalStorage.BaseDir)
+	// Serve uploaded files statically — LOCAL DEV ONLY.
+	// In production (S3/Supabase), all media is served from the CDN.
+	// The /uploads route is disabled in cloud deployments to enforce stateless architecture.
+	if cfg.StorageType == "local" {
+		r.Static("/uploads", cfg.LocalStorage.BaseDir)
 
-	// Support raw PUT uploads for local dev simulation of direct S3 upload
-	r.PUT("/uploads/:filename", func(c *gin.Context) {
-		if cfg.StorageType != "local" {
-			c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Method not allowed"})
-			return
-		}
-		filename := c.Param("filename")
-		cleaned := filepath.Clean(filename)
-		if strings.HasPrefix(cleaned, "..") || strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "\\") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid filename"})
-			return
-		}
-		targetPath := filepath.Join(cfg.LocalStorage.BaseDir, cleaned)
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		dst, err := os.Create(targetPath)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		defer dst.Close()
-		_, err = io.Copy(dst, c.Request.Body)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"status": "uploaded"})
-	})
+		// Support raw PUT uploads for local dev simulation of direct S3 upload
+		r.PUT("/uploads/:filename", func(c *gin.Context) {
+			filename := c.Param("filename")
+			cleaned := filepath.Clean(filename)
+			if strings.HasPrefix(cleaned, "..") || strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "\\") {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid filename"})
+				return
+			}
+			targetPath := filepath.Join(cfg.LocalStorage.BaseDir, cleaned)
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			dst, err := os.Create(targetPath)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer dst.Close()
+			_, err = io.Copy(dst, c.Request.Body)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "uploaded"})
+		})
+	} else {
+		// Cloud storage active: /uploads/* is not served from this server.
+		// Return 410 Gone to surface misconfigurations early.
+		r.GET("/uploads/*path", func(c *gin.Context) {
+			c.JSON(http.StatusGone, gin.H{
+				"error": "Local file serving is disabled. All media is served from cloud storage.",
+			})
+		})
+	}
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 

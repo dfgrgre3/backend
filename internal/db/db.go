@@ -174,14 +174,44 @@ type poolSettings struct {
 	MaxIdleTime  time.Duration
 }
 
+// isServerlessEnv detects Vercel, AWS Lambda, and similar ephemeral function environments.
+// In these environments each invocation may run in a separate process, meaning every
+// instance creates its own connection pool. We must therefore use a very small pool to
+// avoid exhausting the database (especially Supabase PgBouncer) under concurrent load.
+func isServerlessEnv() bool {
+	return os.Getenv("VERCEL") == "1" ||
+		os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" ||
+		os.Getenv("SERVERLESS") == "1"
+}
+
 func getPoolSettings() poolSettings {
-	settings := poolSettings{
-		MaxIdleConns: 50,
-		MaxOpenConns: 300,
-		MaxLifetime:  15 * time.Minute,
-		MaxIdleTime:  5 * time.Minute,
+	serverless := isServerlessEnv()
+
+	var settings poolSettings
+	if serverless {
+		// CRITICAL for Vercel/Lambda: each concurrent Lambda instance opens its own pool.
+		// With N=1000 concurrent lambdas and MaxOpenConns=300 you would request 300,000
+		// connections — destroying the PgBouncer pool instantly.
+		// At 5 conns/instance, 1,000 instances = 5,000 total — well within Supabase limits.
+		settings = poolSettings{
+			MaxIdleConns: 2,
+			MaxOpenConns: 5,
+			MaxLifetime:  1 * time.Minute,  // Force quick release; Lambda reuse is short-lived
+			MaxIdleTime:  30 * time.Second, // Release idle conns before Lambda is frozen
+		}
+		log.Println("[DB Pool] Serverless environment detected — using minimal connection pool (MaxOpen=5, MaxIdle=2)")
+	} else {
+		// Traditional always-on server: larger pool is fine.
+		settings = poolSettings{
+			MaxIdleConns: 10,
+			MaxOpenConns: 50,
+			MaxLifetime:  15 * time.Minute,
+			MaxIdleTime:  5 * time.Minute,
+		}
+		log.Println("[DB Pool] Traditional server environment — using standard connection pool (MaxOpen=50, MaxIdle=10)")
 	}
 
+	// Allow explicit overrides from environment variables in all cases.
 	if v, val := getEnvInt("DB_MAX_IDLE_CONNS"); v {
 		settings.MaxIdleConns = val
 	}

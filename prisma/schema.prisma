@@ -1,0 +1,23 @@
+// ============================================================
+// Prisma Schema — Thanawy Backend
+// ============================================================
+// NOTE: This schema is intentionally minimal. The Go backend uses
+// GORM (not Prisma) for all runtime database access. Prisma is
+// used here solely as a migration management tool (prisma migrate
+// deploy / prisma db push) against the Supabase PostgreSQL instance.
+//
+// The full SQL migration history lives in:
+//   internal/db/migrations/*.sql   (Go GORM-based, applied by the app)
+//   supabase/migrations/*.sql       (Supabase-specific extensions)
+//
+// Use `prisma db pull` to introspect the live DB and regenerate
+// this schema from the actual tables whenever needed.
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}

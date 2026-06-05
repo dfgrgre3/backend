@@ -118,5 +118,14 @@ desktop.ini
 
 .vercel
 .env*
+*.md
 
-/src/generated/prisma
+
+# ==========================================
+# Prisma (Migration Tool — CLI only, not used at runtime)
+# ==========================================
+# Generated Prisma client — should NOT be committed (generated on demand)
+/prisma/generated/
+# The schema and migrations ARE tracked — they are source of truth for DB structure
+# prisma/schema.prisma         ← tracked ✅
+# prisma/migrations/           ← tracked ✅

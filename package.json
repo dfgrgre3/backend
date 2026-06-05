@@ -1,7 +1,22 @@
 {
+  "name": "thanawy-backend-tools",
+  "private": true,
+  "description": "Node.js dev tooling for the Go backend (Prisma CLI for migrations, Supabase client).",
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
-    "@supabase/supabase-js": "^2.106.1",
-    "prisma": "^7.8.0"
+    "@supabase/supabase-js": "^2.106.1"
+  },
+  "devDependencies": {
+    "dotenv": "^16.0.0",
+    "prisma": "^7.8.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.3"
+  },
+  "scripts": {
+    "db:migrate": "npx prisma migrate deploy",
+    "db:pull": "npx prisma db pull",
+    "db:push": "npx prisma db push",
+    "db:studio": "npx prisma studio",
+    "db:validate": "npx prisma validate"
   }
 }
