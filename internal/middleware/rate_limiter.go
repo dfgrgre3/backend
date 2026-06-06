@@ -245,3 +245,43 @@ func GlobalRateLimiter(limit int, window time.Duration) gin.HandlerFunc {
 		NewRateLimiter(db.Redis).RateLimitByIP(limit, window)(c)
 	}
 }
+
+// AIRateLimiter provides rate limiting for AI requests
+func AIRateLimiter() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if db.Redis == nil {
+			c.Next()
+			return
+		}
+		rl := NewRateLimiter(db.Redis)
+		userIDValue, exists := c.Get("userId")
+		if exists && userIDValue != nil {
+			if userIDStr, ok := userIDValue.(string); ok && userIDStr != "" {
+				c.Set("user_id", userIDStr)
+				rl.RateLimitByUser(10, time.Minute)(c)
+				return
+			}
+		}
+		rl.RateLimitByIP(10, time.Minute)(c)
+	}
+}
+
+// WebSocketRateLimiter provides rate limiting for WebSocket connections
+func WebSocketRateLimiter() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if db.Redis == nil {
+			c.Next()
+			return
+		}
+		rl := NewRateLimiter(db.Redis)
+		userIDValue, exists := c.Get("userId")
+		if exists && userIDValue != nil {
+			if userIDStr, ok := userIDValue.(string); ok && userIDStr != "" {
+				c.Set("user_id", userIDStr)
+				rl.RateLimitByUser(5, time.Minute)(c)
+				return
+			}
+		}
+		rl.RateLimitByIP(5, time.Minute)(c)
+	}
+}

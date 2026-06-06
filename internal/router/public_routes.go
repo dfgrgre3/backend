@@ -34,9 +34,9 @@ func SetupPublicRoutes(router *gin.Engine) {
 
 	// Activity routes moved to protected group
 
-	// AI routes (require auth)
+	// AI routes (require auth & rate limiting)
 	ai := router.Group("/api/ai")
-	ai.Use(middleware.Auth())
+	ai.Use(middleware.Auth(), middleware.AIRateLimiter())
 	{
 		ai.POST("/exam", handlers.AIExamProxy)
 		// Polling endpoint for the async exam generation job queue.
@@ -72,8 +72,8 @@ func SetupPublicRoutes(router *gin.Engine) {
 	// Clerk Webhook
 	router.POST("/api/webhooks/clerk", handlers.ClerkWebhook)
 
-	// WebSocket
-	router.GET("/api/ws", middleware.Auth(), handlers.WSHandler)
+	// WebSocket (require auth & rate limiting)
+	router.GET("/api/ws", middleware.Auth(), middleware.WebSocketRateLimiter(), handlers.WSHandler)
 
 	// Public Forum routes
 	router.GET("/api/forum/categories", handlers.GetForumCategories)
