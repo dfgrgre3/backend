@@ -1,5 +1,5 @@
 {
-  "buildCommand": "go build -buildvcs=false -ldflags=\"-s -w\" -o api/api ./cmd/api",
+  "buildCommand": "GOOS=linux go build -buildvcs=false -ldflags=\"-s -w\" -o $VERCEL_OUTPUT_FILE ./cmd/api",
   "outputDirectory": "api",
   "rewrites": [
     {
