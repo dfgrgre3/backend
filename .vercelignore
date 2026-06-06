@@ -1,0 +1,19 @@
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Keep the docs/ directory for Swagger generation (contains docs.go required by main.go)
+# Do NOT add "docs" to this list - main.go imports thanawy-backend/docs
+
+node_modules
+.git
+.next
+prisma/migrations
+scripts
+backups
+bin
+src
+.agents
+.gocache
+.kilo
