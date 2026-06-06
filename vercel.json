@@ -1,0 +1,10 @@
+{
+  "buildCommand": "go build -buildvcs=false -ldflags=\"-s -w\" -o api/api ./cmd/api",
+  "outputDirectory": "api",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ]
+}
