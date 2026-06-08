@@ -130,6 +130,55 @@ func Auth() gin.HandlerFunc {
 		hydrateUserContext(c, claims.Subject, claims.Role)
 		processImpersonation(c, claims.Subject)
 
+		// Propagate to standard context for gRPC/Connect RPC handlers
+		ctx := c.Request.Context()
+		if finalUserID, exists := c.Get("userId"); exists {
+			ctx = context.WithValue(ctx, UserContextKey, finalUserID)
+		}
+		if finalRole, exists := c.Get("role"); exists {
+			ctx = context.WithValue(ctx, RoleContextKey, finalRole)
+		}
+		c.Request = c.Request.WithContext(ctx)
+
+		c.Next()
+	}
+}
+
+func OptionalAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tokenString := extractToken(c)
+		if tokenString == "" {
+			c.Next()
+			return
+		}
+
+		tokenService := &services.TokenService{}
+		claims, err := tokenService.ValidateToken(tokenString)
+		if err != nil || claims.Subject == "" {
+			c.Next()
+			return
+		}
+
+		c.Set("userId", claims.Subject)
+		c.Set("user_id", claims.Subject)
+		c.Set("jti", claims.JTI)
+		if claims.ExpiresAt != nil {
+			c.Set("accessTokenExpiresAt", claims.ExpiresAt.Time.UnixMilli())
+		}
+
+		hydrateUserContext(c, claims.Subject, claims.Role)
+		processImpersonation(c, claims.Subject)
+
+		// Propagate to standard context for gRPC/Connect RPC handlers
+		ctx := c.Request.Context()
+		if finalUserID, exists := c.Get("userId"); exists {
+			ctx = context.WithValue(ctx, UserContextKey, finalUserID)
+		}
+		if finalRole, exists := c.Get("role"); exists {
+			ctx = context.WithValue(ctx, RoleContextKey, finalRole)
+		}
+		c.Request = c.Request.WithContext(ctx)
+
 		c.Next()
 	}
 }

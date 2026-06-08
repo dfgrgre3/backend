@@ -344,9 +344,9 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	authPath, authHandler := thanawyv1connect.NewAuthServiceHandler(&internalgrpc.AuthConnectHandler{Svc: authSvc})
 	analyticsPath, analyticsHandler := thanawyv1connect.NewAnalyticsServiceHandler(&internalgrpc.AnalyticsConnectHandler{Svc: analyticsSvc})
 
-	r.Any(coursePath+"*any", gin.WrapH(courseHandler))
-	r.Any(authPath+"*any", gin.WrapH(authHandler))
-	r.Any(analyticsPath+"*any", gin.WrapH(analyticsHandler))
+	r.Any(coursePath+"*any", middleware.OptionalAuth(), gin.WrapH(courseHandler))
+	r.Any(authPath+"*any", middleware.OptionalAuth(), gin.WrapH(authHandler))
+	r.Any(analyticsPath+"*any", middleware.OptionalAuth(), gin.WrapH(analyticsHandler))
 
 	router.SetupAuthRoutes(r)
 	router.SetupPublicRoutes(r)

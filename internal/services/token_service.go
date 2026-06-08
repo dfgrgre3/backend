@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"strings"
 	"thanawy-backend/internal/config"
 	"time"
 
@@ -82,6 +83,20 @@ func (s *TokenService) GenerateAccessToken(userId, role string) (string, error) 
 func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 	cfg := config.Load()
 	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
+		// If alg is RS256, verify signature using Clerk PEM Public Key
+		if alg, ok := token.Header["alg"].(string); ok && alg == "RS256" {
+			if cfg.ClerkPEMPublicKey == "" {
+				return nil, fmt.Errorf("clerk public key is not configured")
+			}
+			pemStr := strings.ReplaceAll(cfg.ClerkPEMPublicKey, "\\n", "\n")
+			publicKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(pemStr))
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse Clerk public key: %w", err)
+			}
+			return publicKey, nil
+		}
+
+		// Fallback to HS256 for backward compatibility
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
