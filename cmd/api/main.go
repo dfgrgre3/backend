@@ -322,6 +322,8 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	}
 	r.GET("/", rootHandler)
 	r.GET("/api", rootHandler)
+	r.POST("/", rootHandler)
+	r.POST("/api", rootHandler)
 
 	// Public health check routes (bypass configuration validation and rate limits)
 	r.GET("/health", func(c *gin.Context) {
