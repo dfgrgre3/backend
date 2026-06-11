@@ -55,7 +55,7 @@ const (
 	MaxLoginAttempts          = 5
 	LockoutDuration           = 15 * time.Minute
 	errFailedToGenerateTokens = "Failed to generate tokens"
-	refreshTokenPath          = "/api/auth/refresh"
+	refreshTokenPath          = "/"
 	errInvalidEmail           = "Invalid email"
 	userIDQuery               = "user_id = ?"
 )
