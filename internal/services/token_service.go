@@ -13,8 +13,9 @@ import (
 type TokenService struct{}
 
 type TokenClaims struct {
-	Role string `json:"role"`
-	JTI  string `json:"jti"` // Added for session tracking
+	Email string `json:"email"`
+	Role  string `json:"role"`
+	JTI   string `json:"jti"` // Added for session tracking
 	jwt.RegisteredClaims
 }
 

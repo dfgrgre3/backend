@@ -2,7 +2,10 @@ package grpc
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"thanawy-backend/internal/db"
+	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/models"
 	thanawyv1 "thanawy-backend/internal/proto/thanawy/v1"
 	"thanawy-backend/internal/proto/thanawy/v1/thanawyv1connect"
@@ -70,7 +73,42 @@ func (s *AuthServiceServer) Register(ctx context.Context, req *thanawyv1.Registe
 }
 
 func (s *AuthServiceServer) GetProfile(ctx context.Context, req *thanawyv1.GetProfileRequest) (*thanawyv1.GetProfileResponse, error) {
-	return &thanawyv1.GetProfileResponse{}, nil
+	userID, ok := ctx.Value(middleware.UserContextKey).(string)
+	if !ok || userID == "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("unauthenticated"))
+	}
+
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		email, _ := ctx.Value(middleware.EmailContextKey).(string)
+		if email != "" {
+			newUser := &models.User{
+				ID:            userID,
+				Email:         email,
+				EmailVerified: true,
+				Status:        models.StatusActive,
+				Role:          models.RoleStudent,
+				Balance:       0,
+				AiCredits:     0,
+				ExamCredits:   0,
+				TotalXP:       0,
+				Level:         1,
+			}
+			if createErr := db.DB.Create(newUser).Error; createErr == nil {
+				user = newUser
+			} else {
+				if user, err = s.userRepo.FindByID(userID); err != nil {
+					return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create or retrieve user profile: %w", createErr))
+				}
+			}
+		} else {
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("user not found"))
+		}
+	}
+
+	return &thanawyv1.GetProfileResponse{
+		User: mapUserToProto(user),
+	}, nil
 }
 
 func (s *AuthServiceServer) Logout(ctx context.Context, req *thanawyv1.LogoutRequest) (*thanawyv1.LogoutResponse, error) {

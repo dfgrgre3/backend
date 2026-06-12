@@ -126,6 +126,9 @@ func Auth() gin.HandlerFunc {
 		if claims.ExpiresAt != nil {
 			c.Set("accessTokenExpiresAt", claims.ExpiresAt.Time.UnixMilli())
 		}
+		if claims.Email != "" {
+			c.Set("user_email", claims.Email)
+		}
 
 		hydrateUserContext(c, claims.Subject, claims.Role)
 		processImpersonation(c, claims.Subject)
@@ -137,6 +140,9 @@ func Auth() gin.HandlerFunc {
 		}
 		if finalRole, exists := c.Get("role"); exists {
 			ctx = context.WithValue(ctx, RoleContextKey, finalRole)
+		}
+		if finalEmail, exists := c.Get("user_email"); exists {
+			ctx = context.WithValue(ctx, EmailContextKey, finalEmail)
 		}
 		c.Request = c.Request.WithContext(ctx)
 
@@ -165,6 +171,9 @@ func OptionalAuth() gin.HandlerFunc {
 		if claims.ExpiresAt != nil {
 			c.Set("accessTokenExpiresAt", claims.ExpiresAt.Time.UnixMilli())
 		}
+		if claims.Email != "" {
+			c.Set("user_email", claims.Email)
+		}
 
 		hydrateUserContext(c, claims.Subject, claims.Role)
 		processImpersonation(c, claims.Subject)
@@ -176,6 +185,9 @@ func OptionalAuth() gin.HandlerFunc {
 		}
 		if finalRole, exists := c.Get("role"); exists {
 			ctx = context.WithValue(ctx, RoleContextKey, finalRole)
+		}
+		if finalEmail, exists := c.Get("user_email"); exists {
+			ctx = context.WithValue(ctx, EmailContextKey, finalEmail)
 		}
 		c.Request = c.Request.WithContext(ctx)
 

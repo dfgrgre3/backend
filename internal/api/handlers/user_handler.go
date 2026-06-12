@@ -823,8 +823,21 @@ func GetProfile(c *gin.Context) {
 
 	profilePtr, err := getUserRepo().FindByID(userIdStr)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
-		return
+		emailVal, _ := c.Get("user_email")
+		emailStr, _ := emailVal.(string)
+		if emailStr == "" {
+			emailStr = userIdStr + "@clerk.user"
+		}
+		if createErr := EnsureUserExists(userIdStr, emailStr); createErr != nil {
+			log.Printf("[Auth] Failed to auto-create user %s: %v", userIdStr, createErr)
+			c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
+			return
+		}
+		profilePtr, err = getUserRepo().FindByID(userIdStr)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
+			return
+		}
 	}
 	profile := *profilePtr
 
