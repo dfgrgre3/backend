@@ -166,7 +166,7 @@ func (s *AuthService) RequestMagicLink(email string) (string, error) {
 
 func (s *AuthService) VerifyMagicLink(token string) (*models.User, error) {
 	var user models.User
-	if err := db.DB.Where("\"magicLinkToken\" = ? AND \"magicLinkExpires\" > ?", token, time.Now()).First(&user).Error; err != nil {
+	if err := db.DB.Where("magic_link_token = ? AND magic_link_expires > ?", token, time.Now()).First(&user).Error; err != nil {
 		return nil, errors.New("invalid or expired magic link")
 	}
 
@@ -205,7 +205,7 @@ func (s *AuthService) RequestPasswordReset(email string) (string, error) {
 
 func (s *AuthService) ResetPassword(token, newPassword string) error {
 	var user models.User
-	if err := db.DB.Where("\"resetPasswordToken\" = ? AND \"resetPasswordExpires\" > ?", token, time.Now()).First(&user).Error; err != nil {
+	if err := db.DB.Where("reset_password_token = ? AND reset_password_expires > ?", token, time.Now()).First(&user).Error; err != nil {
 		return errors.New("invalid or expired reset token")
 	}
 
@@ -246,7 +246,7 @@ func (s *AuthService) RequestEmailVerification(email string) (string, error) {
 
 func (s *AuthService) VerifyEmail(token string) error {
 	var user models.User
-	if err := db.DB.Where("\"verificationToken\" = ? AND \"verificationExpires\" > ?", token, time.Now()).First(&user).Error; err != nil {
+	if err := db.DB.Where("verification_token = ? AND verification_expires > ?", token, time.Now()).First(&user).Error; err != nil {
 		return errors.New("invalid or expired verification token")
 	}
 
