@@ -518,6 +518,7 @@ func CORS() gin.HandlerFunc {
 			"http://localhost:3001",
 			"https://thanawy.net",
 			"https://www.thanawy.net",
+			"https://admin-lime-omega-38.vercel.app",
 		}
 
 		isAllowed := isOriginAllowed(origin, isDev, allowedOrigins)
