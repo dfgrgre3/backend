@@ -15,11 +15,13 @@ const (
 	CachePrefixCategory = "category:"
 	CachePrefixExam     = "exam:"
 	CachePrefixList     = "list:"
+	CachePrefixTeacher  = "teacher:"
 	CacheTTLSubject     = 30 * time.Minute
 	CacheTTLUser        = 15 * time.Minute
 	CacheTTLCategory    = 1 * time.Hour
 	CacheTTLExam        = 30 * time.Minute
 	CacheTTLList        = 5 * time.Minute
+	CacheTTLTeacher     = 1 * time.Hour
 )
 
 // Cache key format patterns
@@ -88,6 +90,14 @@ func (ci *CacheInvalidator) InvalidateMaterializedViews(ctx context.Context) {
 	ci.del(ctx, "mv_user_weekly_analytics")
 	ci.del(ctx, "mv_user_watch_time")
 	log.Printf("[Cache] Invalidated materialized view caches")
+}
+
+func (ci *CacheInvalidator) InvalidateTeacher(ctx context.Context, id string) {
+	if db.Redis == nil {
+		return
+	}
+	ci.invalidatePattern(ctx, CachePrefixTeacher + "*")
+	log.Printf("[Cache] Invalidated teacher cache: %s", id)
 }
 
 func (ci *CacheInvalidator) del(ctx context.Context, key string) {

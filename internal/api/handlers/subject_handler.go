@@ -69,13 +69,6 @@ func buildSubjectFilters(query *gorm.DB, c *gin.Context) *gorm.DB {
 
 // Public handlers
 func GetSubjects(c *gin.Context) {
-	readDB, aborted := safeReadDB(c)
-	if aborted {
-		return
-	}
-	var subjects []models.Subject
-	query := readDB.Model(&models.Subject{})
-
 	// Pagination
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
@@ -94,6 +87,33 @@ func GetSubjects(c *gin.Context) {
 	} else {
 		page = (offset / limit) + 1
 	}
+
+	categoryId := c.Query("categoryId")
+	search := c.Query("search")
+	level := c.Query("level")
+	isPublished := c.Query("isPublished")
+	isActive := c.Query("isActive")
+
+	cacheKey := fmt.Sprintf("subject:list:page=%d:limit=%d:offset=%d:cat=%s:search=%s:level=%s:pub=%s:act=%s",
+		page, limit, offset, categoryId, search, level, isPublished, isActive)
+
+	if db.Redis != nil {
+		cached, err := db.Redis.Get(c.Request.Context(), cacheKey).Result()
+		if err == nil {
+			var cachedResponse gin.H
+			if json.Unmarshal([]byte(cached), &cachedResponse) == nil {
+				api_response.Success(c, cachedResponse)
+				return
+			}
+		}
+	}
+
+	readDB, aborted := safeReadDB(c)
+	if aborted {
+		return
+	}
+	var subjects []models.Subject
+	query := readDB.Model(&models.Subject{})
 
 	// Apply filters once and reuse
 	query = buildSubjectFilters(query, c)
@@ -175,16 +195,26 @@ func GetSubjects(c *gin.Context) {
 		})
 	}
 
-	api_response.List(c, items, api_response.Pagination{
-		Page:       page,
-		Limit:      limit,
-		Total:      total,
-		TotalPages: int64(math.Ceil(float64(total) / float64(limit))),
-	}, gin.H{
+	responsePayload := gin.H{
+		"items": items,
+		"pagination": api_response.Pagination{
+			Page:       page,
+			Limit:      limit,
+			Total:      total,
+			TotalPages: int64(math.Ceil(float64(total) / float64(limit))),
+		},
 		"subjects": items,
 		"courses":  items,
 		"offset":   offset,
-	})
+	}
+
+	if db.Redis != nil {
+		if data, err := json.Marshal(responsePayload); err == nil {
+			db.Redis.Set(c.Request.Context(), cacheKey, data, 15*time.Minute)
+		}
+	}
+
+	api_response.Success(c, responsePayload)
 }
 
 func GetSubject(c *gin.Context) {

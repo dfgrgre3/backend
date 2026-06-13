@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	apiresponse "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/cache"
@@ -13,11 +16,24 @@ import (
 )
 
 func GetCategories(c *gin.Context) {
+	categoryType := c.Query("type")
+	cacheKey := fmt.Sprintf("category:list:type:%s", categoryType)
+
+	if db.Redis != nil {
+		cached, err := db.Redis.Get(c.Request.Context(), cacheKey).Result()
+		if err == nil {
+			var categories []models.Category
+			if json.Unmarshal([]byte(cached), &categories) == nil {
+				apiresponse.Success(c, categories)
+				return
+			}
+		}
+	}
+
 	database, aborted := safeDB(c)
 	if aborted {
 		return
 	}
-	categoryType := c.Query("type")
 	var categories []models.Category
 
 	query := database.Select("id", "name", "slug", "icon", "description", "type", "created_at")
@@ -30,11 +46,30 @@ func GetCategories(c *gin.Context) {
 		return
 	}
 
+	if db.Redis != nil {
+		if data, err := json.Marshal(categories); err == nil {
+			db.Redis.Set(c.Request.Context(), cacheKey, data, 1*time.Hour)
+		}
+	}
+
 	apiresponse.Success(c, categories)
 }
 
 func GetCategoriesForAdmin(c *gin.Context) {
 	categoryType := c.Query("type")
+	cacheKey := fmt.Sprintf("category:list:admin:type:%s", categoryType)
+
+	if db.Redis != nil {
+		cached, err := db.Redis.Get(c.Request.Context(), cacheKey).Result()
+		if err == nil {
+			var cachedResponse gin.H
+			if json.Unmarshal([]byte(cached), &cachedResponse) == nil {
+				apiresponse.Success(c, cachedResponse)
+				return
+			}
+		}
+	}
+
 	var categories []models.Category
 
 	query := db.DB.Select("id", "name", "slug", "icon", "description", "type", "created_at")
@@ -57,11 +92,13 @@ func GetCategoriesForAdmin(c *gin.Context) {
 		Count      int64  `gorm:"column:count"`
 	}
 	var counts []countResult
-	db.ReadDB(c.Request.Context()).Table("Subject").
-		Select("category_id, count(*) as count").
-		Where("category_id IN ?", categoryIDs).
-		Group("category_id").
-		Scan(&counts)
+	if len(categoryIDs) > 0 {
+		db.ReadDB(c.Request.Context()).Table("Subject").
+			Select("category_id, count(*) as count").
+			Where("category_id IN ?", categoryIDs).
+			Group("category_id").
+			Scan(&counts)
+	}
 
 	countMap := make(map[string]int64)
 	for _, c := range counts {
@@ -82,10 +119,18 @@ func GetCategoriesForAdmin(c *gin.Context) {
 		})
 	}
 
-	apiresponse.Success(c, gin.H{
+	responsePayload := gin.H{
 		"items":      items,
 		"categories": items,
-	})
+	}
+
+	if db.Redis != nil {
+		if data, err := json.Marshal(responsePayload); err == nil {
+			db.Redis.Set(c.Request.Context(), cacheKey, data, 1*time.Hour)
+		}
+	}
+
+	apiresponse.Success(c, responsePayload)
 }
 
 func CreateCategory(c *gin.Context) {
