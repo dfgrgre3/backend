@@ -32,8 +32,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm/clause"
-
 	"github.com/redis/go-redis/v9"
 )
 
@@ -1791,16 +1789,50 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 		user.Name = &name
 	}
 
-	result := db.DB.Clauses(
-		clause.OnConflict{
-			Columns:   []clause.Column{{Name: "id"}},
-			UpdateAll: true,
-		},
-	).Create(&user)
+	var existing models.User
+	err := db.DB.Unscoped().Where("id = ?", userId).First(&existing).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// New user creation
+			role := models.RoleStudent
+			if publicMetadata, ok := clerkData["public_metadata"].(map[string]interface{}); ok {
+				if r, ok := publicMetadata["role"].(string); ok && r != "" {
+					role = models.UserRole(strings.ToUpper(r))
+				}
+			}
+			user.Role = role
 
-	if result.Error != nil {
-		log.Printf("[Clerk Webhook] Error creating user: %v", result.Error)
-		return result.Error
+			if err := db.DB.Create(&user).Error; err != nil {
+				log.Printf("[Clerk Webhook] Error creating user: %v", err)
+				return err
+			}
+		} else {
+			return err
+		}
+	} else {
+		// Existing user: only update specific fields to preserve database roles/balances/XP
+		updates := map[string]interface{}{
+			"email":          primaryEmail,
+			"email_verified": true,
+		}
+		if name != "" {
+			updates["name"] = &name
+		}
+		
+		if avatarUrl, ok := clerkData["image_url"].(string); ok && avatarUrl != "" {
+			updates["avatar"] = &avatarUrl
+		}
+
+		if publicMetadata, ok := clerkData["public_metadata"].(map[string]interface{}); ok {
+			if r, ok := publicMetadata["role"].(string); ok && r != "" {
+				updates["role"] = models.UserRole(strings.ToUpper(r))
+			}
+		}
+
+		if err := db.DB.Model(&models.User{}).Where("id = ?", userId).Updates(updates).Error; err != nil {
+			log.Printf("[Clerk Webhook] Error updating user: %v", err)
+			return err
+		}
 	}
 
 	middleware.InvalidateRolePermsCache(userId)

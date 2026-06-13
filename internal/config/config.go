@@ -36,6 +36,7 @@ type Config struct {
 	}
 	ClerkWebhookSecret string
 	ClerkPEMPublicKey  string
+	ClerkSecretKey     string
 	InternalIPRanges   []string
 }
 
@@ -105,6 +106,7 @@ func Load() *Config {
 
 	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SECRET", "")
 	c.ClerkPEMPublicKey = getEnv("CLERK_PEM_PUBLIC_KEY", "")
+	c.ClerkSecretKey = getEnv("CLERK_SECRET_KEY", "")
 
 	// IP Whitelist Config
 	// Standard RFC 1918 and loopback ranges used as defaults
@@ -191,6 +193,7 @@ func LoadSafe() (*Config, error) {
 
 	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SECRET", "")
 	c.ClerkPEMPublicKey = getEnv("CLERK_PEM_PUBLIC_KEY", "")
+	c.ClerkSecretKey = getEnv("CLERK_SECRET_KEY", "")
 
 	defaultRanges := []string{
 		"127.0.0.1/8",

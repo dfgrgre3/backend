@@ -25,6 +25,10 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+func init() {
+	services.InvalidateCacheCallback = InvalidateRolePermsCache
+}
+
 var impersonationSignKey []byte
 var impersonationKeyOnce sync.Once
 
@@ -272,8 +276,25 @@ func fetchDatabaseRolePerms(userID, cacheKey string) *userAuthContext {
 		Select("role", "permissions").
 		Where("id = ?", userID).
 		Take(&user).Error; err != nil {
+		// Fallback: if user is not found, try to dynamically provision them from Clerk API
+		if strings.HasPrefix(userID, "user_") {
+			_, errProvision := services.ProvisionUserFromClerk(userID)
+			if errProvision == nil {
+				// Retry query
+				if retryErr := db.DB.Unscoped().
+					Select("role", "permissions").
+					Where("id = ?", userID).
+					Take(&user).Error; retryErr == nil {
+					goto querySuccess
+				}
+			} else {
+				log.Printf("[Auth Middleware] Failed to provision user %s from Clerk: %v", userID, errProvision)
+			}
+		}
 		return nil
 	}
+
+querySuccess:
 
 	roleVal := string(user.Role)
 	permsVal := []string(user.Permissions)
