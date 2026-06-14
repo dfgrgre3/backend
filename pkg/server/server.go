@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -239,6 +240,11 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	r.Any(authPath+"*any", middleware.OptionalAuth(), gin.WrapH(authHandler))
 	r.Any(analyticsPath+"*any", middleware.OptionalAuth(), gin.WrapH(analyticsHandler))
 
+	// Register /api prefixed Connect-RPC Handlers for Vercel routing support
+	r.Any("/api"+coursePath+"*any", middleware.OptionalAuth(), gin.WrapH(stripAPIPrefix(courseHandler)))
+	r.Any("/api"+authPath+"*any", middleware.OptionalAuth(), gin.WrapH(stripAPIPrefix(authHandler)))
+	r.Any("/api"+analyticsPath+"*any", middleware.OptionalAuth(), gin.WrapH(stripAPIPrefix(analyticsHandler)))
+
 	router.SetupAuthRoutes(r)
 	router.SetupPublicRoutes(r)
 	router.SetupProtectedRoutes(r)
@@ -248,4 +254,19 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	router.SetupHexagonalRoutes(r, hexHandlers)
 
 	return r
+}
+
+func stripAPIPrefix(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			r2 := new(http.Request)
+			*r2 = *r
+			r2.URL = new(url.URL)
+			*r2.URL = *r.URL
+			r2.URL.Path = strings.TrimPrefix(r.URL.Path, "/api")
+			h.ServeHTTP(w, r2)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 }

@@ -98,4 +98,7 @@ func SetupPublicRoutes(router *gin.Engine) {
 
 	// Public Library routes
 	router.GET("/api/library/categories", handlers.GetLibraryCategories)
+
+	// Public Gamification routes
+	router.GET("/api/gamification/leaderboard", handlers.GetLeaderboard)
 }

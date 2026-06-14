@@ -102,7 +102,7 @@ func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return []byte(cfg.JWTSecret), nil
-	})
+	}, jwt.WithLeeway(2*time.Minute))
 
 	if err != nil {
 		return nil, err

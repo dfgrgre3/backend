@@ -114,7 +114,6 @@ func SetupProtectedRoutes(router *gin.Engine) {
 
 		// Gamification routes
 		protected.GET("/gamification/progress", handlers.GetUserProgress)
-		protected.GET("/gamification/leaderboard", handlers.GetLeaderboard)
 		protected.GET("/gamification/achievements", handlers.GetUserAchievements)
 		protected.POST("/gamification/goals", handlers.CreateCustomGoal)
 		protected.PATCH("/gamification/goals/:id", handlers.UpdateCustomGoal)

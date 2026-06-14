@@ -120,6 +120,7 @@ func Auth() gin.HandlerFunc {
 		tokenService := &services.TokenService{}
 		claims, err := tokenService.ValidateToken(tokenString)
 		if err != nil || claims.Subject == "" {
+			log.Printf("[Auth Middleware] Token validation failed: %v (claims subject empty: %t)", err, claims == nil || claims.Subject == "")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			return
 		}
@@ -199,7 +200,7 @@ func OptionalAuth() gin.HandlerFunc {
 	}
 }
 
-// Helper to extract JWT token from Authorization header or access_token cookie
+// Helper to extract JWT token from Authorization header or access_token cookie or query parameter
 func extractToken(c *gin.Context) string {
 	authHeader := c.GetHeader("Authorization")
 	if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
@@ -212,6 +213,11 @@ func extractToken(c *gin.Context) string {
 	if cookieToken, err := c.Cookie("access_token"); err == nil {
 		return strings.TrimSpace(cookieToken)
 	}
+
+	if queryToken := c.Query("token"); queryToken != "" {
+		return strings.TrimSpace(queryToken)
+	}
+
 	return ""
 }
 
