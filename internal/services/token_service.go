@@ -1,8 +1,14 @@
 package services
 
 import (
+	"crypto/rsa"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"math/big"
+	"net/http"
 	"strings"
+	"sync"
 	"thanawy-backend/internal/config"
 	"time"
 
@@ -23,6 +29,80 @@ type TokenPair struct {
 	AccessToken  string `json:"accessToken"`
 	RefreshToken string `json:"refreshToken"`
 	JTI          string `json:"jti"`
+}
+
+type jwkKey struct {
+	Kty string   `json:"kty"`
+	Kid string   `json:"kid"`
+	Use string   `json:"use"`
+	Alg string   `json:"alg"`
+	N   string   `json:"n"`
+	E   string   `json:"e"`
+	X5c []string `json:"x5c"`
+}
+
+type jwksKeys struct {
+	Keys []jwkKey `json:"keys"`
+}
+
+var (
+	jwkCache      = make(map[string]*rsa.PublicKey)
+	jwkCacheMu    sync.RWMutex
+	lastFetchTime time.Time
+	fetchMu       sync.Mutex
+)
+
+func parseJWKToRSAPublicKey(nStr, eStr string) (*rsa.PublicKey, error) {
+	nBytes, err := base64.RawURLEncoding.DecodeString(nStr)
+	if err != nil {
+		return nil, err
+	}
+	eBytes, err := base64.RawURLEncoding.DecodeString(eStr)
+	if err != nil {
+		return nil, err
+	}
+
+	var eVal int
+	for _, b := range eBytes {
+		eVal = (eVal << 8) | int(b)
+	}
+
+	return &rsa.PublicKey{
+		N: new(big.Int).SetBytes(nBytes),
+		E: eVal,
+	}, nil
+}
+
+func fetchAndCacheJWKS(jwksURL string) error {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(jwksURL)
+	if err != nil {
+		return fmt.Errorf("failed to fetch JWKS from %s: %w", jwksURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to fetch JWKS from %s, status: %d", jwksURL, resp.StatusCode)
+	}
+
+	var jwks jwksKeys
+	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
+		return fmt.Errorf("failed to decode JWKS: %w", err)
+	}
+
+	jwkCacheMu.Lock()
+	defer jwkCacheMu.Unlock()
+
+	for _, key := range jwks.Keys {
+		if key.Kty == "RSA" && key.N != "" && key.E != "" {
+			pubKey, err := parseJWKToRSAPublicKey(key.N, key.E)
+			if err == nil {
+				jwkCache[key.Kid] = pubKey
+			}
+		}
+	}
+
+	return nil
 }
 
 func (s *TokenService) GenerateTokenPair(userId, role string) (*TokenPair, error) {
@@ -84,10 +164,53 @@ func (s *TokenService) GenerateAccessToken(userId, role string) (string, error) 
 func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 	cfg := config.Load()
 	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-		// If alg is RS256, verify signature using Clerk PEM Public Key
+		// If alg is RS256, verify signature using Clerk JWKS or PEM Public Key
 		if alg, ok := token.Header["alg"].(string); ok && alg == "RS256" {
+			kid, _ := token.Header["kid"].(string)
+
+			// Try cache first if kid is available
+			if kid != "" {
+				jwkCacheMu.RLock()
+				pubKey, exists := jwkCache[kid]
+				jwkCacheMu.RUnlock()
+				if exists {
+					return pubKey, nil
+				}
+			}
+
+			// If kid not in cache and JWKS URL is configured, try fetching JWKS
+			if cfg.ClerkJWKSURL != "" {
+				fetchMu.Lock()
+				jwkCacheMu.RLock()
+				pubKey, exists := jwkCache[kid]
+				jwkCacheMu.RUnlock()
+				if exists {
+					fetchMu.Unlock()
+					return pubKey, nil
+				}
+
+				// Throttle fetches: don't fetch more than once every 10 seconds
+				if time.Since(lastFetchTime) > 10*time.Second {
+					if err := fetchAndCacheJWKS(cfg.ClerkJWKSURL); err == nil {
+						lastFetchTime = time.Now()
+					}
+				}
+				fetchMu.Unlock()
+
+				// Check cache again after fetch
+				if kid != "" {
+					jwkCacheMu.RLock()
+					pubKey, exists = jwkCache[kid]
+					jwkCacheMu.RUnlock()
+					if exists {
+						return pubKey, nil
+					}
+				}
+			}
+
+			// Fallback to CLERK_PEM_PUBLIC_KEY
 			if cfg.ClerkPEMPublicKey == "" {
-				return nil, fmt.Errorf("clerk public key is not configured")
+				return nil, fmt.Errorf("clerk public key is not configured and JWKS validation failed")
 			}
 			pemStr := strings.ReplaceAll(cfg.ClerkPEMPublicKey, "\\n", "\n")
 			publicKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(pemStr))
