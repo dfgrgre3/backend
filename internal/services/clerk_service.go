@@ -15,10 +15,20 @@ import (
 	"thanawy-backend/internal/models"
 
 	"gorm.io/gorm"
+	"github.com/google/uuid"
 )
 
 // InvalidateCacheCallback allows breaking circular import with middleware package
 var InvalidateCacheCallback func(string)
+
+// ClerkIDToUUID generates a deterministic UUID from a Clerk User ID
+func ClerkIDToUUID(clerkID string) string {
+	if !strings.HasPrefix(clerkID, "user_") {
+		return clerkID
+	}
+	u := uuid.NewSHA1(uuid.NameSpaceDNS, []byte(clerkID))
+	return u.String()
+}
 
 type clerkEmailAddress struct {
 	EmailAddress string `json:"email_address"`
@@ -104,13 +114,15 @@ func ProvisionUserFromClerk(userId string) (*models.User, error) {
 		role = models.UserRole(strings.ToUpper(r))
 	}
 
+	dbUserID := ClerkIDToUUID(userId)
+
 	var existing models.User
-	err = db.DB.Unscoped().Where("id = ?", userId).First(&existing).Error
+	err = db.DB.Unscoped().Where("id = ?", dbUserID).First(&existing).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Create user
 			newUser := models.User{
-				ID:            userId,
+				ID:            dbUserID,
 				Email:         primaryEmail,
 				EmailVerified: true,
 				Status:        models.StatusActive,
@@ -132,10 +144,10 @@ func ProvisionUserFromClerk(userId string) (*models.User, error) {
 			if err := db.DB.Create(&newUser).Error; err != nil {
 				return nil, err
 			}
-			log.Printf("[Clerk Provisioning] Dynamic user creation successful: %s (%s)", userId, primaryEmail)
+			log.Printf("[Clerk Provisioning] Dynamic user creation successful: %s (%s)", dbUserID, primaryEmail)
 			
 			if InvalidateCacheCallback != nil {
-				InvalidateCacheCallback(userId)
+				InvalidateCacheCallback(dbUserID)
 			}
 			
 			return &newUser, nil
@@ -159,14 +171,14 @@ func ProvisionUserFromClerk(userId string) (*models.User, error) {
 		updates["avatar"] = clerkUser.ImageURL
 	}
 
-	if err := db.DB.Model(&models.User{}).Where("id = ?", userId).Updates(updates).Error; err != nil {
+	if err := db.DB.Model(&models.User{}).Where("id = ?", dbUserID).Updates(updates).Error; err != nil {
 		return nil, err
 	}
 
 	if InvalidateCacheCallback != nil {
-		InvalidateCacheCallback(userId)
+		InvalidateCacheCallback(dbUserID)
 	}
 
-	log.Printf("[Clerk Provisioning] Dynamic user sync successful: %s (%s)", userId, primaryEmail)
+	log.Printf("[Clerk Provisioning] Dynamic user sync successful: %s (%s)", dbUserID, primaryEmail)
 	return &existing, nil
 }

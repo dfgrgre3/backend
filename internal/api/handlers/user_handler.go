@@ -1769,11 +1769,12 @@ func dispatchClerkEvent(event clerkEvent) {
 		}
 	case "user.deleted":
 		if userId, ok := event.Data["id"].(string); ok {
-			if err := db.DB.Where(idQuery, userId).Delete(&models.User{}).Error; err != nil {
+			dbUserID := services.ClerkIDToUUID(userId)
+			if err := db.DB.Where(idQuery, dbUserID).Delete(&models.User{}).Error; err != nil {
 				log.Printf("[Clerk Webhook] Error deleting user: %v", err)
 			} else {
-				middleware.InvalidateRolePermsCache(userId)
-				getUserRepo().InvalidateCache(userId)
+				middleware.InvalidateRolePermsCache(dbUserID)
+				getUserRepo().InvalidateCache(dbUserID)
 			}
 		}
 	default:
@@ -1872,8 +1873,10 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 		name += " " + lastName
 	}
 
+	dbUserID := services.ClerkIDToUUID(userId)
+
 	user := models.User{
-		ID:            userId,
+		ID:            dbUserID,
 		Email:         primaryEmail,
 		EmailVerified: true,
 		Status:        models.StatusActive,
@@ -1890,7 +1893,7 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 	}
 
 	var existing models.User
-	err := db.DB.Unscoped().Where("id = ?", userId).First(&existing).Error
+	err := db.DB.Unscoped().Where("id = ?", dbUserID).First(&existing).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// New user creation
@@ -1929,29 +1932,30 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 			}
 		}
 
-		if err := db.DB.Model(&models.User{}).Where("id = ?", userId).Updates(updates).Error; err != nil {
+		if err := db.DB.Model(&models.User{}).Where("id = ?", dbUserID).Updates(updates).Error; err != nil {
 			log.Printf("[Clerk Webhook] Error updating user: %v", err)
 			return err
 		}
 	}
 
-	middleware.InvalidateRolePermsCache(userId)
-	getUserRepo().InvalidateCache(userId)
+	middleware.InvalidateRolePermsCache(dbUserID)
+	getUserRepo().InvalidateCache(dbUserID)
 
-	log.Printf("[Clerk Webhook] User synced successfully: %s (%s)", sanitizeLog(userId), sanitizeLog(primaryEmail))
+	log.Printf("[Clerk Webhook] User synced successfully: %s (%s)", sanitizeLog(dbUserID), sanitizeLog(primaryEmail))
 	return nil
 }
 
 func EnsureUserExists(userId, email string) error {
+	dbUserID := services.ClerkIDToUUID(userId)
 	var user models.User
-	err := db.DB.First(&user, idQuery, userId).Error
+	err := db.DB.First(&user, idQuery, dbUserID).Error
 
 	if err == nil {
 		return nil
 	}
 
 	newUser := models.User{
-		ID:            userId,
+		ID:            dbUserID,
 		Email:         email,
 		EmailVerified: false,
 		Status:        models.StatusActive,
@@ -1971,7 +1975,7 @@ func EnsureUserExists(userId, email string) error {
 		return err
 	}
 
-	log.Printf("[Auth] Auto-created user: %s (%s)", sanitizeLog(userId), sanitizeLog(email))
+	log.Printf("[Auth] Auto-created user: %s (%s)", sanitizeLog(dbUserID), sanitizeLog(email))
 	return nil
 }
 

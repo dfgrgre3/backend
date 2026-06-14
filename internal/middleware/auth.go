@@ -123,8 +123,14 @@ func Auth() gin.HandlerFunc {
 			return
 		}
 
-		c.Set("userId", claims.Subject)
-		c.Set("user_id", claims.Subject)
+		clerkID := claims.Subject
+		dbUserID := services.ClerkIDToUUID(clerkID)
+
+		c.Set("userId", dbUserID)
+		c.Set("user_id", dbUserID)
+		if clerkID != dbUserID {
+			c.Set("clerkUserId", clerkID)
+		}
 		c.Set("jti", claims.JTI)
 		if claims.ExpiresAt != nil {
 			c.Set("accessTokenExpiresAt", claims.ExpiresAt.Time.UnixMilli())
@@ -133,8 +139,8 @@ func Auth() gin.HandlerFunc {
 			c.Set("user_email", claims.Email)
 		}
 
-		hydrateUserContext(c, claims.Subject, claims.Role)
-		processImpersonation(c, claims.Subject)
+		hydrateUserContext(c, dbUserID, claims.Role)
+		processImpersonation(c, dbUserID)
 
 		// Propagate to standard context for gRPC/Connect RPC handlers
 		ctx := c.Request.Context()
@@ -168,8 +174,14 @@ func OptionalAuth() gin.HandlerFunc {
 			return
 		}
 
-		c.Set("userId", claims.Subject)
-		c.Set("user_id", claims.Subject)
+		clerkID := claims.Subject
+		dbUserID := services.ClerkIDToUUID(clerkID)
+
+		c.Set("userId", dbUserID)
+		c.Set("user_id", dbUserID)
+		if clerkID != dbUserID {
+			c.Set("clerkUserId", clerkID)
+		}
 		c.Set("jti", claims.JTI)
 		if claims.ExpiresAt != nil {
 			c.Set("accessTokenExpiresAt", claims.ExpiresAt.Time.UnixMilli())
@@ -178,8 +190,8 @@ func OptionalAuth() gin.HandlerFunc {
 			c.Set("user_email", claims.Email)
 		}
 
-		hydrateUserContext(c, claims.Subject, claims.Role)
-		processImpersonation(c, claims.Subject)
+		hydrateUserContext(c, dbUserID, claims.Role)
+		processImpersonation(c, dbUserID)
 
 		// Propagate to standard context for gRPC/Connect RPC handlers
 		ctx := c.Request.Context()
@@ -274,15 +286,15 @@ func storeInLocalCache(userID string, ctx *userAuthContext) {
 // fetchDatabaseRolePerms retrieves user role/permissions from the database.
 // Caches the result in Redis (async) and local in-memory cache.
 // Returns nil if the user is not found in the database.
-func fetchDatabaseRolePerms(userID, cacheKey string) *userAuthContext {
+func fetchDatabaseRolePerms(userID, clerkID, cacheKey string) *userAuthContext {
 	var user models.User
 	if err := db.DB.Unscoped().
 		Select("role", "permissions").
 		Where("id = ?", userID).
 		Take(&user).Error; err != nil {
 		// Fallback: if user is not found, try to dynamically provision them from Clerk API
-		if strings.HasPrefix(userID, "user_") {
-			_, errProvision := services.ProvisionUserFromClerk(userID)
+		if clerkID != "" && strings.HasPrefix(clerkID, "user_") {
+			_, errProvision := services.ProvisionUserFromClerk(clerkID)
 			if errProvision == nil {
 				// Retry query
 				if retryErr := db.DB.Unscoped().
@@ -292,7 +304,7 @@ func fetchDatabaseRolePerms(userID, cacheKey string) *userAuthContext {
 					goto querySuccess
 				}
 			} else {
-				log.Printf("[Auth Middleware] Failed to provision user %s from Clerk: %v", userID, errProvision)
+				log.Printf("[Auth Middleware] Failed to provision user %s (Clerk: %s) from Clerk: %v", userID, clerkID, errProvision)
 			}
 		}
 		return nil
@@ -323,7 +335,7 @@ querySuccess:
 
 // buildSingleFlightCallback creates the function used inside singleflight.Do
 // to fetch user role/permissions from cache layers and finally database.
-func buildSingleFlightCallback(userID, fallbackRole string) func() (interface{}, error) {
+func buildSingleFlightCallback(userID, clerkID, fallbackRole string) func() (interface{}, error) {
 	return func() (interface{}, error) {
 		// Re-check local cache inside singleflight (avoid duplicate work)
 		if cached, ok := fetchCachedRolePerms(userID); ok {
@@ -339,7 +351,7 @@ func buildSingleFlightCallback(userID, fallbackRole string) func() (interface{},
 		}
 
 		// Fallback to database
-		if dbCtx := fetchDatabaseRolePerms(userID, cacheKey); dbCtx != nil {
+		if dbCtx := fetchDatabaseRolePerms(userID, clerkID, cacheKey); dbCtx != nil {
 			return dbCtx, nil
 		}
 
@@ -365,8 +377,11 @@ func hydrateUserContext(c *gin.Context, userID, fallbackRole string) {
 		return
 	}
 
+	clerkIDVal, _ := c.Get("clerkUserId")
+	clerkID, _ := clerkIDVal.(string)
+
 	// 2. Use singleflight to collapse concurrent calls for the same user
-	res, err, _ := userContextSF.Do(userID, buildSingleFlightCallback(userID, fallbackRole))
+	res, err, _ := userContextSF.Do(userID, buildSingleFlightCallback(userID, clerkID, fallbackRole))
 
 	if err == nil {
 		authCtx := res.(*userAuthContext)
@@ -412,7 +427,7 @@ func processImpersonation(c *gin.Context, adminID string) {
 		authCtx = cached
 	} else {
 		// Use singleflight to collapse concurrent calls for the same user
-		res, err, _ := userContextSF.Do(impersonatedID, buildSingleFlightCallback(impersonatedID, ""))
+		res, err, _ := userContextSF.Do(impersonatedID, buildSingleFlightCallback(impersonatedID, "", ""))
 		if err == nil {
 			authCtx = res.(*userAuthContext)
 		}
