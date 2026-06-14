@@ -390,6 +390,9 @@ func stripAPIPrefix(h http.Handler) http.Handler {
 			r2.URL = new(url.URL)
 			*r2.URL = *r.URL
 			r2.URL.Path = strings.TrimPrefix(r.URL.Path, "/api")
+			if r2.RequestURI != "" {
+				r2.RequestURI = strings.TrimPrefix(r2.RequestURI, "/api")
+			}
 			h.ServeHTTP(w, r2)
 			return
 		}
