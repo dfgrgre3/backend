@@ -39,6 +39,7 @@ type Config struct {
 	ClerkSecretKey     string
 	ClerkJWKSURL       string
 	InternalIPRanges   []string
+	ImpersonationSecret string
 }
 
 func Load() *Config {
@@ -109,6 +110,7 @@ func Load() *Config {
 	c.ClerkPEMPublicKey = getEnv("CLERK_PEM_PUBLIC_KEY", "")
 	c.ClerkSecretKey = getEnv("CLERK_SECRET_KEY", "")
 	c.ClerkJWKSURL = getEnv("CLERK_JWKS_URL", "")
+	c.ImpersonationSecret = getEnv("IMPERSONATION_SECRET", "")
 
 	// IP Whitelist Config
 	// Standard RFC 1918 and loopback ranges used as defaults
@@ -197,6 +199,7 @@ func LoadSafe() (*Config, error) {
 	c.ClerkPEMPublicKey = getEnv("CLERK_PEM_PUBLIC_KEY", "")
 	c.ClerkSecretKey = getEnv("CLERK_SECRET_KEY", "")
 	c.ClerkJWKSURL = getEnv("CLERK_JWKS_URL", "")
+	c.ImpersonationSecret = getEnv("IMPERSONATION_SECRET", "")
 
 	defaultRanges := []string{
 		"127.0.0.1/8",

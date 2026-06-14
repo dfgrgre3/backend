@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -669,3 +670,46 @@ func TestPermissionRequired_ManageWildcardRejectsView(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
+
+func TestImpersonationTokens(t *testing.T) {
+	// Initialize configuration if not already done
+	_ = getConfig()
+	if cachedConfig == nil {
+		cachedConfig = &config.Config{}
+	}
+
+	// Backup original secret
+	originalSecret := cachedConfig.ImpersonationSecret
+	defer func() {
+		cachedConfig.ImpersonationSecret = originalSecret
+	}()
+
+	// 1. Test invalid/empty secret (should panic)
+	cachedConfig.ImpersonationSecret = ""
+	assert.Panics(t, func() {
+		SignImpersonationToken("user-123")
+	}, "should panic when secret is empty")
+
+	cachedConfig.ImpersonationSecret = "too-short"
+	assert.Panics(t, func() {
+		SignImpersonationToken("user-123")
+	}, "should panic when secret is not 32-byte hex")
+
+	// 2. Test valid 32-byte hex key
+	cachedConfig.ImpersonationSecret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	
+	token := SignImpersonationToken("user-123")
+	assert.NotEmpty(t, token)
+
+	userID, ok := VerifyImpersonationToken(token)
+	assert.True(t, ok)
+	assert.Equal(t, "user-123", userID)
+
+	// Test invalid token
+	_, ok = VerifyImpersonationToken("user-123.invalid_signature")
+	assert.False(t, ok)
+
+	_, ok = VerifyImpersonationToken("invalid_token_format")
+	assert.False(t, ok)
+}
+

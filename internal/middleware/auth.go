@@ -3,7 +3,6 @@ package middleware
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -29,17 +28,16 @@ func init() {
 	services.InvalidateCacheCallback = InvalidateRolePermsCache
 }
 
-var impersonationSignKey []byte
-var impersonationKeyOnce sync.Once
-
 func getImpersonationSignKey() []byte {
-	impersonationKeyOnce.Do(func() {
-		impersonationSignKey = make([]byte, 32)
-		if _, err := rand.Read(impersonationSignKey); err != nil {
-			panic("failed to generate secure random key for impersonation signing")
-		}
-	})
-	return impersonationSignKey
+	cfg := getConfig()
+	if cfg.ImpersonationSecret == "" {
+		log.Panic("CRITICAL SECURITY ERROR: ImpersonationSecret environment variable is unconfigured.")
+	}
+	decodedKey, err := hex.DecodeString(cfg.ImpersonationSecret)
+	if err != nil || len(decodedKey) != 32 {
+		log.Panic("CRITICAL SECURITY ERROR: ImpersonationSecret must be a valid 32-byte hex string.")
+	}
+	return decodedKey
 }
 
 func SignImpersonationToken(userID string) string {
