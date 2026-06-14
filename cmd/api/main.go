@@ -285,12 +285,26 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 			return
 		}
 		filename := c.Param("filename")
-		cleaned := filepath.Clean(filename)
-		if strings.HasPrefix(cleaned, "..") || strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "\\") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid filename"})
+		baseUploadDir, err := filepath.Abs(cfg.LocalStorage.BaseDir)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Configuration state tracking error"})
 			return
 		}
-		targetPath := filepath.Join(cfg.LocalStorage.BaseDir, cleaned)
+
+		// Enforce strict name isolation parameters to avoid absolute path traversal injections
+		baseName := filepath.Base(filename)
+		if baseName == "." || baseName == "/" || baseName == ".." {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Sanitization constraints rejected the provided name payload"})
+			return
+		}
+
+		targetPath := filepath.Join(baseUploadDir, baseName)
+		// Double-verify that the resolved path remains nested within the base directory
+		if !strings.HasPrefix(targetPath, baseUploadDir) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Escalation sequence detected and blocked"})
+			return
+		}
+
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

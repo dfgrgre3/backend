@@ -428,9 +428,18 @@ func processImpersonation(c *gin.Context, adminID string) {
 			"SUPER_ADMIN": 5,
 		}
 
-		if roleHierarchy[currentRoleStr] <= roleHierarchy[authCtx.Role] {
-			log.Printf("Security Warning: Admin %s with role %s attempted to impersonate user %s with role %s", adminID, currentRoleStr, impersonatedID, authCtx.Role)
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Impersonating users of equal or higher administrative rank is not allowed"})
+		currRank, validParent := roleHierarchy[currentRoleStr]
+		targetRank, validChild := roleHierarchy[authCtx.Role]
+
+		if !validParent || !validChild {
+			log.Printf("[Security Alert] Context conversion evaluation failed for rank assessment: %s to %s", currentRoleStr, authCtx.Role)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Malformed role structure encountered during evaluation"})
+			return
+		}
+
+		if currRank <= targetRank {
+			log.Printf("[Security Infraction] Privilege escalation block: Operator (%s) attempted control over (%s)", adminID, impersonatedID)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Impersonating users of equal or higher administrative rank is explicitly prohibited"})
 			return
 		}
 
@@ -626,11 +635,11 @@ func setCorsHeaders(c *gin.Context, origin string, isAllowed bool) {
 	if isAllowed {
 		if origin != "" {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		} else {
-			// For requests with no origin (e.g. curl, mobile apps), allow all
-			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+			// To comply with standard credential tracking specs, wildcards must not accompany credential flags
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "null")
 		}
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 	}
 
 	c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Dev-Admin-Bypass, accept, origin, Cache-Control, X-Requested-With, Connect-Protocol-Version, Connect-Timeout-Ms, Connect-Content-Encoding, X-Grpc-Web, X-User-Agent, Idempotency-Key")
