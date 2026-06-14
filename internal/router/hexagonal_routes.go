@@ -25,7 +25,7 @@ func SetupHexagonalRoutes(router *gin.Engine, handlers *app.Handlers) {
 	// User Management (Hexagonal)
 	admin := router.Group("/api/admin")
 	admin.Use(middleware.Auth())
-	admin.Use(middleware.AdminRequired())
+	admin.Use(middleware.AdminOrModerator())
 	{
 		// Replace legacy user routes with hexagonal handler
 		admin.GET("/hex/users", middleware.PermissionRequired(models.PermUsersView), handlers.UserHandler.ListUsers)
@@ -46,7 +46,7 @@ func SetupHexagonalRoutes(router *gin.Engine, handlers *app.Handlers) {
 		// Admin subject routes
 		admin := router.Group("/api/admin")
 		admin.Use(middleware.Auth())
-		admin.Use(middleware.AdminRequired())
+		admin.Use(middleware.AdminOrModerator())
 		{
 			admin.GET(hexSubjectsRoute, middleware.PermissionRequired(models.PermSubjectsView), handlers.SubjectHandler.ListSubjects)
 			admin.GET(hexSubjectByIDRoute, middleware.PermissionRequired(models.PermSubjectsView), handlers.SubjectHandler.GetSubject)

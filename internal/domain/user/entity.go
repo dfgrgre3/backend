@@ -7,10 +7,11 @@ import (
 type Role string
 
 const (
-	RoleAdmin     Role = "ADMIN"
-	RoleTeacher   Role = "TEACHER"
-	RoleStudent   Role = "STUDENT"
-	RoleModerator Role = "MODERATOR"
+	RoleAdmin      Role = "ADMIN"
+	RoleTeacher    Role = "TEACHER"
+	RoleStudent    Role = "STUDENT"
+	RoleModerator  Role = "MODERATOR"
+	RoleSuperAdmin Role = "SUPER_ADMIN"
 )
 
 type Status string

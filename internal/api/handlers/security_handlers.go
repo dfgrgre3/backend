@@ -26,6 +26,7 @@ import (
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/models"
+	"thanawy-backend/internal/services"
 )
 
 const (
@@ -815,7 +816,9 @@ func GetBlockedAttempts(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"attempts": attempts}})
 }
 
-// VerifyTwoFactorLogin validates a TOTP code for the authenticated user (challengeId reserved for future login flows).
+// VerifyTwoFactorLogin validates a TOTP code + challengeId for admin-panel 2FA login.
+// The challengeId must have been issued by the Login handler and stored in Redis;
+// it is consumed on first use to prevent replay attacks.
 func VerifyTwoFactorLogin(c *gin.Context) {
 	var req struct {
 		ChallengeID string `json:"challengeId" binding:"required"`
@@ -826,30 +829,146 @@ func VerifyTwoFactorLogin(c *gin.Context) {
 		return
 	}
 
-	userIDVal, ok := c.Get("userId")
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
-	userID, ok := userIDVal.(string)
-	if !ok || userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
+	ip := c.ClientIP()
+
+	// ----------------------------------------------------------------
+	// 1. Validate the challengeId against the Redis-stored pending token
+	// ----------------------------------------------------------------
+	var userID string
+
+	if db.Redis != nil {
+		challengeKey := fmt.Sprintf("2fa_challenge:%s", req.ChallengeID)
+		ctx := c.Request.Context()
+
+		// Read and atomically delete the key (one-time use)
+		val, err := db.Redis.GetDel(ctx, challengeKey).Result()
+		if err != nil || val == "" {
+			_ = LogSecurityEvent("", models.SecurityEvent2FAFailed, ip, c.Request.UserAgent(), nil, nil)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired challenge. Please sign in again."})
+			return
+		}
+		userID = val
+	} else {
+		// Redis unavailable: fall back to extracting userID from the
+		// authenticated session context (degraded mode – weaker but functional).
+		userIDVal, ok := c.Get("userId")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+		var cast bool
+		userID, cast = userIDVal.(string)
+		if !cast || userID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
 	}
 
+	// ----------------------------------------------------------------
+	// 2. Brute-force protection
+	// ----------------------------------------------------------------
+	twoFAKey := fmt.Sprintf("2fa_attempts:%s:%s", userID, ip)
+	if db.Redis != nil {
+		attempts, err := db.Redis.Get(c.Request.Context(), twoFAKey).Int()
+		if err == nil && attempts >= MaxLoginAttempts {
+			_ = LogSecurityEvent(userID, models.SecurityEvent2FAFailed, ip, c.Request.UserAgent(), nil, nil)
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many failed attempts. Please try again after 15 minutes."})
+			return
+		}
+	}
+
+	// ----------------------------------------------------------------
+	// 3. Fetch 2FA settings and validate TOTP code
+	// ----------------------------------------------------------------
 	var settings models.TwoFactorSettings
 	if err := db.DB.First(&settings, userIDQuery, userID).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "2FA not configured"})
 		return
 	}
+
+	if !settings.IsEnabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "2FA is not enabled for this account"})
+		return
+	}
+
+	codeValid := false
 	if settings.Method == "authenticator" && settings.Secret != "" {
-		if !totp.Validate(req.Code, settings.Secret) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": errInvalidVerificationCode})
-			return
+		codeValid = totp.Validate(req.Code, settings.Secret)
+	}
+
+	// Also allow backup codes
+	if !codeValid && len(settings.BackupCodes) > 0 {
+		for i, bc := range settings.BackupCodes {
+			if bc == req.Code {
+				// Consume the backup code
+				settings.BackupCodes = append(settings.BackupCodes[:i], settings.BackupCodes[i+1:]...)
+				db.DB.Model(&settings).Update("backup_codes", settings.BackupCodes)
+				codeValid = true
+				break
+			}
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true, "challengeId": req.ChallengeID})
+	if !codeValid {
+		if db.Redis != nil {
+			db.Redis.Incr(c.Request.Context(), twoFAKey)
+			db.Redis.Expire(c.Request.Context(), twoFAKey, LockoutDuration)
+		}
+		_ = LogSecurityEvent(userID, models.SecurityEvent2FAFailed, ip, c.Request.UserAgent(), nil, nil)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": errInvalidVerificationCode})
+		return
+	}
+
+	// Clear brute-force counter on success
+	if db.Redis != nil {
+		db.Redis.Del(c.Request.Context(), twoFAKey)
+	}
+
+	// Update last used timestamp
+	now := time.Now()
+	db.DB.Model(&settings).Update("last_used_at", now)
+
+	// ----------------------------------------------------------------
+	// 4. Issue JWT token pair and create session
+	// ----------------------------------------------------------------
+	var user models.User
+	if err := db.DB.Select("id, role, email").First(&user, idQuery, userID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User not found"})
+		return
+	}
+
+	svc := &services.TokenService{}
+	tokens, err := svc.GenerateTokenPair(user.ID, string(user.Role), user.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errFailedToGenerateTokens})
+		return
+	}
+
+	userAgent := c.Request.UserAgent()
+	session := &models.UserSession{
+		ID:           tokens.JTI,
+		UserID:       user.ID,
+		RefreshToken: tokens.RefreshToken,
+		UserAgent:    userAgent,
+		IP:           ip,
+		ExpiresAt:    time.Now().Add(24 * time.Hour),
+		LastAccessed: time.Now(),
+	}
+	_ = db.DB.Create(session).Error
+
+	middleware.LogCriticalOperation(c, "2fa_login_success", map[string]interface{}{
+		"user_id": userID,
+		"method":  settings.Method,
+	})
+	_ = LogSecurityEvent(userID, "2FA_LOGIN_SUCCESS", ip, userAgent, nil, nil)
+
+	c.SetCookie("access_token", tokens.AccessToken, 3600*24, "/", "", isProduction(), true)
+	c.SetCookie("refresh_token", tokens.RefreshToken, 3600*24*30, "/", "", isProduction(), true)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":     true,
+		"challengeId": req.ChallengeID,
+	})
 }
 
 // GetUser2FAStatus returns the 2FA status for the authenticated user

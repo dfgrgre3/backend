@@ -105,14 +105,17 @@ func fetchAndCacheJWKS(jwksURL string) error {
 	return nil
 }
 
-func (s *TokenService) GenerateTokenPair(userId, role string) (*TokenPair, error) {
+func (s *TokenService) GenerateTokenPair(userId, role, email string) (*TokenPair, error) {
 	cfg := config.Load()
 	jti := uuid.New().String()
 
-	// Access Token (Short-lived: 15 minutes)
+	// Access Token (Short-lived: 15 minutes).
+	// Email is included so middleware can hydrate user_email directly from the
+	// token without a DB lookup on every request.
 	accessClaims := TokenClaims{
-		Role: role,
-		JTI:  jti,
+		Email: email,
+		Role:  role,
+		JTI:   jti,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userId,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
@@ -125,7 +128,9 @@ func (s *TokenService) GenerateTokenPair(userId, role string) (*TokenPair, error
 		return nil, err
 	}
 
-	// Refresh Token (Long-lived: 30 days)
+	// Refresh Token (Long-lived: 30 days).
+	// The refresh token only carries subject + expiry; email/role are re-fetched
+	// from the DB on every token rotation to reflect any permission changes.
 	refreshClaims := jwt.RegisteredClaims{
 		Subject:   userId,
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * 24 * time.Hour)),
@@ -144,22 +149,8 @@ func (s *TokenService) GenerateTokenPair(userId, role string) (*TokenPair, error
 	}, nil
 }
 
-func (s *TokenService) GenerateAccessToken(userId, role string) (string, error) {
-	cfg := config.Load()
-	jti := uuid.New().String()
-
-	claims := TokenClaims{
-		Role: role,
-		JTI:  jti,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   userId,
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			ID:        jti,
-		},
-	}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(cfg.JWTSecret))
-}
+// GenerateAccessToken is intentionally removed.
+// Always use GenerateTokenPair so the JTI is tied to a persisted UserSession.
 
 func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 	cfg := config.Load()
@@ -225,7 +216,9 @@ func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return []byte(cfg.JWTSecret), nil
-	}, jwt.WithLeeway(2*time.Minute))
+	// WithLeeway allows up to 30 seconds of clock skew between servers.
+	// Intentionally kept small to minimise the window for replaying near-expired tokens.
+	}, jwt.WithLeeway(30*time.Second))
 
 	if err != nil {
 		return nil, err

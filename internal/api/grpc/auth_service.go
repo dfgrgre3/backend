@@ -37,14 +37,14 @@ func (s *AuthServiceServer) Login(ctx context.Context, req *thanawyv1.LoginReque
 		return nil, err
 	}
 
-	token, err := s.tokenService.GenerateAccessToken(user.ID, string(user.Role))
+	tokenPair, err := s.tokenService.GenerateTokenPair(user.ID, string(user.Role), user.Email)
 	if err != nil {
 		return nil, err
 	}
 
 	return &thanawyv1.LoginResponse{
 		Success: true,
-		Token:   token,
+		Token:   tokenPair.AccessToken,
 		User:    mapUserToProto(user),
 	}, nil
 }

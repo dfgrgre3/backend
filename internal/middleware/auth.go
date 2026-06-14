@@ -384,9 +384,6 @@ func hydrateUserContext(c *gin.Context, userID, fallbackRole string) {
 func processImpersonation(c *gin.Context, adminID string) {
 	currentRole, _ := c.Get("role")
 	currentRoleStr, _ := currentRole.(string)
-	if currentRoleStr == "" {
-		currentRoleStr = "ADMIN" // Default fallback
-	}
 
 	if currentRoleStr != "ADMIN" && currentRoleStr != "SUPER_ADMIN" {
 		return
@@ -451,7 +448,7 @@ func AdminRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, _ := c.Get("role")
 		rs, _ := role.(string)
-		if rs != "ADMIN" {
+		if rs != "ADMIN" && rs != "SUPER_ADMIN" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Admin access required"})
 			return
 		}
@@ -464,7 +461,7 @@ func ModeratorRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, _ := c.Get("role")
 		rs, _ := role.(string)
-		if rs != "ADMIN" && rs != "MODERATOR" {
+		if rs != "ADMIN" && rs != "SUPER_ADMIN" && rs != "MODERATOR" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Moderator access required"})
 			return
 		}
@@ -477,7 +474,7 @@ func AdminOrModerator() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, _ := c.Get("role")
 		rs, _ := role.(string)
-		if rs != "ADMIN" && rs != "MODERATOR" {
+		if rs != "ADMIN" && rs != "SUPER_ADMIN" && rs != "MODERATOR" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Admin or Moderator access required"})
 			return
 		}

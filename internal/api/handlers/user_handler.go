@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"github.com/redis/go-redis/v9"
 )
@@ -57,6 +58,14 @@ const (
 	errInvalidEmail           = "Invalid email"
 	userIDQuery               = "user_id = ?"
 )
+
+// setAuthCookie writes an HttpOnly, SameSite=Lax auth cookie.
+// Using SameSite=Lax prevents CSRF on state-changing requests while still
+// allowing top-level GET navigations (e.g. OAuth redirects).
+func setAuthCookie(c *gin.Context, name, value string, maxAgeSec int) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(name, value, maxAgeSec, "/", "", isProduction(), true)
+}
 
 func getLoginAttemptsKey(email, ip string) string {
 	return fmt.Sprintf("login_attempts:%s:%s", email, ip)
@@ -159,9 +168,18 @@ func Login(c *gin.Context) {
 	recordLoginAttempt(c, email, ip, true)
 
 	if user.TwoFactorEnabled {
+		// Generate a signed challenge token so VerifyTwoFactorLogin can validate
+		// that the caller actually completed password authentication.
+		challengeID := uuid.New().String()
+		if db.Redis != nil {
+			challengeKey := fmt.Sprintf("2fa_challenge:%s", challengeID)
+			db.Redis.Set(c.Request.Context(), challengeKey, user.ID, 5*time.Minute)
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"success":     true,
 			"requires2FA": true,
+			"challengeId": challengeID,
 			"user": gin.H{
 				"id":    user.ID,
 				"email": user.Email,
@@ -170,7 +188,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	tokens, err := tokenService.GenerateTokenPair(user.ID, string(user.Role))
+	tokens, err := tokenService.GenerateTokenPair(user.ID, string(user.Role), user.Email)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errFailedToGenerateTokens, "details": err.Error()})
 		return
@@ -195,9 +213,16 @@ func Login(c *gin.Context) {
 
 	activeSessions, _ := getSessionRepo().GetActiveSessions(user.ID)
 	if len(activeSessions) >= 2 {
+		// Evict the session with the oldest LastAccessed time to keep
+		// the most recently used devices.
+		oldestIdx := 0
+		for i, s := range activeSessions {
+			if s.LastAccessed.Before(activeSessions[oldestIdx].LastAccessed) {
+				oldestIdx = i
+			}
+		}
 		_ = LogSecurityEvent(user.ID, "DEVICE_LIMIT_REACHED", ip, userAgent, location, nil)
-		oldestSession := activeSessions[0]
-		_ = getSessionRepo().RevokeSessionByJTI(oldestSession.ID)
+		_ = getSessionRepo().RevokeSessionByJTI(activeSessions[oldestIdx].ID)
 	}
 
 	if err := getSessionRepo().Create(session); err != nil {
@@ -208,9 +233,9 @@ func Login(c *gin.Context) {
 	_ = LogSecurityEvent(user.ID, models.SecurityEventLoginSuccess, ip, userAgent, location, nil)
 	services.GetAuditService().LogAsync(user.ID, services.AuditEventLogin, "auth", user.ID, map[string]interface{}{"ip": ip}, ip, userAgent)
 
-	c.SetCookie("access_token", tokens.AccessToken, 3600*24, "/", "", isProduction(), true)
+	setAuthCookie(c, "access_token", tokens.AccessToken, 3600*24)
 	refreshExpiry := int(expiryDuration.Seconds())
-	c.SetCookie("refresh_token", tokens.RefreshToken, refreshExpiry, refreshTokenPath, "", isProduction(), true)
+	setAuthCookie(c, "refresh_token", tokens.RefreshToken, refreshExpiry)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -233,6 +258,19 @@ func Verify2FA(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
+	}
+
+	ip := c.ClientIP()
+
+	// Brute force protection: block after MaxLoginAttempts failed 2FA attempts
+	twoFAKey := fmt.Sprintf("2fa_attempts:%s:%s", req.UserID, ip)
+	if db.Redis != nil {
+		attempts, err := db.Redis.Get(c.Request.Context(), twoFAKey).Int()
+		if err == nil && attempts >= MaxLoginAttempts {
+			_ = LogSecurityEvent(req.UserID, models.SecurityEvent2FAFailed, ip, c.Request.UserAgent(), nil, nil)
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many failed attempts. Please try again after 15 minutes."})
+			return
+		}
 	}
 
 	user, err := getUserRepo().FindByID(req.UserID)
@@ -260,12 +298,22 @@ func Verify2FA(c *gin.Context) {
 	}
 
 	if !tokenValid {
-		_ = LogSecurityEvent(user.ID, models.SecurityEvent2FAFailed, c.ClientIP(), c.Request.UserAgent(), nil, nil)
+		// Increment failed attempt counter
+		if db.Redis != nil {
+			db.Redis.Incr(c.Request.Context(), twoFAKey)
+			db.Redis.Expire(c.Request.Context(), twoFAKey, LockoutDuration)
+		}
+		_ = LogSecurityEvent(user.ID, models.SecurityEvent2FAFailed, ip, c.Request.UserAgent(), nil, nil)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired verification code"})
 		return
 	}
 
-	tokens, err := tokenService.GenerateTokenPair(user.ID, string(user.Role))
+	// Clear failed attempt counter on success
+	if db.Redis != nil {
+		db.Redis.Del(c.Request.Context(), twoFAKey)
+	}
+
+	tokens, err := tokenService.GenerateTokenPair(user.ID, string(user.Role), user.Email)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errFailedToGenerateTokens})
 		return
@@ -281,16 +329,16 @@ func Verify2FA(c *gin.Context) {
 		UserID:       user.ID,
 		RefreshToken: tokens.RefreshToken,
 		UserAgent:    c.Request.UserAgent(),
-		IP:           c.ClientIP(),
+		IP:           ip,
 		ExpiresAt:    time.Now().Add(expiryDuration),
 		LastAccessed: time.Now(),
 	}
 	_ = getSessionRepo().Create(session)
 
-	_ = LogSecurityEvent(user.ID, "2FA_SUCCESS", c.ClientIP(), c.Request.UserAgent(), nil, nil)
+	_ = LogSecurityEvent(user.ID, "2FA_SUCCESS", ip, c.Request.UserAgent(), nil, nil)
 
-	c.SetCookie("access_token", tokens.AccessToken, 3600*24, "/", "", isProduction(), true)
-	c.SetCookie("refresh_token", tokens.RefreshToken, int(expiryDuration.Seconds()), refreshTokenPath, "", isProduction(), true)
+	setAuthCookie(c, "access_token", tokens.AccessToken, 3600*24)
+	setAuthCookie(c, "refresh_token", tokens.RefreshToken, int(expiryDuration.Seconds()))
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -379,7 +427,7 @@ func VerifyMagicLink(c *gin.Context) {
 		return
 	}
 
-	tokens, err := tokenService.GenerateTokenPair(user.ID, string(user.Role))
+	tokens, err := tokenService.GenerateTokenPair(user.ID, string(user.Role), user.Email)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errFailedToGenerateTokens})
 		return
@@ -398,8 +446,8 @@ func VerifyMagicLink(c *gin.Context) {
 
 	_ = LogSecurityEvent(user.ID, models.SecurityEventMagicLinkLogin, c.ClientIP(), c.Request.UserAgent(), nil, nil)
 
-	c.SetCookie("access_token", tokens.AccessToken, 3600*24, "/", "", isProduction(), true)
-	c.SetCookie("refresh_token", tokens.RefreshToken, 3600*24, refreshTokenPath, "", isProduction(), true)
+	setAuthCookie(c, "access_token", tokens.AccessToken, 3600*24)
+	setAuthCookie(c, "refresh_token", tokens.RefreshToken, 3600*24)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -511,7 +559,7 @@ var (
 
 const refreshMetaRedisKeyFmt = "refresh_meta:%s"
 
-func refreshMetaKey(tokenHash string) string { return refreshMetaRedisKeyFmt + tokenHash }
+func refreshMetaKey(tokenHash string) string { return fmt.Sprintf(refreshMetaRedisKeyFmt, tokenHash) }
 
 // loadRefreshMeta returns (userId, role, sessionId) from L1/L2 cache when
 // possible. Falls back to a single DB query when both layers miss.
@@ -633,7 +681,7 @@ func RefreshToken(c *gin.Context) {
 		return
 	}
 
-	tokens, err := tokenService.GenerateTokenPair(user.ID, string(user.Role))
+	tokens, err := tokenService.GenerateTokenPair(user.ID, string(user.Role), user.Email)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to refresh token"})
 		return
@@ -642,8 +690,37 @@ func RefreshToken(c *gin.Context) {
 	// Use RotateToken: single UPDATE instead of Revoke+Create
 	// This reduces the operation from ~3000ms (DELETE+INSERT) to ~50ms (UPDATE)
 	newExpiry := time.Now().Add(30 * 24 * time.Hour)
-	_, err = getSessionRepo().RotateToken(sessionID, refreshToken, tokens.RefreshToken, newExpiry)
-	if err != nil {
+	updatedSession, err := getSessionRepo().RotateToken(sessionID, refreshToken, tokens.RefreshToken, newExpiry)
+	if err == nil {
+		// Invalidate old token metadata cache immediately
+		refreshMetaL1.Delete(tokenHash)
+		if db.Redis != nil {
+			go func(key string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+				defer cancel()
+				db.Redis.Del(ctx, key)
+			}(refreshMetaKey(tokenHash))
+		}
+
+		// Warm the cache for the new token
+		newTokenHash := models.ComputeRefreshTokenHash(tokens.RefreshToken)
+		payload, _ := json.Marshal(struct {
+			UserID    string `json:"u"`
+			Role      string `json:"r"`
+			SessionID string `json:"s"`
+		}{user.ID, string(user.Role), updatedSession.ID})
+		refreshMetaL1.Store(newTokenHash, &refreshMetaEntry{
+			data:      payload,
+			expiresAt: time.Now().Add(refreshMetaL1TTL),
+		})
+		if db.Redis != nil {
+			go func(key string, data []byte) {
+				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+				defer cancel()
+				db.Redis.Set(ctx, key, data, refreshMetaRedisTTL)
+			}(refreshMetaKey(newTokenHash), payload)
+		}
+	} else {
 		// Fallback to old method if rotation fails (e.g., stale session)
 		_ = getSessionRepo().RevokeSessionByJTI(sessionID)
 		_ = getSessionRepo().Create(&models.UserSession{
@@ -666,8 +743,8 @@ func RefreshToken(c *gin.Context) {
 		}
 	}
 
-	c.SetCookie("access_token", tokens.AccessToken, 3600*24, "/", "", isProduction(), true)
-	c.SetCookie("refresh_token", tokens.RefreshToken, 3600*24*30, refreshTokenPath, "", isProduction(), true)
+	setAuthCookie(c, "access_token", tokens.AccessToken, 3600*24)
+	setAuthCookie(c, "refresh_token", tokens.RefreshToken, 3600*24*30)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":              true,
@@ -683,6 +760,7 @@ func RefreshToken(c *gin.Context) {
 // @Success 200 {object} map[string]interface{} "Logout successful"
 // @Router /auth/logout [post]
 func Logout(c *gin.Context) {
+	// Revoke the session via access token JTI
 	if token, err := c.Cookie("access_token"); err == nil {
 		if claims, err := tokenService.ValidateToken(token); err == nil {
 			_ = getSessionRepo().RevokeSessionByJTI(claims.JTI)
@@ -690,8 +768,22 @@ func Logout(c *gin.Context) {
 		}
 	}
 
-	c.SetCookie("access_token", "", -1, "/", "", isProduction(), true)
-	c.SetCookie("refresh_token", "", -1, refreshTokenPath, "", isProduction(), true)
+	// Also clear L1 cache for the refresh token to prevent stale metadata usage
+	if refreshToken, err := c.Cookie("refresh_token"); err == nil && refreshToken != "" {
+		tokenHash := models.ComputeRefreshTokenHash(refreshToken)
+		refreshMetaL1.Delete(tokenHash)
+		// Async-delete from Redis too
+		if db.Redis != nil {
+			go func(key string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+				defer cancel()
+				db.Redis.Del(ctx, key)
+			}(refreshMetaKey(tokenHash))
+		}
+	}
+
+	setAuthCookie(c, "access_token", "", -1)
+	setAuthCookie(c, "refresh_token", "", -1)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Logged out successfully"})
 }
 
@@ -777,11 +869,19 @@ func Register(c *gin.Context) {
 
 	user, err := authService.Register(input)
 	if err != nil {
+		// Distinguish duplicate email (409 Conflict) from other errors (500).
+		if err.Error() == "user already exists" {
+			c.JSON(http.StatusConflict, gin.H{"error": "البريد الإلكتروني مسجل بالفعل"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	token, _ := authService.RequestEmailVerification(user.Email)
+	token, tokenErr := authService.RequestEmailVerification(user.Email)
+	if tokenErr != nil {
+		log.Printf("[Register] Failed to generate verification token for user %s: %v", user.Email, tokenErr)
+	}
 
 	services.GetAuditService().LogAsync(user.ID, "user.register", "user", user.ID, nil, c.ClientIP(), c.Request.UserAgent())
 	GlobalNotifyAdmins("مستخدم جديد", fmt.Sprintf("انضم %s إلى المنصة", user.Email), "success")

@@ -15,10 +15,11 @@ import (
 type UserRole string
 
 const (
-	RoleStudent   UserRole = "STUDENT"
-	RoleTeacher   UserRole = "TEACHER"
-	RoleModerator UserRole = "MODERATOR"
-	RoleAdmin     UserRole = "ADMIN"
+	RoleStudent    UserRole = "STUDENT"
+	RoleTeacher    UserRole = "TEACHER"
+	RoleModerator  UserRole = "MODERATOR"
+	RoleAdmin      UserRole = "ADMIN"
+	RoleSuperAdmin UserRole = "SUPER_ADMIN"
 )
 
 type UserStatus string
@@ -171,7 +172,7 @@ func (u *User) HasPermission(permission string) bool {
 func (u *User) GetEffectivePermissions() []string {
 	perms := []string(u.Permissions)
 
-	if u.Role == RoleAdmin {
+	if u.Role == RoleAdmin || u.Role == RoleSuperAdmin {
 		if !slices.Contains(perms, PermAdminBypass) {
 			return append(perms, PermAdminBypass)
 		}
@@ -191,7 +192,7 @@ func (u *User) GetEffectivePermissions() []string {
 
 func GetDefaultPermissions(role UserRole) []string {
 	switch role {
-	case RoleAdmin:
+	case RoleAdmin, RoleSuperAdmin:
 		return []string{PermAdminBypass}
 	case RoleModerator:
 		return []string{

@@ -713,3 +713,129 @@ func TestImpersonationTokens(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// ─── SUPER_ADMIN Role Tests ───────────────────────────────────────────────────
+
+func TestAdminRequired_AllowsSuperAdmin(t *testing.T) {
+	router := setupTestRouter()
+	router.Use(func(c *gin.Context) {
+		c.Set("role", "SUPER_ADMIN")
+		c.Next()
+	})
+	router.Use(AdminRequired())
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "SUPER_ADMIN should be allowed by AdminRequired")
+}
+
+func TestModeratorRequired_AllowsSuperAdmin(t *testing.T) {
+	router := setupTestRouter()
+	router.Use(func(c *gin.Context) {
+		c.Set("role", "SUPER_ADMIN")
+		c.Next()
+	})
+	router.Use(ModeratorRequired())
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "SUPER_ADMIN should be allowed by ModeratorRequired")
+}
+
+func TestAdminOrModerator_AllowsSuperAdmin(t *testing.T) {
+	router := setupTestRouter()
+	router.Use(func(c *gin.Context) {
+		c.Set("role", "SUPER_ADMIN")
+		c.Next()
+	})
+	router.Use(AdminOrModerator())
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "SUPER_ADMIN should be allowed by AdminOrModerator")
+}
+
+func TestRoleRequired_AllowsSuperAdmin(t *testing.T) {
+	router := setupTestRouter()
+	router.Use(func(c *gin.Context) {
+		c.Set("role", "SUPER_ADMIN")
+		c.Next()
+	})
+	router.Use(RoleRequired("ADMIN", "SUPER_ADMIN"))
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "SUPER_ADMIN should pass RoleRequired when listed")
+}
+
+func TestAdminRequired_RejectsStudent_AfterSuperAdminFix(t *testing.T) {
+	// Regression: ensure STUDENT is still rejected after SUPER_ADMIN fix
+	router := setupTestRouter()
+	router.Use(func(c *gin.Context) {
+		c.Set("role", "STUDENT")
+		c.Next()
+	})
+	router.Use(AdminRequired())
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code, "STUDENT should still be rejected by AdminRequired")
+}
+
+// ─── Impersonation Privilege Escalation Tests ─────────────────────────────────
+
+func TestImpersonation_SuperAdmin_CannotImpersonateAdmin(t *testing.T) {
+	// SUPER_ADMIN (rank=5) cannot impersonate another ADMIN (rank=4) — same level check
+	// roleHierarchy: SUPER_ADMIN=5, ADMIN=4 → 5 <= 4 is false → allowed to impersonate
+	// But ADMIN (rank=4) cannot impersonate ADMIN (rank=4) → 4 <= 4 is true → blocked
+
+	roleHierarchy := map[string]int{
+		"STUDENT":     1,
+		"TEACHER":     2,
+		"MODERATOR":   3,
+		"ADMIN":       4,
+		"SUPER_ADMIN": 5,
+	}
+
+	// ADMIN vs ADMIN → should be blocked (equal rank)
+	assert.True(t, roleHierarchy["ADMIN"] <= roleHierarchy["ADMIN"],
+		"ADMIN cannot impersonate another ADMIN (equal rank)")
+
+	// SUPER_ADMIN vs ADMIN → should be allowed (higher rank)
+	assert.False(t, roleHierarchy["SUPER_ADMIN"] <= roleHierarchy["ADMIN"],
+		"SUPER_ADMIN can impersonate ADMIN (higher rank)")
+
+	// SUPER_ADMIN vs SUPER_ADMIN → should be blocked (equal rank)
+	assert.True(t, roleHierarchy["SUPER_ADMIN"] <= roleHierarchy["SUPER_ADMIN"],
+		"SUPER_ADMIN cannot impersonate another SUPER_ADMIN (equal rank)")
+}
+

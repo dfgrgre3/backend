@@ -20,11 +20,14 @@ const (
 	adminSettingsRoute          = "/settings"
 )
 
-// SetupAdminRoutes configures administrative API endpoints
+// SetupAdminRoutes configures administrative API endpoints.
+// Access is layered:
+//   - General admin group: ADMIN, SUPER_ADMIN, MODERATOR (AdminOrModerator)
+//   - Sensitive sub-group: ADMIN and SUPER_ADMIN only (AdminRequired)
 func SetupAdminRoutes(router *gin.Engine) {
 	admin := router.Group("/api/admin")
 	admin.Use(middleware.Auth())
-	admin.Use(middleware.AdminRequired())
+	admin.Use(middleware.AdminOrModerator())
 	admin.Use(middleware.StrictRBAC())
 	{
 		// Dashboard
@@ -40,12 +43,22 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.GET("/reports/users", handlers.GetAdminReportsUsers)
 		admin.GET("/reports/books", handlers.GetAdminReportsBooks)
 
-		// AI / Impersonation
+		// AI
 		admin.GET("/ai", handlers.AdminAIGet)
 		admin.POST("/ai", handlers.AdminAIPost)
-		admin.POST("/reset-circuit-breaker", handlers.AdminResetCircuitBreaker)
-		admin.POST("/impersonate", handlers.ImpersonateUser)
-		admin.DELETE("/impersonate", handlers.DeleteImpersonation)
+
+		// ---------------------------------------------------------------
+		// Sensitive operations: ADMIN and SUPER_ADMIN only
+		// ---------------------------------------------------------------
+		sensitive := router.Group("/api/admin")
+		sensitive.Use(middleware.Auth())
+		sensitive.Use(middleware.AdminRequired()) // blocks MODERATOR
+		sensitive.Use(middleware.StrictRBAC())
+
+		// Impersonation (admin-only)
+		sensitive.POST("/reset-circuit-breaker", handlers.AdminResetCircuitBreaker)
+		sensitive.POST("/impersonate", handlers.ImpersonateUser)
+		sensitive.DELETE("/impersonate", handlers.DeleteImpersonation)
 
 		// Teachers
 		admin.GET(adminTeachersRoute, handlers.GetTeachersForAdmin)
@@ -71,21 +84,21 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/tickets/:id/close", handlers.CloseTicket)
 		admin.PATCH("/tickets/:id/tags", handlers.UpdateTicketTags)
 
-		// Backups
-		admin.GET("/backups", handlers.GetBackups)
-		admin.POST("/backups", handlers.CreateBackup)
-		admin.GET("/backups/stats", handlers.GetBackupStats)
-		admin.GET("/backups/tables", handlers.GetDatabaseTables)
-		admin.POST(adminBackupsScheduleRoute, handlers.ScheduleBackup)
-		admin.PUT(adminBackupsScheduleRoute, handlers.UpdateBackupSchedule)
-		admin.PUT(adminBackupsScheduleIDRoute, handlers.UpdateBackupSchedule)
-		admin.DELETE(adminBackupsScheduleRoute, handlers.DeleteBackupSchedule)
-		admin.DELETE(adminBackupsScheduleIDRoute, handlers.DeleteBackupSchedule)
-		admin.DELETE("/backups/:id", handlers.DeleteBackup)
-		admin.GET("/backups/:id/download", handlers.DownloadBackup)
-		admin.POST("/backups/:id/restore", handlers.RestoreBackup)
-		admin.POST("/backups/:id/verify", handlers.VerifyBackup)
-		admin.GET("/backups/:id/progress", handlers.GetBackupProgress)
+		// Backups (admin-only)
+		sensitive.GET("/backups", handlers.GetBackups)
+		sensitive.POST("/backups", handlers.CreateBackup)
+		sensitive.GET("/backups/stats", handlers.GetBackupStats)
+		sensitive.GET("/backups/tables", handlers.GetDatabaseTables)
+		sensitive.POST(adminBackupsScheduleRoute, handlers.ScheduleBackup)
+		sensitive.PUT(adminBackupsScheduleRoute, handlers.UpdateBackupSchedule)
+		sensitive.PUT(adminBackupsScheduleIDRoute, handlers.UpdateBackupSchedule)
+		sensitive.DELETE(adminBackupsScheduleRoute, handlers.DeleteBackupSchedule)
+		sensitive.DELETE(adminBackupsScheduleIDRoute, handlers.DeleteBackupSchedule)
+		sensitive.DELETE("/backups/:id", handlers.DeleteBackup)
+		sensitive.GET("/backups/:id/download", handlers.DownloadBackup)
+		sensitive.POST("/backups/:id/restore", handlers.RestoreBackup)
+		sensitive.POST("/backups/:id/verify", handlers.VerifyBackup)
+		sensitive.GET("/backups/:id/progress", handlers.GetBackupProgress)
 
 		// 2FA Management (for Admins)
 		admin.GET("/security/2fa/status", handlers.GetTwoFactorStatus)
@@ -106,16 +119,16 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/security/sessions/:id/suspend", handlers.SuspendSession)
 		admin.GET("/security/sessions/activity", handlers.GetSessionActivity)
 
-		// IP Whitelist
-		admin.GET("/security/ip-whitelist", handlers.GetIPWhitelist)
-		admin.POST("/security/ip-whitelist", handlers.AddIPToWhitelist)
-		admin.GET("/security/ip-whitelist/settings", handlers.GetIPWhitelistSettings)
-		admin.POST("/security/ip-whitelist/settings", handlers.UpdateIPWhitelistSettings)
-		admin.GET("/security/ip-whitelist/blocked", handlers.GetBlockedAttempts)
-		admin.POST("/security/ip-whitelist/bulk", handlers.BulkAddIPToWhitelist)
-		admin.GET("/security/ip-whitelist/check", handlers.CheckIPWhitelist)
-		admin.PATCH("/security/ip-whitelist/:id", handlers.UpdateIPWhitelistEntry)
-		admin.DELETE("/security/ip-whitelist/:id", handlers.RemoveIPFromWhitelist)
+		// IP Whitelist (admin-only)
+		sensitive.GET("/security/ip-whitelist", handlers.GetIPWhitelist)
+		sensitive.POST("/security/ip-whitelist", handlers.AddIPToWhitelist)
+		sensitive.GET("/security/ip-whitelist/settings", handlers.GetIPWhitelistSettings)
+		sensitive.POST("/security/ip-whitelist/settings", handlers.UpdateIPWhitelistSettings)
+		sensitive.GET("/security/ip-whitelist/blocked", handlers.GetBlockedAttempts)
+		sensitive.POST("/security/ip-whitelist/bulk", handlers.BulkAddIPToWhitelist)
+		sensitive.GET("/security/ip-whitelist/check", handlers.CheckIPWhitelist)
+		sensitive.PATCH("/security/ip-whitelist/:id", handlers.UpdateIPWhitelistEntry)
+		sensitive.DELETE("/security/ip-whitelist/:id", handlers.RemoveIPFromWhitelist)
 
 		// General CRUD / Gamification
 		// Achievements
@@ -187,12 +200,12 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.DELETE("/books/reviews", handlers.AdminBookReviews)
 
 		// User/Subject Admin Operations
-		// User
+		// User read/update: moderators can access; delete is admin-only
 		admin.GET("/users", handlers.GetUsers)
 		admin.POST("/users", handlers.CreateUser)
 		admin.GET(adminUserIDRoute, handlers.GetUserByID)
 		admin.PATCH(adminUserIDRoute, handlers.UpdateUser)
-		admin.DELETE(adminUserIDRoute, handlers.DeleteUser)
+		sensitive.DELETE(adminUserIDRoute, handlers.DeleteUser) // ADMIN-only
 		admin.GET("/search/users", handlers.SearchUsers)
 		admin.POST("/users/search", handlers.SearchUsers)
 
@@ -254,8 +267,9 @@ func SetupAdminRoutes(router *gin.Engine) {
 		// Search
 		admin.GET("/search/content", handlers.SearchContent)
 
-		// Partitions, Marketing & Contests (moved from protected_routes.go)
-		admin.GET("/database-partitions", handlers.DatabasePartitions)
+		// Partitions (admin-only - system-level operation)
+		sensitive.GET("/database-partitions", handlers.DatabasePartitions)
+		// Marketing & Contests
 		admin.GET("/marketing", handlers.Marketing)
 		admin.POST("/marketing", handlers.Marketing)
 		admin.GET("/contests", handlers.Contests)
@@ -270,10 +284,10 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.PUT(adminCoursesActionRoute, handlers.AdminCourseAction)
 		admin.GET("/courses/export", handlers.AdminCourseAction)
 
-		// Setting
+		// Settings (write = admin-only, read = open to moderators)
 		admin.GET(adminSettingsRoute, handlers.AdminSettings)
-		admin.PATCH(adminSettingsRoute, handlers.AdminSettings)
-		admin.PUT(adminSettingsRoute, handlers.AdminSettings)
+		sensitive.PATCH(adminSettingsRoute, handlers.AdminSettings)
+		sensitive.PUT(adminSettingsRoute, handlers.AdminSettings)
 
 		// Report content
 		admin.GET("/reports/content", handlers.AdminReportsContent)
