@@ -50,7 +50,40 @@ var (
 	jwkCacheMu    sync.RWMutex
 	lastFetchTime time.Time
 	fetchMu       sync.Mutex
+
+	clerkPEMKeyVal string
+	clerkPEMPubKey *rsa.PublicKey
+	clerkPEMMu     sync.RWMutex
 )
+
+func getClerkPEMPublicKey(pemPublicKey string) (*rsa.PublicKey, error) {
+	clerkPEMMu.RLock()
+	if clerkPEMPubKey != nil && clerkPEMKeyVal == pemPublicKey {
+		pubKey := clerkPEMPubKey
+		clerkPEMMu.RUnlock()
+		return pubKey, nil
+	}
+	clerkPEMMu.RUnlock()
+
+	clerkPEMMu.Lock()
+	defer clerkPEMMu.Unlock()
+
+	// Recheck under write lock
+	if clerkPEMPubKey != nil && clerkPEMKeyVal == pemPublicKey {
+		return clerkPEMPubKey, nil
+	}
+
+	pemStr := strings.ReplaceAll(pemPublicKey, "\\n", "\n")
+	pubKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(pemStr))
+	if err != nil {
+		return nil, err
+	}
+
+	clerkPEMPubKey = pubKey
+	clerkPEMKeyVal = pemPublicKey
+	return pubKey, nil
+}
+
 
 func parseJWKToRSAPublicKey(nStr, eStr string) (*rsa.PublicKey, error) {
 	nBytes, err := base64.RawURLEncoding.DecodeString(nStr)
@@ -155,8 +188,13 @@ func (s *TokenService) GenerateTokenPair(userId, role, email string) (*TokenPair
 func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 	cfg := config.Load()
 	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
+		alg, ok := token.Header["alg"].(string)
+		if !ok {
+			return nil, fmt.Errorf("missing signing algorithm")
+		}
+
 		// If alg is RS256, verify signature using Clerk JWKS or PEM Public Key
-		if alg, ok := token.Header["alg"].(string); ok && alg == "RS256" {
+		if alg == "RS256" {
 			kid, _ := token.Header["kid"].(string)
 
 			// Try cache first if kid is available
@@ -203,19 +241,18 @@ func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 			if cfg.ClerkPEMPublicKey == "" {
 				return nil, fmt.Errorf("clerk public key is not configured and JWKS validation failed")
 			}
-			pemStr := strings.ReplaceAll(cfg.ClerkPEMPublicKey, "\\n", "\n")
-			publicKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(pemStr))
+			publicKey, err := getClerkPEMPublicKey(cfg.ClerkPEMPublicKey)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse Clerk public key: %w", err)
 			}
 			return publicKey, nil
 		}
 
-		// Fallback to HS256 for backward compatibility
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		if alg == "HS256" {
+			return []byte(cfg.JWTSecret), nil
 		}
-		return []byte(cfg.JWTSecret), nil
+
+		return nil, fmt.Errorf("unexpected signing method: %v. Only Clerk RS256 or HS256 tokens are supported", alg)
 	// WithLeeway allows up to 30 seconds of clock skew between servers.
 	// Intentionally kept small to minimise the window for replaying near-expired tokens.
 	}, jwt.WithLeeway(30*time.Second))

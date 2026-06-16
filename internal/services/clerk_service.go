@@ -8,18 +8,30 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 
-	"gorm.io/gorm"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // InvalidateCacheCallback allows breaking circular import with middleware package
 var InvalidateCacheCallback func(string)
+
+var (
+	clerkProvisionCache   = make(map[string]*clerkCacheEntry)
+	clerkProvisionCacheMu sync.RWMutex
+)
+
+type clerkCacheEntry struct {
+	user      *models.User
+	err       error
+	expiresAt time.Time
+}
 
 // ClerkIDToUUID generates a deterministic UUID from a Clerk User ID
 func ClerkIDToUUID(clerkID string) string {
@@ -42,6 +54,7 @@ type clerkUserResponse struct {
 	ImageURL       *string             `json:"image_url"`
 	EmailAddresses []clerkEmailAddress `json:"email_addresses"`
 	PublicMetadata map[string]any      `json:"public_metadata"`
+	UnsafeMetadata map[string]any      `json:"unsafe_metadata"`
 }
 
 func FetchUserFromClerk(userId string) (*clerkUserResponse, error) {
@@ -83,6 +96,35 @@ func FetchUserFromClerk(userId string) (*clerkUserResponse, error) {
 }
 
 func ProvisionUserFromClerk(userId string) (*models.User, error) {
+	clerkProvisionCacheMu.RLock()
+	if entry, exists := clerkProvisionCache[userId]; exists && time.Now().Before(entry.expiresAt) {
+		user, err := entry.user, entry.err
+		clerkProvisionCacheMu.RUnlock()
+		return user, err
+	}
+	clerkProvisionCacheMu.RUnlock()
+
+	clerkProvisionCacheMu.Lock()
+	defer clerkProvisionCacheMu.Unlock()
+
+	// Double check
+	if entry, exists := clerkProvisionCache[userId]; exists && time.Now().Before(entry.expiresAt) {
+		return entry.user, entry.err
+	}
+
+	user, err := provisionUserFromClerkInternal(userId)
+
+	// Cache result for 5 minutes (both success and error)
+	clerkProvisionCache[userId] = &clerkCacheEntry{
+		user:      user,
+		err:       err,
+		expiresAt: time.Now().Add(5 * time.Minute),
+	}
+
+	return user, err
+}
+
+func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 	clerkUser, err := FetchUserFromClerk(userId)
 	if err != nil {
 		return nil, err
@@ -114,6 +156,37 @@ func ProvisionUserFromClerk(userId string) (*models.User, error) {
 		role = models.UserRole(strings.ToUpper(r))
 	}
 
+	var phone, country, gradeLevel, educationType string
+	var dateOfBirth *time.Time
+	var interestedSubjects []string
+
+	if clerkUser.UnsafeMetadata != nil {
+		if p, ok := clerkUser.UnsafeMetadata["phone"].(string); ok {
+			phone = p
+		}
+		if c, ok := clerkUser.UnsafeMetadata["country"].(string); ok {
+			country = c
+		}
+		if g, ok := clerkUser.UnsafeMetadata["gradeLevel"].(string); ok {
+			gradeLevel = g
+		}
+		if e, ok := clerkUser.UnsafeMetadata["educationType"].(string); ok {
+			educationType = e
+		}
+		if dob, ok := clerkUser.UnsafeMetadata["dateOfBirth"].(string); ok && dob != "" {
+			if parsedDob, err := time.Parse("2006-01-02", dob); err == nil {
+				dateOfBirth = &parsedDob
+			}
+		}
+		if is, ok := clerkUser.UnsafeMetadata["interestedSubjects"].([]any); ok {
+			for _, item := range is {
+				if s, ok := item.(string); ok {
+					interestedSubjects = append(interestedSubjects, s)
+				}
+			}
+		}
+	}
+
 	dbUserID := ClerkIDToUUID(userId)
 
 	var existing models.User
@@ -122,17 +195,23 @@ func ProvisionUserFromClerk(userId string) (*models.User, error) {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Create user
 			newUser := models.User{
-				ID:            dbUserID,
-				Email:         primaryEmail,
-				EmailVerified: true,
-				Status:        models.StatusActive,
-				Role:          role,
-				Balance:       0,
-				AiCredits:     0,
-				ExamCredits:   0,
-				TotalXP:       0,
-				Level:         1,
-				Username:      clerkUser.Username,
+				ID:                 dbUserID,
+				Email:              primaryEmail,
+				EmailVerified:      true,
+				Status:             models.StatusActive,
+				Role:               role,
+				Balance:            0,
+				AiCredits:          0,
+				ExamCredits:        0,
+				TotalXP:            0,
+				Level:              1,
+				Username:           clerkUser.Username,
+				Phone:              &phone,
+				Country:            &country,
+				GradeLevel:         &gradeLevel,
+				EducationType:      &educationType,
+				DateOfBirth:        dateOfBirth,
+				InterestedSubjects: interestedSubjects,
 			}
 			if name != "" {
 				newUser.Name = &name
@@ -169,6 +248,35 @@ func ProvisionUserFromClerk(userId string) (*models.User, error) {
 	}
 	if clerkUser.ImageURL != nil {
 		updates["avatar"] = clerkUser.ImageURL
+	}
+
+	if clerkUser.UnsafeMetadata != nil {
+		if p, ok := clerkUser.UnsafeMetadata["phone"].(string); ok && p != "" {
+			updates["phone"] = &p
+		}
+		if c, ok := clerkUser.UnsafeMetadata["country"].(string); ok && c != "" {
+			updates["country"] = &c
+		}
+		if g, ok := clerkUser.UnsafeMetadata["gradeLevel"].(string); ok && g != "" {
+			updates["grade_level"] = &g
+		}
+		if e, ok := clerkUser.UnsafeMetadata["educationType"].(string); ok && e != "" {
+			updates["education_type"] = &e
+		}
+		if dob, ok := clerkUser.UnsafeMetadata["dateOfBirth"].(string); ok && dob != "" {
+			if parsedDob, err := time.Parse("2006-01-02", dob); err == nil {
+				updates["date_of_birth"] = &parsedDob
+			}
+		}
+		if is, ok := clerkUser.UnsafeMetadata["interestedSubjects"].([]any); ok && len(is) > 0 {
+			var interestedSubjects []string
+			for _, item := range is {
+				if s, ok := item.(string); ok {
+					interestedSubjects = append(interestedSubjects, s)
+				}
+			}
+			updates["interested_subjects"] = interestedSubjects
+		}
 	}
 
 	if err := db.DB.Model(&models.User{}).Where("id = ?", dbUserID).Updates(updates).Error; err != nil {

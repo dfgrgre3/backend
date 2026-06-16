@@ -10,23 +10,7 @@ import (
 func SetupAuthRoutes(router *gin.Engine) {
 	auth := router.Group("/api/auth")
 	{
-		auth.POST("/login", middleware.LoginRateLimiter(), handlers.Login)
-		auth.POST("/register", middleware.AuthRateLimiter(), handlers.Register)
-		auth.POST("/logout", handlers.Logout)
-		auth.POST("/refresh", handlers.RefreshToken)
-		auth.POST("/2fa/verify", handlers.Verify2FA)
-		auth.POST("/magic-link/request", middleware.AuthRateLimiter(), handlers.RequestMagicLink)
-		auth.GET("/magic-link/verify", handlers.VerifyMagicLink)
-		auth.POST("/forgot-password", middleware.AuthRateLimiter(), handlers.ForgotPassword)
-		auth.POST("/reset-password", handlers.ResetPassword)
-		auth.GET("/verify-email", handlers.VerifyEmail)
-		auth.POST("/resend-verification", middleware.AuthRateLimiter(), handlers.ResendVerification)
-
-		// Google OAuth
-		auth.GET("/oauth/google", handlers.OAuthGoogleRedirect)
-		auth.GET("/oauth/google/callback", handlers.OAuthGoogleCallback)
-
-		// Protected auth routes
+		// Protected auth routes (uses Clerk RS256 JWT tokens via middleware)
 		auth.Use(middleware.Auth())
 		{
 			const sessionsPath = "/sessions"
