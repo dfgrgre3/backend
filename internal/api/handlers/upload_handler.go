@@ -17,6 +17,8 @@ import (
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/storage"
 
+	"bytes"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -24,7 +26,6 @@ import (
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const (
-	uploadChunkMetadataPrefix = "upload_metadata:"
 	maxSimpleUploadSize       = 50 << 20  // 50 MB
 	maxChunkSize              = 100 << 20 // 100 MB per chunk
 )
@@ -285,11 +286,6 @@ func handleChunkedInit(c *gin.Context) {
 		return
 	}
 
-	if db.Redis == nil {
-		api_response.Error(c, http.StatusInternalServerError, "Chunked uploads require Redis to be configured")
-		return
-	}
-
 	// Validate extension
 	ext := strings.ToLower(filepath.Ext(req.FileName))
 	category := "any"
@@ -308,7 +304,11 @@ func handleChunkedInit(c *gin.Context) {
 	}
 	metaBytes, _ := json.Marshal(meta)
 
-	db.Redis.Set(c.Request.Context(), uploadChunkMetadataPrefix+uploadID, metaBytes, 24*time.Hour)
+	_, err := storage.GlobalStorage.Upload(c.Request.Context(), fmt.Sprintf("temp/%s/meta.json", uploadID), bytes.NewReader(metaBytes), int64(len(metaBytes)), "application/json")
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to initialize upload session")
+		return
+	}
 
 	api_response.Success(c, gin.H{
 		"uploadId":  uploadID,
@@ -326,14 +326,9 @@ func handleChunkedPutChunk(c *gin.Context) {
 		return
 	}
 
-	if db.Redis == nil {
-		api_response.Error(c, http.StatusInternalServerError, "Chunked uploads require Redis")
-		return
-	}
-
 	// Verify session exists
-	exists, _ := db.Redis.Exists(c.Request.Context(), uploadChunkMetadataPrefix+uploadID).Result()
-	if exists == 0 {
+	_, err := getChunkMetadata(c.Request.Context(), uploadID)
+	if err != nil {
 		api_response.Error(c, http.StatusNotFound, "Upload session not found or expired")
 		return
 	}
@@ -423,11 +418,6 @@ func GetUploadStatus(c *gin.Context) {
 		return
 	}
 
-	if db.Redis == nil {
-		api_response.Error(c, http.StatusInternalServerError, "Redis is required for chunked uploads")
-		return
-	}
-
 	ctx := c.Request.Context()
 	meta, err := getChunkMetadata(ctx, uploadID)
 	if err != nil {
@@ -495,10 +485,12 @@ func getMimesForCategory(category string) []string {
 
 func getChunkMetadata(ctx context.Context, uploadID string) (chunkedChunkMetadata, error) {
 	var meta chunkedChunkMetadata
-	if db.Redis == nil {
-		return meta, fmt.Errorf("redis not available")
+	rc, err := storage.GlobalStorage.Download(ctx, fmt.Sprintf("temp/%s/meta.json", uploadID))
+	if err != nil {
+		return meta, err
 	}
-	val, err := db.Redis.Get(ctx, uploadChunkMetadataPrefix+uploadID).Bytes()
+	defer rc.Close()
+	val, err := io.ReadAll(rc)
 	if err != nil {
 		return meta, err
 	}
@@ -596,7 +588,5 @@ func cleanupChunkSession(uploadID string, chunks []chunkedChunkEntry) {
 	for _, chunk := range chunks {
 		_ = storage.GlobalStorage.Delete(bgCtx, chunk.path)
 	}
-	if db.Redis != nil {
-		db.Redis.Del(bgCtx, uploadChunkMetadataPrefix+uploadID)
-	}
+	_ = storage.GlobalStorage.Delete(bgCtx, fmt.Sprintf("temp/%s/meta.json", uploadID))
 }

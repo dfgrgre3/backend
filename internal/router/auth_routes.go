@@ -10,6 +10,9 @@ import (
 func SetupAuthRoutes(router *gin.Engine) {
 	auth := router.Group("/api/auth")
 	{
+		// Guest user creation (no auth required)
+		auth.GET("/guest", handlers.GetGuestUser)
+
 		// Protected auth routes (uses Clerk RS256 JWT tokens via middleware)
 		auth.Use(middleware.Auth())
 		{
