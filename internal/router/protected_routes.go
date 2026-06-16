@@ -105,9 +105,11 @@ func SetupProtectedRoutes(router *gin.Engine) {
 		// Upload
 		protected.POST("/upload/presign", handlers.PresignUpload)
 		protected.POST(pathUpload, handlers.Upload)
+		protected.DELETE(pathUpload, handlers.DeleteUpload)
 		protected.POST(pathUploadChunked, handlers.UploadChunked)
 		protected.PUT(pathUploadChunked, handlers.UploadChunked)
 		protected.PATCH(pathUploadChunked, handlers.UploadChunked)
+		protected.GET("/upload/chunked/:uploadId/status", handlers.GetUploadStatus)
 
 		// Exam routes
 		protected.POST("/exams/:id/submit", handlers.SubmitExam)

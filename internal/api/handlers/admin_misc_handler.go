@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,8 +11,6 @@ import (
 
 	"encoding/csv"
 	"encoding/json"
-	"io"
-	"sort"
 	"strings"
 
 	api_response "thanawy-backend/internal/api/response"
@@ -23,12 +20,10 @@ import (
 	"thanawy-backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"runtime"
 	"sync"
 )
 
-const uploadMetadataKeyPrefix = "upload_metadata:"
 const coalesceSumDuration = "COALESCE(SUM(duration_min), 0)"
 
 // AdminAI handles all AI-related admin operations
@@ -306,110 +301,7 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-func Upload(c *gin.Context) {
-	file, err := c.FormFile("file")
-	if err != nil {
-		api_response.Error(c, http.StatusBadRequest, "No file uploaded")
-		return
-	}
-
-	uploadDir := "uploads"
-	if _, err := os.Stat(uploadDir); os.IsNotExist(err) {
-		err = os.MkdirAll(uploadDir, 0755)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create upload directory"})
-			return
-		}
-	}
-
-	ext := strings.ToLower(filepath.Ext(file.Filename))
-
-	allowedExts := map[string]bool{
-		".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true,
-		".pdf": true, ".doc": true, ".docx": true,
-		".mp4": true, ".mp3": true,
-	}
-
-	if !allowedExts[ext] {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "File type not allowed"})
-		return
-	}
-
-	f, err := file.Open()
-	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to open file")
-		return
-	}
-	defer f.Close()
-
-	// Perform strict Magic Number validation
-	allowedMimes := []string{
-		"image/jpeg", "image/png", "image/gif", "image/webp",
-		"application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-		"video/mp4", "audio/mpeg",
-	}
-	isValid, detectedMime, err := db.ValidateMagicNumber(f, allowedMimes)
-	if err != nil || !isValid {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "File content does not match its extension (Magic Number mismatch)", "detected": detectedMime})
-		return
-	}
-
-	filename := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
-
-	url, err := storage.GlobalStorage.Upload(c.Request.Context(), filename, f, file.Size, file.Header.Get("Content-Type"))
-	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to upload file")
-		return
-	}
-
-	api_response.Success(c, gin.H{
-		"fileUrl": url,
-	})
-}
-
-// PresignUpload generates a pre-signed URL for direct browser-to-S3 upload.
-// The frontend uploads the file directly to S3/R2, then sends the key back to the backend.
-func PresignUpload(c *gin.Context) {
-	var req struct {
-		FileName    string `json:"fileName" binding:"required"`
-		ContentType string `json:"contentType" binding:"required"`
-		FileSize    int64  `json:"fileSize"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api_response.Error(c, http.StatusBadRequest, "fileName and contentType are required")
-		return
-	}
-
-	ext := strings.ToLower(filepath.Ext(req.FileName))
-	allowedExts := map[string]bool{
-		".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true,
-		".pdf": true, ".doc": true, ".docx": true,
-		".mp4": true, ".mp3": true,
-	}
-	if !allowedExts[ext] {
-		api_response.Error(c, http.StatusBadRequest, "File type not allowed")
-		return
-	}
-
-	filename := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
-	presignedURL, err := storage.GlobalStorage.GeneratePresignedUploadURL(
-		c.Request.Context(),
-		filename,
-		req.ContentType,
-		15*time.Minute,
-	)
-	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to generate upload URL")
-		return
-	}
-
-	publicURL, _ := storage.GlobalStorage.GetURL(c.Request.Context(), filename)
-	api_response.Success(c, gin.H{
-		"uploadUrl": presignedURL,
-		"fileKey":   filename,
-		"publicUrl": publicURL,
-	})
-}
+// Upload and PresignUpload are implemented in upload_handler.go
 
 func AdminExamsBulkUpload(c *gin.Context) {
 	file, err := c.FormFile("file")
@@ -487,226 +379,7 @@ func AdminExamsBulkUpload(c *gin.Context) {
 	LogAudit(c, "BULK_UPLOAD_EXAM", "exam", exam.ID, gin.H{"importedCount": importedCount})
 }
 
-func UploadChunked(c *gin.Context) {
-	switch c.Request.Method {
-	case http.MethodPost:
-		handlePostInitChunked(c)
-	case http.MethodPut:
-		handlePutUploadChunk(c)
-	case http.MethodPatch:
-		handlePatchMergeChunks(c)
-	default:
-		c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Method not allowed"})
-	}
-}
-
-type chunkMetadata struct {
-	FileName  string `json:"fileName"`
-	FileType  string `json:"fileType"`
-	FileSize  int64  `json:"fileSize"`
-	ChunkSize int    `json:"chunkSize"`
-}
-
-type chunkEntry struct {
-	index int
-	path  string
-}
-
-func handlePostInitChunked(c *gin.Context) {
-	var req chunkMetadata
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api_response.Error(c, http.StatusBadRequest, "Invalid request parameters")
-		return
-	}
-
-	uploadID := uuid.New().String()
-	metadataBytes, _ := json.Marshal(req)
-
-	if db.Redis == nil {
-		api_response.Error(c, http.StatusInternalServerError, "Redis is required for chunked uploads")
-		return
-	}
-	db.Redis.Set(c.Request.Context(), uploadMetadataKeyPrefix+uploadID, metadataBytes, 24*time.Hour)
-
-	api_response.Success(c, gin.H{"uploadId": uploadID})
-}
-
-func handlePutUploadChunk(c *gin.Context) {
-	uploadID := c.PostForm("uploadId")
-	chunkIndexStr := c.PostForm("chunkIndex")
-	if uploadID == "" || chunkIndexStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing uploadId or chunkIndex"})
-		return
-	}
-
-	file, err := c.FormFile("chunk")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No chunk file found in request"})
-		return
-	}
-
-	f, err := file.Open()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open chunk"})
-		return
-	}
-	defer f.Close()
-
-	chunkPath := fmt.Sprintf("temp/%s/%s", uploadID, chunkIndexStr)
-	_, err = storage.GlobalStorage.Upload(c.Request.Context(), chunkPath, f, file.Size, "application/octet-stream")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save chunk to storage", "details": err.Error()})
-		return
-	}
-
-	api_response.Success(c, nil)
-}
-
-func handlePatchMergeChunks(c *gin.Context) {
-	var req struct {
-		UploadID string `json:"uploadId"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
-		return
-	}
-
-	ctx := c.Request.Context()
-	metadata, err := getUploadMetadata(ctx, req.UploadID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired uploadId"})
-		return
-	}
-
-	chunks, err := getSortedChunks(ctx, req.UploadID)
-	if err != nil || len(chunks) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No chunks found for this upload"})
-		return
-	}
-
-	url, err := assembleAndUploadFinalFile(ctx, req.UploadID, metadata, chunks)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	api_response.Success(c, gin.H{"fileUrl": url})
-}
-
-func getUploadMetadata(ctx context.Context, uploadID string) (chunkMetadata, error) {
-	var metadata chunkMetadata
-	if db.Redis == nil {
-		return metadata, fmt.Errorf("Redis is required for chunked uploads")
-	}
-	val, err := db.Redis.Get(ctx, uploadMetadataKeyPrefix+uploadID).Bytes()
-	if err != nil {
-		return metadata, err
-	}
-	json.Unmarshal(val, &metadata)
-	return metadata, nil
-}
-
-func getSortedChunks(ctx context.Context, uploadID string) ([]chunkEntry, error) {
-	chunkPrefix := fmt.Sprintf("temp/%s/", uploadID)
-	chunkFiles, err := storage.GlobalStorage.List(ctx, chunkPrefix)
-	if err != nil {
-		return nil, err
-	}
-
-	var chunks []chunkEntry
-	for _, path := range chunkFiles {
-		parts := strings.Split(path, "/")
-		if len(parts) < 3 {
-			continue
-		}
-		idx, err := strconv.Atoi(parts[len(parts)-1])
-		if err != nil {
-			continue
-		}
-		chunks = append(chunks, chunkEntry{index: idx, path: path})
-	}
-
-	sort.Slice(chunks, func(i, j int) bool {
-		return chunks[i].index < chunks[j].index
-	})
-	return chunks, nil
-}
-
-type chunkStreamReader struct {
-	chunks        []chunkEntry
-	currentIdx    int
-	currentReader io.ReadCloser
-	downloadFn    func(chunkPath string) (io.ReadCloser, error)
-}
-
-func (r *chunkStreamReader) Read(p []byte) (n int, err error) {
-	for {
-		if r.currentReader == nil {
-			if r.currentIdx >= len(r.chunks) {
-				return 0, io.EOF
-			}
-			chunkPath := r.chunks[r.currentIdx].path
-			rc, err := r.downloadFn(chunkPath)
-			if err != nil {
-				return 0, fmt.Errorf("failed to download chunk %s: %w", chunkPath, err)
-			}
-			r.currentReader = rc
-		}
-
-		n, err = r.currentReader.Read(p)
-		if err == io.EOF {
-			_ = r.currentReader.Close()
-			r.currentReader = nil
-			r.currentIdx++
-			if n > 0 {
-				return n, nil
-			}
-			continue
-		}
-		return n, err
-	}
-}
-
-func (r *chunkStreamReader) Close() error {
-	if r.currentReader != nil {
-		err := r.currentReader.Close()
-		r.currentReader = nil
-		return err
-	}
-	return nil
-}
-
-func assembleAndUploadFinalFile(ctx context.Context, uploadID string, metadata chunkMetadata, chunks []chunkEntry) (string, error) {
-	ext := strings.ToLower(filepath.Ext(metadata.FileName))
-	finalFilename := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
-
-	stream := &chunkStreamReader{
-		chunks: chunks,
-		downloadFn: func(chunkPath string) (io.ReadCloser, error) {
-			return storage.GlobalStorage.Download(ctx, chunkPath)
-		},
-	}
-	defer stream.Close()
-
-	url, err := storage.GlobalStorage.Upload(ctx, finalFilename, stream, metadata.FileSize, metadata.FileType)
-	if err != nil {
-		return "", fmt.Errorf("failed to upload final file: %w", err)
-	}
-
-	go cleanupChunkedUpload(uploadID, chunks)
-
-	return url, nil
-}
-
-func cleanupChunkedUpload(uploadID string, chunks []chunkEntry) {
-	bgCtx := context.Background()
-	for _, chunk := range chunks {
-		storage.GlobalStorage.Delete(bgCtx, chunk.path)
-	}
-	if db.Redis != nil {
-		db.Redis.Del(bgCtx, uploadMetadataKeyPrefix+uploadID)
-	}
-}
+// UploadChunked and all chunk helpers are implemented in upload_handler.go
 
 func MarkActivityRead(c *gin.Context) {
 	userId, exists := c.Get("userId")
