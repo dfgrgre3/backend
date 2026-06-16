@@ -564,6 +564,8 @@ func CORS() gin.HandlerFunc {
 			"http://localhost:3001",
 			"https://thanawy.net",
 			"https://www.thanawy.net",
+			"https://tolo.app",
+			"https://www.tolo.app",
 			"https://tolo-blond.vercel.app",
 			"https://admin-lime-omega-38.vercel.app",
 		}
