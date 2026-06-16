@@ -40,6 +40,32 @@ type Config struct {
 	ClerkJWKSURL       string
 	InternalIPRanges   []string
 	ImpersonationSecret string
+
+	// HTTP Server Timeouts
+	HTTPReadTimeout  string
+	HTTPWriteTimeout string
+	HTTPIdleTimeout  string
+
+	// Trust Proxy
+	TrustProxy     bool
+	TrustedProxies []string
+
+	// Rate Limiting
+	RateLimitRequests int
+	RateLimitWindow   string
+
+	// Cookie Security
+	CookieSecure   bool
+	CookieSameSite string
+
+	// App Env
+	AppEnv string
+
+	// Sentry DSN
+	SentryDSN string
+
+	// App Version
+	AppVersion string
 }
 
 func Load() *Config {
@@ -111,6 +137,35 @@ func Load() *Config {
 	c.ClerkSecretKey = getEnv("CLERK_SECRET_KEY", "")
 	c.ClerkJWKSURL = getEnv("CLERK_JWKS_URL", "")
 	c.ImpersonationSecret = getEnv("IMPERSONATION_SECRET", "")
+
+	// Stability & Production configurations
+	c.HTTPReadTimeout = getEnv("HTTP_READ_TIMEOUT", "10s")
+	c.HTTPWriteTimeout = getEnv("HTTP_WRITE_TIMEOUT", "30s")
+	c.HTTPIdleTimeout = getEnv("HTTP_IDLE_TIMEOUT", "120s")
+
+	c.TrustProxy = getEnv("TRUST_PROXY", "true") == "true"
+	trustedProxiesRaw := getEnv("TRUSTED_PROXIES", "")
+	if trustedProxiesRaw != "" {
+		parts := strings.Split(trustedProxiesRaw, ",")
+		c.TrustedProxies = make([]string, 0, len(parts))
+		for _, p := range parts {
+			trimmed := strings.TrimSpace(p)
+			if trimmed != "" {
+				c.TrustedProxies = append(c.TrustedProxies, trimmed)
+			}
+		}
+	}
+
+	c.RateLimitRequests = getEnvInt("RATE_LIMIT_REQUESTS", 200)
+	c.RateLimitWindow = getEnv("RATE_LIMIT_WINDOW", "1m")
+
+	c.CookieSecure = getEnv("COOKIE_SECURE", "false") == "true"
+	c.CookieSameSite = getEnv("COOKIE_SAME_SITE", "lax")
+
+	c.AppEnv = getEnv("APP_ENV", environment)
+
+	c.SentryDSN = getEnv("SENTRY_DSN", "")
+	c.AppVersion = getEnv("APP_VERSION", "1.0.0")
 
 	// IP Whitelist Config
 	// Standard RFC 1918 and loopback ranges used as defaults
@@ -201,6 +256,35 @@ func LoadSafe() (*Config, error) {
 	c.ClerkJWKSURL = getEnv("CLERK_JWKS_URL", "")
 	c.ImpersonationSecret = getEnv("IMPERSONATION_SECRET", "")
 
+	// Stability & Production configurations
+	c.HTTPReadTimeout = getEnv("HTTP_READ_TIMEOUT", "10s")
+	c.HTTPWriteTimeout = getEnv("HTTP_WRITE_TIMEOUT", "30s")
+	c.HTTPIdleTimeout = getEnv("HTTP_IDLE_TIMEOUT", "120s")
+
+	c.TrustProxy = getEnv("TRUST_PROXY", "true") == "true"
+	trustedProxiesSafeRaw := getEnv("TRUSTED_PROXIES", "")
+	if trustedProxiesSafeRaw != "" {
+		parts := strings.Split(trustedProxiesSafeRaw, ",")
+		c.TrustedProxies = make([]string, 0, len(parts))
+		for _, p := range parts {
+			trimmed := strings.TrimSpace(p)
+			if trimmed != "" {
+				c.TrustedProxies = append(c.TrustedProxies, trimmed)
+			}
+		}
+	}
+
+	c.RateLimitRequests = getEnvInt("RATE_LIMIT_REQUESTS", 200)
+	c.RateLimitWindow = getEnv("RATE_LIMIT_WINDOW", "1m")
+
+	c.CookieSecure = getEnv("COOKIE_SECURE", "false") == "true"
+	c.CookieSameSite = getEnv("COOKIE_SAME_SITE", "lax")
+
+	c.AppEnv = getEnv("APP_ENV", environment)
+
+	c.SentryDSN = getEnv("SENTRY_DSN", "")
+	c.AppVersion = getEnv("APP_VERSION", "1.0.0")
+
 	defaultRanges := []string{
 		"127.0.0.1/8",
 		"10.0.0.0/8",
@@ -218,6 +302,20 @@ func LoadSafe() (*Config, error) {
 	}
 
 	return c, nil
+}
+
+func getEnvInt(key string, defaultVal int) int {
+	valStr := getEnv(key, "")
+	if valStr == "" {
+		return defaultVal
+	}
+	importStr := strings.TrimSpace(valStr)
+	var val int
+	_, err := fmt.Sscanf(importStr, "%d", &val)
+	if err != nil {
+		return defaultVal
+	}
+	return val
 }
 
 // generateRandomString generates a random string for dev secrets

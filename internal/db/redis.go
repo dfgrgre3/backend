@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"crypto/tls"
 	"os"
 	"strconv"
 	"time"
@@ -22,6 +23,11 @@ func ConnectRedis(url string) {
 	if err != nil {
 		log.Printf("Failed to parse Redis URL: %v", err)
 		return
+	}
+
+	// Force TLS if REDIS_TLS environment variable is set to true
+	if os.Getenv("REDIS_TLS") == "true" && opts.TLSConfig == nil {
+		opts.TLSConfig = &tls.Config{}
 	}
 
 	// Configure Redis connection pooling for massive scale. Defaults are safe for

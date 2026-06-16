@@ -33,6 +33,8 @@ import (
 	"thanawy-backend/internal/worker"
 
 	"github.com/gin-gonic/gin"
+	"github.com/getsentry/sentry-go"
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -60,6 +62,22 @@ func main() {
 	// Initialize Configuration
 	cfg := config.Load()
 	config.GlobalConfig = cfg
+
+	// Initialize Sentry SDK early
+	if cfg.SentryDSN != "" {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:              cfg.SentryDSN,
+			Environment:      cfg.AppEnv,
+			Release:          cfg.AppVersion,
+			AttachStacktrace: true,
+		}); err != nil {
+			log.Printf("Sentry initialization failed: %v\n", err)
+		} else {
+			log.Println("Sentry SDK initialized successfully")
+			// Flush buffered events before the program terminates
+			defer sentry.Flush(2 * time.Second)
+		}
+	}
 
 	// Initialize Database with explicit Read/Write DSNs for CQRS
 	_, err := connectDatabaseWithRetry(cfg)
@@ -152,12 +170,25 @@ func main() {
 			port = "8082"
 		}
 
+		readTimeout, err := time.ParseDuration(cfg.HTTPReadTimeout)
+		if err != nil {
+			readTimeout = 10 * time.Second
+		}
+		writeTimeout, err := time.ParseDuration(cfg.HTTPWriteTimeout)
+		if err != nil {
+			writeTimeout = 30 * time.Second
+		}
+		idleTimeout, err := time.ParseDuration(cfg.HTTPIdleTimeout)
+		if err != nil {
+			idleTimeout = 120 * time.Second
+		}
+
 		srv = &http.Server{
 			Addr:         ":" + port,
 			Handler:      r,
-			ReadTimeout:  10 * time.Second,
-			WriteTimeout: 30 * time.Second,
-			IdleTimeout:  120 * time.Second,
+			ReadTimeout:  readTimeout,
+			WriteTimeout: writeTimeout,
+			IdleTimeout:  idleTimeout,
 		}
 
 		// Run server in goroutine
@@ -266,12 +297,41 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	}
 	r := gin.New()
 
+	if cfg.SentryDSN != "" {
+		r.Use(sentrygin.New(sentrygin.Options{
+			Repanic: true,
+		}))
+	}
+
+	if cfg.TrustProxy {
+		if len(cfg.TrustedProxies) > 0 {
+			if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+				log.Printf("WARNING: Failed to set trusted proxies: %v", err)
+			} else {
+				log.Printf("Trusted proxies configured: %v", cfg.TrustedProxies)
+			}
+		} else {
+			// Trust all proxies (Gin default) but set explicitly to suppress startup warning
+			_ = r.SetTrustedProxies([]string{"0.0.0.0/0", "::/0"})
+			log.Println("Trusting all proxies (0.0.0.0/0, ::/0)")
+		}
+	} else {
+		_ = r.SetTrustedProxies(nil)
+		log.Println("Proxy trusting disabled (SetTrustedProxies(nil))")
+	}
+
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 	r.Use(middleware.CORS())
 	r.Use(middleware.ValidateSecrets(middleware.DefaultSecretsValidatorConfig()))
 	r.Use(middleware.PerformanceMonitor())
-	r.Use(middleware.GlobalRateLimiter(200, time.Minute))
+
+	rateLimitWindow, err := time.ParseDuration(cfg.RateLimitWindow)
+	if err != nil {
+		rateLimitWindow = time.Minute
+	}
+	r.Use(middleware.GlobalRateLimiter(cfg.RateLimitRequests, rateLimitWindow))
+
 	r.Use(middleware.CSRFMiddleware())
 	r.Use(middleware.DBConsistencyMiddleware(db.DB))
 
