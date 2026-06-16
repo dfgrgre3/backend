@@ -28,6 +28,8 @@ func SetupAuthRoutes(router *gin.Engine) {
 			auth.POST("/2fa/disable", handlers.DisableUser2FA)
 			auth.POST("/verify-phone/send", handlers.SendPhoneVerification)
 			auth.POST("/verify-phone/verify", handlers.VerifyPhoneVerification)
+			// Devices: list all active sessions with device info for the current user
+			auth.GET("/devices", handlers.GetUserDevices)
 		}
 	}
 }

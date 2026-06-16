@@ -827,6 +827,70 @@ func UpdateAuthSession(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
+// GetUserDevices returns a list of devices (sessions) for the authenticated user.
+// Each device entry includes the user-agent, IP, location, and last-active time.
+// @Summary Get user devices
+// @Description Get all registered devices for the current user
+// @Tags Auth
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /api/auth/devices [get]
+func GetUserDevices(c *gin.Context) {
+	userID, exists := c.Get("userId")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var sessions []models.UserSession
+	if err := db.DB.
+		Where("user_id = ? AND is_active = ?", userID, true).
+		Order("last_accessed DESC").
+		Find(&sessions).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch devices"})
+		return
+	}
+
+	type DeviceInfo struct {
+		ID           string  `json:"id"`
+		UserAgent    string  `json:"userAgent"`
+		IP           string  `json:"ip"`
+		Location     *string `json:"location"`
+		LastAccessed string  `json:"lastAccessed"`
+		ExpiresAt    string  `json:"expiresAt"`
+		IsCurrent    bool    `json:"isCurrent"`
+	}
+
+	// Identify the current session via the access token JTI
+	currentJTI := ""
+	if token, err := c.Cookie("access_token"); err == nil {
+		if claims, err := tokenService.ValidateToken(token); err == nil {
+			currentJTI = claims.JTI
+		}
+	}
+
+	devices := make([]DeviceInfo, 0, len(sessions))
+	for _, s := range sessions {
+		devices = append(devices, DeviceInfo{
+			ID:           s.ID,
+			UserAgent:    s.UserAgent,
+			IP:           s.IP,
+			Location:     s.Location,
+			LastAccessed: s.LastAccessed.Format(time.RFC3339),
+			ExpiresAt:    s.ExpiresAt.Format(time.RFC3339),
+			IsCurrent:    s.ID == currentJTI,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"devices": devices,
+			"count":   len(devices),
+		},
+	})
+}
+
 type RegisterRequest struct {
 	Email         string `json:"email" binding:"required,email"`
 	Password      string `json:"password" binding:"required,min=8"`
@@ -1875,21 +1939,76 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 
 	dbUserID := services.ClerkIDToUUID(userId)
 
+	// Extract metadata fields from public_metadata or unsafe_metadata
+	role := models.RoleStudent
+	var phone, country, gradeLevel, educationType string
+	var dateOfBirth *time.Time
+	var interestedSubjects []string
+
+	// Try extracting from public_metadata first
+	if publicMetadata, ok := clerkData["public_metadata"].(map[string]interface{}); ok {
+		if r, ok := publicMetadata["role"].(string); ok && r != "" {
+			role = models.UserRole(strings.ToUpper(r))
+		}
+	}
+
+	// Try extracting from unsafe_metadata (which is set by our frontend sign-up form)
+	var unsafeMetadata map[string]interface{}
+	if um, ok := clerkData["unsafe_metadata"].(map[string]interface{}); ok {
+		unsafeMetadata = um
+		if r, ok := unsafeMetadata["role"].(string); ok && r != "" {
+			role = models.UserRole(strings.ToUpper(r))
+		}
+		if p, ok := unsafeMetadata["phone"].(string); ok {
+			phone = p
+		}
+		if c, ok := unsafeMetadata["country"].(string); ok {
+			country = c
+		}
+		if g, ok := unsafeMetadata["gradeLevel"].(string); ok {
+			gradeLevel = g
+		}
+		if e, ok := unsafeMetadata["educationType"].(string); ok {
+			educationType = e
+		}
+		if dob, ok := unsafeMetadata["dateOfBirth"].(string); ok && dob != "" {
+			if parsedDob, err := time.Parse("2006-01-02", dob); err == nil {
+				dateOfBirth = &parsedDob
+			}
+		}
+		if is, ok := unsafeMetadata["interestedSubjects"].([]interface{}); ok {
+			for _, item := range is {
+				if s, ok := item.(string); ok {
+					interestedSubjects = append(interestedSubjects, s)
+				}
+			}
+		}
+	}
+
 	user := models.User{
-		ID:            dbUserID,
-		Email:         primaryEmail,
-		EmailVerified: true,
-		Status:        models.StatusActive,
-		Role:          models.RoleStudent,
-		Balance:       0,
-		AiCredits:     0,
-		ExamCredits:   0,
-		TotalXP:       0,
-		Level:         1,
+		ID:                 dbUserID,
+		Email:              primaryEmail,
+		EmailVerified:      true,
+		Status:             models.StatusActive,
+		Role:               role,
+		Balance:            0,
+		AiCredits:          0,
+		ExamCredits:        0,
+		TotalXP:            0,
+		Level:              1,
+		Phone:              &phone,
+		Country:            &country,
+		GradeLevel:         &gradeLevel,
+		EducationType:      &educationType,
+		DateOfBirth:        dateOfBirth,
+		InterestedSubjects: interestedSubjects,
 	}
 
 	if name != "" {
 		user.Name = &name
+	}
+	if avatarUrl, ok := clerkData["image_url"].(string); ok && avatarUrl != "" {
+		user.Avatar = &avatarUrl
 	}
 
 	var existing models.User
@@ -1897,14 +2016,6 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// New user creation
-			role := models.RoleStudent
-			if publicMetadata, ok := clerkData["public_metadata"].(map[string]interface{}); ok {
-				if r, ok := publicMetadata["role"].(string); ok && r != "" {
-					role = models.UserRole(strings.ToUpper(r))
-				}
-			}
-			user.Role = role
-
 			if err := db.DB.Create(&user).Error; err != nil {
 				log.Printf("[Clerk Webhook] Error creating user: %v", err)
 				return err
@@ -1913,23 +2024,35 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 			return err
 		}
 	} else {
-		// Existing user: only update specific fields to preserve database roles/balances/XP
+		// Existing user: update metadata and core profile fields
 		updates := map[string]interface{}{
 			"email":          primaryEmail,
 			"email_verified": true,
+			"role":           role,
 		}
 		if name != "" {
 			updates["name"] = &name
 		}
-		
-		if avatarUrl, ok := clerkData["image_url"].(string); ok && avatarUrl != "" {
-			updates["avatar"] = &avatarUrl
+		if user.Avatar != nil {
+			updates["avatar"] = user.Avatar
 		}
-
-		if publicMetadata, ok := clerkData["public_metadata"].(map[string]interface{}); ok {
-			if r, ok := publicMetadata["role"].(string); ok && r != "" {
-				updates["role"] = models.UserRole(strings.ToUpper(r))
-			}
+		if phone != "" {
+			updates["phone"] = &phone
+		}
+		if country != "" {
+			updates["country"] = &country
+		}
+		if gradeLevel != "" {
+			updates["grade_level"] = &gradeLevel
+		}
+		if educationType != "" {
+			updates["education_type"] = &educationType
+		}
+		if dateOfBirth != nil {
+			updates["date_of_birth"] = dateOfBirth
+		}
+		if len(interestedSubjects) > 0 {
+			updates["interested_subjects"] = interestedSubjects
 		}
 
 		if err := db.DB.Model(&models.User{}).Where("id = ?", dbUserID).Updates(updates).Error; err != nil {
