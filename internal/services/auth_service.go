@@ -95,6 +95,7 @@ func (s *AuthService) Register(input RegisterInput) (*models.User, error) {
 		PasswordHash:  string(hashedPassword),
 		Role:          role,
 		Status:        models.StatusActive,
+		EmailVerified: false,
 		Phone:         &input.Phone,
 		GradeLevel:    &input.GradeLevel,
 		EducationType: &input.EducationType,
@@ -130,9 +131,14 @@ func (s *AuthService) Login(email, password, ip, userAgent string) (*models.User
 		return nil, errors.New("invalid email or password")
 	}
 
-	// Check status (do not leak account status to unauthenticated callers)
+	// Check account is active (do not leak account status to unauthenticated callers)
 	if user.Status != models.StatusActive {
 		return nil, errors.New("invalid email or password")
+	}
+
+	// Require email verification before allowing login
+	if !user.EmailVerified {
+		return nil, errors.New("email not verified")
 	}
 
 	return user, nil

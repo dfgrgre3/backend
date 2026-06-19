@@ -104,6 +104,10 @@ func Login(c *gin.Context) {
 		recordLoginAttempt(c, email, ip, false)
 		services.GetAuditService().LogAsync("", services.AuditEventLoginFailed, "auth", email, map[string]interface{}{"error": err.Error()}, ip, userAgent)
 		_ = LogSecurityEvent("", models.SecurityEventLoginFailed, ip, userAgent, nil, nil)
+		if err.Error() == "email not verified" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "يرجى تأكيد البريد الإلكتروني أولاً. تم إرسال رابط التأكيد إلى بريدك الإلكتروني."})
+			return
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "البريد الإلكتروني أو كلمة المرور غير صحيحة"})
 		return
 	}

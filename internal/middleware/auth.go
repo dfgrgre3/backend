@@ -118,7 +118,7 @@ func Auth() gin.HandlerFunc {
 		tokenService := &services.TokenService{}
 		claims, err := tokenService.ValidateToken(tokenString)
 		if err != nil || claims.Subject == "" {
-			fmt.Printf("[Auth Middleware] Token validation failed: %v, Subject: %q, Token: %s\n", err, claims.Subject, tokenString)
+			log.Printf("[Auth Middleware] Token validation failed: %v (subject: %s)", err, claims.Subject)
 			log.Printf("[Auth Middleware] Token validation failed: %v (claims subject empty: %t)", err, claims == nil || claims.Subject == "")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			return
