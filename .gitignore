@@ -56,6 +56,7 @@ yarn-error.log*
 .eslintcache
 .stylelintcache
 dist/
+.next/
 
 # ==========================================
 # Python Specific
