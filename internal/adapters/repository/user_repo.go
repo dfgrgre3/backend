@@ -218,8 +218,8 @@ func (p *noOpPublisher) Publish(ctx context.Context, event user.UserEvent) error
 func hashPassword(password string) (string, error) {
 	cfg := config.Load()
 	cost := cfg.BCryptCost
-	if cost < bcrypt.MinCost {
-		cost = bcrypt.MinCost
+	if cost < 12 {
+		cost = 12
 	}
 	if cost > bcrypt.MaxCost {
 		cost = bcrypt.MaxCost

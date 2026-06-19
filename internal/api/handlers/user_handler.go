@@ -412,7 +412,9 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	LogAudit(c, "CREATE", "user", user.ID, user)
+	safeUserForAudit := user
+	safeUserForAudit.PasswordHash = ""
+	LogAudit(c, "CREATE", "user", user.ID, safeUserForAudit)
 	api_response.Created(c, user)
 }
 
@@ -1227,8 +1229,8 @@ func sanitizeLog(s string) string {
 func bcryptCostFromConfig() int {
 	cfg := config.Load()
 	cost := cfg.BCryptCost
-	if cost < bcrypt.MinCost {
-		return bcrypt.MinCost
+	if cost < 12 {
+		return 12
 	}
 	if cost > bcrypt.MaxCost {
 		return bcrypt.MaxCost

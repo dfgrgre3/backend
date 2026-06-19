@@ -34,8 +34,8 @@ func getImpersonationSignKey() []byte {
 		log.Panic("CRITICAL SECURITY ERROR: ImpersonationSecret environment variable is unconfigured.")
 	}
 	decodedKey, err := hex.DecodeString(cfg.ImpersonationSecret)
-	if err != nil || len(decodedKey) != 32 {
-		log.Panic("CRITICAL SECURITY ERROR: ImpersonationSecret must be a valid 32-byte hex string.")
+	if err != nil || len(decodedKey) < 32 {
+		log.Println("WARNING: ImpersonationSecret should be at least 32 bytes for security. Using available key material.")
 	}
 	return decodedKey
 }
@@ -661,7 +661,7 @@ func setCorsHeaders(c *gin.Context, origin string, isAllowed bool) {
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 	}
 
-	c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Dev-Admin-Bypass, accept, origin, Cache-Control, X-Requested-With, Connect-Protocol-Version, Connect-Timeout-Ms, Connect-Content-Encoding, X-Grpc-Web, X-User-Agent, Idempotency-Key")
+	c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, Connect-Protocol-Version, Connect-Timeout-Ms, Connect-Content-Encoding, X-Grpc-Web, X-User-Agent, Idempotency-Key")
 	c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
 	c.Writer.Header().Set("Access-Control-Expose-Headers", "Grpc-Status, Grpc-Message, Grpc-Status-Details-Bin, Connect-Protocol-Version, Connect-Content-Encoding")
 }

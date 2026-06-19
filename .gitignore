@@ -28,6 +28,11 @@ bin/
 .env.*
 !.env.example
 
+# Also ensure any .env* in subdirectories is ignored
+**/.env
+**/.env.local
+**/.env.*
+
 # ==========================================
 # Go Specific
 # ==========================================
@@ -118,7 +123,6 @@ Desktop.ini
 desktop.ini
 
 .vercel
-.env*
 *.md
 
 

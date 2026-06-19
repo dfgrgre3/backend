@@ -72,8 +72,8 @@ func (s *AuthService) Register(input RegisterInput) (*models.User, error) {
 	// 3. Hash password
 	cfg := config.Load()
 	cost := cfg.BCryptCost
-	if cost < bcrypt.MinCost {
-		cost = bcrypt.MinCost
+	if cost < 12 {
+		cost = 12
 	}
 	if cost > bcrypt.MaxCost {
 		cost = bcrypt.MaxCost
@@ -178,6 +178,9 @@ func (s *AuthService) RequestMagicLink(email string) (string, error) {
 }
 
 func (s *AuthService) VerifyMagicLink(token string) (*models.User, error) {
+	if !IsValidToken(token) {
+		return nil, errors.New("invalid or expired magic link")
+	}
 	var user models.User
 	if err := db.DB.Where("magic_link_token = ? AND magic_link_expires > ?", token, time.Now()).First(&user).Error; err != nil {
 		return nil, errors.New("invalid or expired magic link")
@@ -217,12 +220,23 @@ func (s *AuthService) RequestPasswordReset(email string) (string, error) {
 }
 
 func (s *AuthService) ResetPassword(token, newPassword string) error {
+	if !IsValidToken(token) {
+		return errors.New("invalid or expired reset token")
+	}
 	var user models.User
 	if err := db.DB.Where("reset_password_token = ? AND reset_password_expires > ?", token, time.Now()).First(&user).Error; err != nil {
 		return errors.New("invalid or expired reset token")
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), 12)
+	cfg := config.Load()
+	cost := cfg.BCryptCost
+	if cost < 12 {
+		cost = 12
+	}
+	if cost > bcrypt.MaxCost {
+		cost = bcrypt.MaxCost
+	}
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), cost)
 	if err != nil {
 		return err
 	}
@@ -258,6 +272,9 @@ func (s *AuthService) RequestEmailVerification(email string) (string, error) {
 }
 
 func (s *AuthService) VerifyEmail(token string) error {
+	if !IsValidToken(token) {
+		return errors.New("invalid or expired verification token")
+	}
 	var user models.User
 	if err := db.DB.Where("verification_token = ? AND verification_expires > ?", token, time.Now()).First(&user).Error; err != nil {
 		return errors.New("invalid or expired verification token")
@@ -268,4 +285,16 @@ func (s *AuthService) VerifyEmail(token string) error {
 	user.VerificationExpires = nil
 
 	return s.getRepo().Update(&user)
+}
+
+func IsValidToken(token string) bool {
+	if len(token) != 43 {
+		return false
+	}
+	for _, r := range token {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
+			return false
+		}
+	}
+	return true
 }

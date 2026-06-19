@@ -37,7 +37,7 @@ func CSRFProtection() gin.HandlerFunc {
 		}
 
 		// For state-changing methods, validate CSRF token
-		if env == "production" && !validateCSRFToken(c) {
+		if !validateCSRFToken(c) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error": "CSRF token validation failed",
 			})

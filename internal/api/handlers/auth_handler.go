@@ -30,11 +30,10 @@ func InitAuthService(repo *repository.UserRepository) {
 	authService = services.NewAuthService(repo)
 }
 
-// setAuthCookie writes an HttpOnly, SameSite=Lax auth cookie.
-// Using SameSite=Lax prevents CSRF on state-changing requests while still
-// allowing top-level GET navigations (e.g. OAuth redirects).
+// setAuthCookie writes an HttpOnly, SameSite=Strict auth cookie.
+// Using SameSite=Strict prevents CSRF on state-changing requests.
 func setAuthCookie(c *gin.Context, name, value string, maxAgeSec int) {
-	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie(name, value, maxAgeSec, "/", "", isProduction(), true)
 }
 
@@ -154,7 +153,7 @@ func Login(c *gin.Context) {
 	}
 
 	activeSessions, _ := getSessionRepo().GetActiveSessions(user.ID)
-	if len(activeSessions) >= 2 {
+	if len(activeSessions) >= 5 {
 		oldestIdx := 0
 		for i, s := range activeSessions {
 			if s.LastAccessed.Before(activeSessions[oldestIdx].LastAccessed) {
@@ -332,7 +331,7 @@ func RequestMagicLink(c *gin.Context) {
 		return
 	}
 
-	token, err := authService.RequestMagicLink(req.Email)
+	_, err := authService.RequestMagicLink(req.Email)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": "If an account exists, a link has been sent."})
 		return
@@ -344,9 +343,7 @@ func RequestMagicLink(c *gin.Context) {
 		"success": true,
 		"message": "Magic link sent successfully",
 	}
-	if !isProduction() {
-		log.Printf("[DEBUG] Magic link token generated: %s", token)
-	}
+
 	c.JSON(http.StatusOK, response)
 }
 
@@ -354,6 +351,11 @@ func VerifyMagicLink(c *gin.Context) {
 	token := c.Query("token")
 	if token == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Token is required"})
+		return
+	}
+
+	if !services.IsValidToken(token) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired magic link"})
 		return
 	}
 
@@ -400,7 +402,7 @@ func ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	token, err := authService.RequestPasswordReset(req.Email)
+	_, err := authService.RequestPasswordReset(req.Email)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": "If an account exists, a reset link has been sent."})
 		return
@@ -412,9 +414,7 @@ func ForgotPassword(c *gin.Context) {
 		"success": true,
 		"message": "Password reset link sent",
 	}
-	if !isProduction() {
-		log.Printf("[DEBUG] Password reset token generated: %s", token)
-	}
+
 	c.JSON(http.StatusOK, response)
 }
 
@@ -425,6 +425,11 @@ func ResetPassword(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	if !services.IsValidToken(req.Token) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired reset token"})
 		return
 	}
 
@@ -440,6 +445,11 @@ func VerifyEmail(c *gin.Context) {
 	token := c.Query("token")
 	if token == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Token is required"})
+		return
+	}
+
+	if !services.IsValidToken(token) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired verification token"})
 		return
 	}
 
@@ -460,7 +470,7 @@ func ResendVerification(c *gin.Context) {
 		return
 	}
 
-	token, err := authService.RequestEmailVerification(req.Email)
+	_, err := authService.RequestEmailVerification(req.Email)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to generate verification link"})
 		return
@@ -470,9 +480,7 @@ func ResendVerification(c *gin.Context) {
 		"success": true,
 		"message": "Verification email sent",
 	}
-	if !isProduction() {
-		log.Printf("[DEBUG] Verification token generated: %s", token)
-	}
+
 	c.JSON(http.StatusOK, response)
 }
 

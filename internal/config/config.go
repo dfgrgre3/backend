@@ -107,7 +107,7 @@ func Load() *Config {
 		JWTSecret:            jwtSecret,
 		JWTRefreshSecret:     jwtRefreshSecret,
 		Environment:          environment,
-		BCryptCost:           getEnvInt("BCRYPT_COST", 10),
+		BCryptCost:           getEnvInt("BCRYPT_COST", 12),
 		StorageType:          getEnv("STORAGE_TYPE", "s3"),
 	}
 
