@@ -174,7 +174,7 @@ func OptionalAuth() gin.HandlerFunc {
 		tokenService := &services.TokenService{}
 		claims, err := tokenService.ValidateToken(tokenString)
 		if err != nil || claims.Subject == "" {
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			return
 		}
 

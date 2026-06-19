@@ -347,32 +347,22 @@ func VerifyTwoFactorLogin(c *gin.Context) {
 	ip := c.ClientIP()
 	var userID string
 
-	if db.Redis != nil {
-		challengeKey := fmt.Sprintf("2fa_challenge:%s", req.ChallengeID)
-		ctx := c.Request.Context()
-
-		// Read and atomically delete the key (one-time use)
-		val, err := db.Redis.GetDel(ctx, challengeKey).Result()
-		if err != nil || val == "" {
-			_ = LogSecurityEvent("", models.SecurityEvent2FAFailed, ip, c.Request.UserAgent(), nil, nil)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired challenge. Please sign in again."})
-			return
-		}
-		userID = val
-	} else {
-		// Redis unavailable: fall back to extracting userID from the session context
-		userIDVal, ok := c.Get("userId")
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-			return
-		}
-		var cast bool
-		userID, cast = userIDVal.(string)
-		if !cast || userID == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-			return
-		}
+	if db.Redis == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Authentication service is temporarily unavailable (Redis connection required for 2FA)"})
+		return
 	}
+
+	challengeKey := fmt.Sprintf("2fa_challenge:%s", req.ChallengeID)
+	ctx := c.Request.Context()
+
+	// Read and atomically delete the key (one-time use)
+	val, err := db.Redis.GetDel(ctx, challengeKey).Result()
+	if err != nil || val == "" {
+		_ = LogSecurityEvent("", models.SecurityEvent2FAFailed, ip, c.Request.UserAgent(), nil, nil)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired challenge. Please sign in again."})
+		return
+	}
+	userID = val
 
 	var email string
 	if userID != "" && db.DB != nil {

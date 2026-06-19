@@ -92,10 +92,10 @@ func (r *SessionRepository) RevokeAllUserSessions(userID string) error {
 		}).Error
 }
 
-// RevokeSessionByJTI revokes a specific session by its ID (JTI).
-func (r *SessionRepository) RevokeSessionByJTI(jti string) error {
+// RevokeSessionByJTI revokes a specific session by its ID (JTI) and ensures it belongs to the given user.
+func (r *SessionRepository) RevokeSessionByJTI(jti string, userID string) error {
 	return r.db.Model(&models.UserSession{}).
-		Where("id = ? AND is_active = ?", jti, true).
+		Where("id = ? AND user_id = ? AND is_active = ?", jti, userID, true).
 		Updates(map[string]interface{}{
 			"is_active":  false,
 			"status":     "revoked",

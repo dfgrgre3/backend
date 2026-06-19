@@ -84,11 +84,16 @@ func (s *AuthService) Register(input RegisterInput) (*models.User, error) {
 	}
 
 	// 4. Create user
+	role := input.Role
+	if role == models.RoleAdmin || role == models.RoleSuperAdmin {
+		role = models.RoleStudent
+	}
+
 	user := models.User{
 		Email:         email,
 		Username:      &input.Username,
 		PasswordHash:  string(hashedPassword),
-		Role:          input.Role,
+		Role:          role,
 		Status:        models.StatusActive,
 		Phone:         &input.Phone,
 		GradeLevel:    &input.GradeLevel,

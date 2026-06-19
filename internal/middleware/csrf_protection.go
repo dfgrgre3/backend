@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
-	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -99,8 +99,7 @@ func validateCSRFToken(c *gin.Context) bool {
 func generateCSRFToken() string {
 	bytes := make([]byte, csrfTokenLength)
 	if _, err := rand.Read(bytes); err != nil {
-		// Fallback to less secure but still usable token
-		return fmt.Sprintf("%d", time.Now().UnixNano())
+		log.Panic("CRITICAL: Failed to generate secure random bytes for CSRF token")
 	}
 	return base64.URLEncoding.EncodeToString(bytes)
 }

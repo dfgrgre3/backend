@@ -162,7 +162,7 @@ func Login(c *gin.Context) {
 			}
 		}
 		_ = LogSecurityEvent(user.ID, "DEVICE_LIMIT_REACHED", ip, userAgent, location, nil)
-		_ = getSessionRepo().RevokeSessionByJTI(activeSessions[oldestIdx].ID)
+		_ = getSessionRepo().RevokeSessionByJTI(activeSessions[oldestIdx].ID, user.ID)
 	}
 
 	if err := getSessionRepo().Create(session); err != nil {
@@ -345,8 +345,7 @@ func RequestMagicLink(c *gin.Context) {
 		"message": "Magic link sent successfully",
 	}
 	if !isProduction() {
-		link := "/verify-magic-link?token=" + token
-		response["debug"] = link
+		log.Printf("[DEBUG] Magic link token generated: %s", token)
 	}
 	c.JSON(http.StatusOK, response)
 }
@@ -414,7 +413,7 @@ func ForgotPassword(c *gin.Context) {
 		"message": "Password reset link sent",
 	}
 	if !isProduction() {
-		response["debug"] = "/reset-password?token=" + token
+		log.Printf("[DEBUG] Password reset token generated: %s", token)
 	}
 	c.JSON(http.StatusOK, response)
 }
@@ -472,7 +471,7 @@ func ResendVerification(c *gin.Context) {
 		"message": "Verification email sent",
 	}
 	if !isProduction() {
-		response["debug"] = "/verify-email?token=" + token
+		log.Printf("[DEBUG] Verification token generated: %s", token)
 	}
 	c.JSON(http.StatusOK, response)
 }
@@ -602,7 +601,7 @@ func RefreshToken(c *gin.Context) {
 			return
 		}
 		if session.IsExpired() {
-			_ = getSessionRepo().RevokeSessionByJTI(session.ID)
+			_ = getSessionRepo().RevokeSessionByJTI(session.ID, session.UserID)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired"})
 			return
 		}
@@ -657,7 +656,7 @@ func RefreshToken(c *gin.Context) {
 			}(refreshMetaKey(newTokenHash), payload)
 		}
 	} else {
-		_ = getSessionRepo().RevokeSessionByJTI(sessionID)
+		_ = getSessionRepo().RevokeSessionByJTI(sessionID, userID)
 		_ = getSessionRepo().Create(&models.UserSession{
 			ID:           tokens.JTI,
 			UserID:       user.ID,
@@ -689,7 +688,7 @@ func RefreshToken(c *gin.Context) {
 func Logout(c *gin.Context) {
 	if token, err := c.Cookie("access_token"); err == nil {
 		if claims, err := tokenService.ValidateToken(token); err == nil {
-			_ = getSessionRepo().RevokeSessionByJTI(claims.JTI)
+			_ = getSessionRepo().RevokeSessionByJTI(claims.JTI, claims.Subject)
 			services.GetAuditService().LogAsync(claims.Subject, services.AuditEventLogout, "auth", claims.Subject, nil, c.ClientIP(), c.Request.UserAgent())
 		}
 	}
@@ -740,7 +739,7 @@ func DeleteAuthSession(c *gin.Context) {
 		return
 	}
 
-	if err := getSessionRepo().RevokeSessionByJTI(sessionID); err != nil {
+	if err := getSessionRepo().RevokeSessionByJTI(sessionID, userID.(string)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revoke session"})
 		return
 	}
@@ -860,7 +859,7 @@ func Register(c *gin.Context) {
 		"message": "Registration successful. Please verify your email.",
 	}
 	if !isProduction() {
-		response["debug"] = "/verify-email?token=" + token
+		log.Printf("[DEBUG] Registration verification token generated: %s", token)
 	}
 	c.JSON(http.StatusCreated, response)
 }

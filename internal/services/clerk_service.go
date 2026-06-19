@@ -132,15 +132,15 @@ func ProvisionUserFromClerk(userId string) (*models.User, error) {
 	return user, err
 }
 
-// parseAndValidateClerkRole parses the raw role value from Clerk metadata and
-// returns a valid UserRole. Any unknown, empty, or manipulated value falls back
-// to STUDENT — never trusts Clerk metadata for elevated roles directly.
 func parseAndValidateClerkRole(raw string) models.UserRole {
 	role := models.UserRole(strings.ToUpper(strings.TrimSpace(raw)))
+	if role == models.RoleAdmin || role == models.RoleSuperAdmin {
+		log.Printf("[Security Warning] Attempt to auto-provision administrative role: %q from Clerk metadata was rejected. Defaulting to STUDENT", raw)
+		return models.RoleStudent
+	}
 	if models.IsValidUserRole(role) {
 		return role
 	}
-	log.Printf("[Clerk Provisioning] Ignoring invalid role from Clerk metadata: %q; defaulting to STUDENT", raw)
 	return models.RoleStudent
 }
 
