@@ -12,6 +12,9 @@ const (
 	EventVideoHeartbeat EventType = "video_heartbeat"
 	EventGamificationXP EventType = "gamification_xp"
 	EventPageView       EventType = "page_view"
+	EventEnrollment     EventType = "enrollment"
+	EventUnenrollment   EventType = "unenrollment"
+	EventCourseComplete EventType = "course_complete"
 )
 
 type AnalyticsEvent struct {

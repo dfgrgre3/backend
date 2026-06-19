@@ -31,6 +31,8 @@ func SetupProtectedRoutes(router *gin.Engine) {
 
 		// Protected Activity routes
 		protected.GET("/schedule", handlers.GetSchedule)
+		protected.GET("/lessons", handlers.GetLessons)
+		protected.POST("/lessons", handlers.CreateLesson)
 		protected.GET(pathTasks, handlers.GetTasks)
 		protected.GET("/study-sessions", handlers.GetStudySessions)
 		protected.GET("/reminders", handlers.GetReminders)
@@ -93,6 +95,9 @@ func SetupProtectedRoutes(router *gin.Engine) {
 
 		// Enrollment & Progress
 		protected.POST("/courses/:id/enroll", handlers.EnrollCourse)
+		protected.DELETE("/courses/:id/enroll", handlers.UnenrollCourse)
+		protected.GET("/courses/:id/enrollment-status", handlers.GetEnrollmentStatus)
+		protected.POST("/courses/:id/complete", handlers.CompleteCourse)
 		protected.POST("/courses/:id/checkout", handlers.CourseCheckout)
 		protected.GET("/courses/:id/curriculum", handlers.GetSubjectCurriculum)
 		protected.POST("/courses/lessons/:id/progress", handlers.UpdateLessonProgress)

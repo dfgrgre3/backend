@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/repository"
@@ -69,7 +70,15 @@ func (s *AuthService) Register(input RegisterInput) (*models.User, error) {
 	}
 
 	// 3. Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.Password), 12)
+	cfg := config.Load()
+	cost := cfg.BCryptCost
+	if cost < bcrypt.MinCost {
+		cost = bcrypt.MinCost
+	}
+	if cost > bcrypt.MaxCost {
+		cost = bcrypt.MaxCost
+	}
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.Password), cost)
 	if err != nil {
 		return nil, err
 	}
@@ -110,16 +119,15 @@ func (s *AuthService) Login(email, password, ip, userAgent string) (*models.User
 	}
 
 	// Check password
-	log.Printf("Login attempt: email=%s found=%v hash_len=%d", email, user != nil, len(user.PasswordHash))
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
 	if err != nil {
-		log.Printf("Password mismatch for user: %s", email)
+		log.Printf("Password mismatch for session ip=%s", ip)
 		return nil, errors.New("invalid email or password")
 	}
 
-	// Check status
+	// Check status (do not leak account status to unauthenticated callers)
 	if user.Status != models.StatusActive {
-		return nil, fmt.Errorf("account is %s", user.Status)
+		return nil, errors.New("invalid email or password")
 	}
 
 	return user, nil

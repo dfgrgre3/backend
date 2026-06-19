@@ -33,13 +33,21 @@ type clerkCacheEntry struct {
 	expiresAt time.Time
 }
 
-// ClerkIDToUUID generates a deterministic UUID from a Clerk User ID
+// ClerkIDToUUID generates a deterministic UUID from a Clerk User ID.
+// Only accepts IDs with the known "user_" prefix or valid UUID strings;
+// anything else is treated as a Clerk ID and hashed deterministically.
 func ClerkIDToUUID(clerkID string) string {
-	if !strings.HasPrefix(clerkID, "user_") {
+	if clerkID == "" {
+		return uuid.New().String()
+	}
+	if strings.HasPrefix(clerkID, "user_") {
+		u := uuid.NewSHA1(uuid.NameSpaceDNS, []byte(clerkID))
+		return u.String()
+	}
+	if _, err := uuid.Parse(clerkID); err == nil {
 		return clerkID
 	}
-	u := uuid.NewSHA1(uuid.NameSpaceDNS, []byte(clerkID))
-	return u.String()
+	return uuid.NewSHA1(uuid.NameSpaceDNS, []byte(clerkID)).String()
 }
 
 type clerkEmailAddress struct {
@@ -124,6 +132,18 @@ func ProvisionUserFromClerk(userId string) (*models.User, error) {
 	return user, err
 }
 
+// parseAndValidateClerkRole parses the raw role value from Clerk metadata and
+// returns a valid UserRole. Any unknown, empty, or manipulated value falls back
+// to STUDENT — never trusts Clerk metadata for elevated roles directly.
+func parseAndValidateClerkRole(raw string) models.UserRole {
+	role := models.UserRole(strings.ToUpper(strings.TrimSpace(raw)))
+	if models.IsValidUserRole(role) {
+		return role
+	}
+	log.Printf("[Clerk Provisioning] Ignoring invalid role from Clerk metadata: %q; defaulting to STUDENT", raw)
+	return models.RoleStudent
+}
+
 func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 	clerkUser, err := FetchUserFromClerk(userId)
 	if err != nil {
@@ -153,7 +173,7 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 
 	role := models.RoleStudent
 	if r, ok := clerkUser.PublicMetadata["role"].(string); ok && r != "" {
-		role = models.UserRole(strings.ToUpper(r))
+		role = parseAndValidateClerkRole(r)
 	}
 
 	var phone, country, gradeLevel, educationType string
@@ -234,11 +254,10 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 		return nil, err
 	}
 
-	// Update existing user email & metadata
+	// Update existing user email & metadata (never override role after initial provisioning)
 	updates := map[string]any{
 		"email":          primaryEmail,
 		"email_verified": true,
-		"role":           role,
 	}
 	if name != "" {
 		updates["name"] = &name

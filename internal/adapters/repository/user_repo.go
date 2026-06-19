@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/domain/user"
 
 	"golang.org/x/crypto/bcrypt"
@@ -215,7 +216,15 @@ func (p *noOpPublisher) Publish(ctx context.Context, event user.UserEvent) error
 }
 
 func hashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	cfg := config.Load()
+	cost := cfg.BCryptCost
+	if cost < bcrypt.MinCost {
+		cost = bcrypt.MinCost
+	}
+	if cost > bcrypt.MaxCost {
+		cost = bcrypt.MaxCost
+	}
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), cost)
 	return string(bytes), err
 }
 

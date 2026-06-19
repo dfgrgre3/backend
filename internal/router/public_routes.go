@@ -11,6 +11,7 @@ import (
 func SetupPublicRoutes(router *gin.Engine) {
 	// Public Course routes
 	router.GET("/api/courses", handlers.GetSubjects)
+	router.GET("/api/courses/popular", handlers.GetPopularCourses)
 	router.GET("/api/courses/:id", handlers.GetSubject)
 	router.GET("/api/courses/:id/lessons", handlers.GetCourseLessons)
 	router.GET("/api/courses/:id/reviews", handlers.GetCourseReviews)
@@ -24,6 +25,7 @@ func SetupPublicRoutes(router *gin.Engine) {
 	// Public blog route (published posts only)
 	router.GET("/api/blog", handlers.GetPublicBlogPosts)
 	router.GET("/api/blog/:slug", handlers.GetPublicBlogPost)
+	router.GET("/api/blog/categories", handlers.GetBlogCategories)
 
 	// Public events route
 	router.GET("/api/events", handlers.GetPublicEvents)

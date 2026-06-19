@@ -864,6 +864,16 @@ func VerifyTwoFactorLogin(c *gin.Context) {
 		}
 	}
 
+	var email string
+	if userID != "" && db.DB != nil {
+		_ = db.DB.Model(&models.User{}).Where("id = ?", userID).Pluck("email", &email).Error
+	}
+	if email != "" && isIPBlocked(c, email, ip) {
+		_ = LogSecurityEvent(userID, models.SecurityEvent2FAFailed, ip, c.Request.UserAgent(), nil, nil)
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Account temporarily locked. Please try again after 15 minutes."})
+		return
+	}
+
 	// ----------------------------------------------------------------
 	// 2. Brute-force protection
 	// ----------------------------------------------------------------

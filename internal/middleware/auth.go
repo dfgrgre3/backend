@@ -118,6 +118,7 @@ func Auth() gin.HandlerFunc {
 		tokenService := &services.TokenService{}
 		claims, err := tokenService.ValidateToken(tokenString)
 		if err != nil || claims.Subject == "" {
+			fmt.Printf("[Auth Middleware] Token validation failed: %v, Subject: %q, Token: %s\n", err, claims.Subject, tokenString)
 			log.Printf("[Auth Middleware] Token validation failed: %v (claims subject empty: %t)", err, claims == nil || claims.Subject == "")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			return
@@ -222,10 +223,6 @@ func extractToken(c *gin.Context) string {
 
 	if cookieToken, err := c.Cookie("access_token"); err == nil {
 		return strings.TrimSpace(cookieToken)
-	}
-
-	if queryToken := c.Query("token"); queryToken != "" {
-		return strings.TrimSpace(queryToken)
 	}
 
 	return ""
@@ -640,7 +637,7 @@ func isLocalhostOrLAN(origin string) bool {
 
 	ip := net.ParseIP(host)
 	if ip != nil {
-		if ip.IsLoopback() || ip.IsPrivate() {
+		if ip.IsLoopback() {
 			return true
 		}
 	}

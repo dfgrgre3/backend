@@ -190,6 +190,14 @@ func (u *User) GetEffectivePermissions() []string {
 	return perms
 }
 
+func IsValidUserRole(role UserRole) bool {
+	switch role {
+	case RoleStudent, RoleTeacher, RoleModerator, RoleAdmin, RoleSuperAdmin:
+		return true
+	}
+	return false
+}
+
 func GetDefaultPermissions(role UserRole) []string {
 	switch role {
 	case RoleAdmin, RoleSuperAdmin:

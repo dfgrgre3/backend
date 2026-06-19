@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,6 +14,7 @@ import (
 	"thanawy-backend/internal/cache"
 	"thanawy-backend/internal/cqrs/commands"
 	"thanawy-backend/internal/db"
+	"thanawy-backend/internal/events"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/repository"
 	"thanawy-backend/internal/services"
@@ -344,6 +346,12 @@ func EnrollCourse(c *gin.Context) {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to enroll: "+err.Error())
 		return
 	}
+
+	// Fire enrollment event for gamification/analytics
+	fireEnrollmentEvent(c, userId, subject.ID, string(events.EventEnrollment))
+
+	// Invalidate cache
+	cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), subject.ID)
 
 	api_response.Success(c, gin.H{"success": true, "message": "Enrolled successfully"})
 }
@@ -750,24 +758,24 @@ func mapInputToSubjectUpdatesMap(input map[string]interface{}) (map[string]inter
 
 	// Field mapping from input key (camelCase) to db column (snake_case)
 	mappings := map[string]string{
-		"name":            "name",
-		"nameAr":          "name_ar",
-		"description":     "description",
-		"categoryId":      "category_id",
-		"color":           "color",
-		"image":           "image",
-		"code":            "code",
-		"icon":            "icon",
-		"instructorName":  "instructor_name",
-		"instructorId":    "instructor_id",
-		"slug":            "slug",
-		"thumbnailUrl":    "thumbnail_url",
-		"trailerUrl":      "trailer_url",
-		"seoTitle":        "seo_title",
-		"seoDescription":  "seo_description",
-		"level":           "level",
-		"language":        "language",
-		"type":            "type",
+		"name":           "name",
+		"nameAr":         "name_ar",
+		"description":    "description",
+		"categoryId":     "category_id",
+		"color":          "color",
+		"image":          "image",
+		"code":           "code",
+		"icon":           "icon",
+		"instructorName": "instructor_name",
+		"instructorId":   "instructor_id",
+		"slug":           "slug",
+		"thumbnailUrl":   "thumbnail_url",
+		"trailerUrl":     "trailer_url",
+		"seoTitle":       "seo_title",
+		"seoDescription": "seo_description",
+		"level":          "level",
+		"language":       "language",
+		"type":           "type",
 	}
 
 	for inputKey, dbCol := range mappings {
@@ -820,7 +828,6 @@ func mapInputToSubjectUpdatesMap(input map[string]interface{}) (map[string]inter
 
 	return updates, nil
 }
-
 
 func parseStringArray(val interface{}) (*models.PGStringArray, error) {
 	if val == nil {
@@ -984,8 +991,22 @@ func GetUserSubjects(c *gin.Context) {
 		return
 	}
 
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
 	var enrollments []models.Enrollment
-	if err := db.DB.Preload("Subject").Where("user_id = ?", userId).Find(&enrollments).Error; err != nil {
+	if err := db.DB.WithContext(c.Request.Context()).
+		Preload("Subject").
+		Where("user_id = ?", userId).
+		Limit(limit).
+		Offset(offset).
+		Find(&enrollments).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch enrollments"})
 		return
 	}
@@ -1001,7 +1022,7 @@ func GetUserSubjects(c *gin.Context) {
 		if e.Subject.ID != "" {
 			response = append(response, subjectResponse{
 				ID:      e.ID,
-				Subject: e.Subject.Name, // Using name as the subject identifier
+				Subject: e.Subject.Name,
 			})
 		}
 	}
@@ -1143,7 +1164,6 @@ type incomingLesson struct {
 	Description *string              `json:"description"`
 	Attachments []incomingAttachment `json:"attachments"`
 }
-
 
 type incomingChapter struct {
 	ID        string           `json:"id"`
@@ -1334,7 +1354,7 @@ func CreateCourseReview(c *gin.Context) {
 	gamificationService := commands.NewGamificationCommandService()
 	_ = gamificationService.AwardXP(commands.AwardXPCommand{
 		UserID:   review.UserID,
-		XPType:   "quest", // categorizes under quest/other XP
+		XPType:   "quest",
 		XPAmount: xpAmount,
 		Source:   "course_review",
 		SourceID: review.ID,
@@ -1354,9 +1374,17 @@ func GetCourseReviews(c *gin.Context) {
 	id := c.Param("id")
 	var reviews []models.CourseReview
 
-	// Resolve subject first if it's a slug
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
 	var subject models.Subject
-	query := db.DB.Select("id")
+	query := db.DB.Select("id").WithContext(c.Request.Context())
 	query = applyIDOrSlugQuery(query, id)
 
 	if err := query.First(&subject).Error; err != nil {
@@ -1364,86 +1392,17 @@ func GetCourseReviews(c *gin.Context) {
 		return
 	}
 
-	if err := db.DB.Preload("User").Where("subject_id = ? AND is_visible = ?", subject.ID, true).Find(&reviews).Error; err != nil {
+	if err := db.DB.WithContext(c.Request.Context()).
+		Preload("User").
+		Where("subject_id = ? AND is_visible = ?", subject.ID, true).
+		Limit(limit).
+		Offset(offset).
+		Find(&reviews).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch reviews"})
 		return
 	}
 
 	c.JSON(http.StatusOK, reviews)
-}
-
-// GetCourseEnrollments returns all students enrolled in a course (Admin only)
-func GetCourseEnrollments(c *gin.Context) {
-	id := c.Param("id")
-	var enrollments []models.Enrollment
-
-	// Resolve subject first
-	var subject models.Subject
-	query := db.DB.Select("id")
-	query = applyIDOrSlugQuery(query, id)
-
-	if err := query.First(&subject).Error; err != nil {
-		handleSubjectError(c, id, err, "resolving subject for enrollments")
-		return
-	}
-
-	if err := db.DB.Preload("User").Where(subjectIDQuery, subject.ID).Order("enrolled_at desc").Find(&enrollments).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch enrollments"})
-		return
-	}
-
-	api_response.Success(c, gin.H{
-		"enrollments": enrollments,
-	})
-}
-
-// ManualEnroll allows an admin to enroll a user in a course manually
-func ManualEnroll(c *gin.Context) {
-	id := c.Param("id")
-	var input struct {
-		UserID string `json:"userId" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "User ID is required"})
-		return
-	}
-
-	// Check if already enrolled
-	if isAlreadyEnrolled(input.UserID, id) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "User is already enrolled in this course"})
-		return
-	}
-
-	if err := executeEnrollmentTransaction(input.UserID, id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to enroll user"})
-		return
-	}
-
-	api_response.Created(c, nil)
-}
-
-// UnenrollUser removes a user's enrollment from a course
-func UnenrollUser(c *gin.Context) {
-	id := c.Param("id")
-	userId := c.Param("userId")
-
-	if err := db.DB.Transaction(func(tx *gorm.DB) error {
-		result := tx.Where("user_id = ? AND subject_id = ?", userId, id).Delete(&models.Enrollment{})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected > 0 {
-			return tx.Model(&models.Subject{}).
-				Where("id = ? AND enrolled_count > 0", id).
-				Update("enrolled_count", gorm.Expr("enrolled_count - 1")).Error
-		}
-		return nil
-	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unenroll user"})
-		return
-	}
-
-	api_response.Success(c, nil)
 }
 
 // DuplicateCourse duplicates an existing course (Subject) along with its topics, subtopics, and attachments
@@ -1491,7 +1450,7 @@ func DuplicateCourse(c *gin.Context) {
 		Icon:                   oldSubject.Icon,
 		Color:                  oldSubject.Color,
 		IsActive:               true,
-		IsPublished:            false, // default to draft
+		IsPublished:            false,
 		Price:                  oldSubject.Price,
 		Level:                  oldSubject.Level,
 		InstructorName:         oldSubject.InstructorName,
@@ -1601,7 +1560,6 @@ func BatchCourseAction(c *gin.Context) {
 	case "deactivate":
 		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Update("is_active", false).Error
 	case "delete":
-		// Ensure none of the subjects have active enrollments
 		var count int64
 		db.DB.Model(&models.Enrollment{}).Where("subject_id IN ?", input.IDs).Count(&count)
 		if count > 0 {
@@ -1619,7 +1577,6 @@ func BatchCourseAction(c *gin.Context) {
 		return
 	}
 
-	// Invalidate caches
 	invalidator := cache.NewCacheInvalidator()
 	for _, id := range input.IDs {
 		getSubjectRepo().InvalidateSubjectCache(id)
@@ -1629,4 +1586,121 @@ func BatchCourseAction(c *gin.Context) {
 	api_response.Success(c, gin.H{
 		"message": "Batch action executed successfully",
 	})
+}
+
+// GetPopularCourses returns the most popular published courses for the homepage,
+// ordered by enrolled_count descending, then by rating descending.
+// Limit and offset can be passed via query params; default limit is 8.
+// Requires isPublished=true; also filters to isActive=true.
+func GetPopularCourses(c *gin.Context) {
+	const SubjectCacheTTL = 2 * time.Hour
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "8"))
+	if limit <= 0 {
+		limit = 8
+	}
+	if limit > 20 {
+		limit = 20
+	}
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if offset < 0 {
+		offset = 0
+	}
+
+	cacheKey := fmt.Sprintf("subject:popular:limit=%d:offset=%d", limit, offset)
+
+	if db.Redis != nil {
+		cached, err := db.Redis.Get(c.Request.Context(), cacheKey).Result()
+		if err == nil {
+			var cachedResponse gin.H
+			if json.Unmarshal([]byte(cached), &cachedResponse) == nil {
+				api_response.Success(c, cachedResponse)
+				return
+			}
+		}
+	}
+
+	readDB, aborted := safeReadDB(c)
+	if aborted {
+		return
+	}
+
+	var subjects []models.Subject
+	if err := readDB.Model(&models.Subject{}).
+		Where("is_published = ? AND is_active = ?", true, true).
+		Order("enrolled_count DESC").
+		Order("rating DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&subjects).Error; err != nil {
+
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch popular courses")
+		return
+	}
+
+	subjectIDs := make([]string, len(subjects))
+	for i, s := range subjects {
+		subjectIDs[i] = s.ID
+	}
+
+	type countResult struct {
+		SubjectID string
+		Count     int64
+	}
+	var topicCounts []countResult
+	if len(subjectIDs) > 0 {
+		db.ReadDB(c.Request.Context()).Table("Topic").
+			Select("subject_id, count(*) as count").
+			Where("subject_id IN ?", subjectIDs).
+			Group("subject_id").
+			Scan(&topicCounts)
+	}
+
+	topicCountMap := make(map[string]int64)
+	for _, c := range topicCounts {
+		topicCountMap[c.SubjectID] = c.Count
+	}
+
+	items := make([]gin.H, 0, len(subjects))
+	for _, subject := range subjects {
+		items = append(items, gin.H{
+			"id":                     subject.ID,
+			"name":                   subject.Name,
+			"nameAr":                 subject.NameAr,
+			"code":                   subject.Code,
+			"description":            subject.Description,
+			"icon":                   subject.Icon,
+			"color":                  subject.Color,
+			"type":                   "COURSE",
+			"isActive":               subject.IsActive,
+			"isPublished":            subject.IsPublished,
+			"price":                  subject.Price,
+			"level":                  subject.Level,
+			"instructorName":         subject.InstructorName,
+			"instructorId":           subject.InstructorId,
+			"categoryId":             subject.CategoryId,
+			"thumbnailUrl":           subject.ThumbnailUrl,
+			"trailerUrl":             subject.TrailerUrl,
+			"trailerDurationMinutes": subject.TrailerDurationMinutes,
+			"slug":                   subject.Slug,
+			"rating":                 subject.Rating,
+			"enrolledCount":          subject.EnrolledCount,
+			"durationHours":          subject.DurationHours,
+			"topicCount":             topicCountMap[subject.ID],
+		})
+	}
+
+	response := gin.H{
+		"items": items,
+		"total": len(items),
+	}
+	if db.Redis != nil {
+		data, _ := json.Marshal(response)
+		go func(key string, payload []byte) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			db.Redis.Set(ctx, key, payload, SubjectCacheTTL)
+		}(cacheKey, data)
+	}
+
+	api_response.Success(c, response)
 }

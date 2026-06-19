@@ -401,7 +401,7 @@ func RequestMagicLink(c *gin.Context) {
 		return
 	}
 
-	_ = LogSecurityEvent("", models.SecurityEventMagicLinkRequested, c.ClientIP(), c.Request.UserAgent(), nil, &token)
+	_ = LogSecurityEvent("", models.SecurityEventMagicLinkRequested, c.ClientIP(), c.Request.UserAgent(), nil, nil)
 
 	response := gin.H{
 		"success": true,
@@ -470,7 +470,7 @@ func ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	_ = LogSecurityEvent("", models.SecurityEventPasswordResetReq, c.ClientIP(), c.Request.UserAgent(), nil, &token)
+	_ = LogSecurityEvent("", models.SecurityEventPasswordResetReq, c.ClientIP(), c.Request.UserAgent(), nil, nil)
 
 	response := gin.H{
 		"success": true,
@@ -647,10 +647,20 @@ func loadRefreshMeta(tokenHash string) (string, string, string, error) {
 }
 
 func RefreshToken(c *gin.Context) {
-	refreshToken, err := c.Cookie("refresh_token")
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token missing"})
-		return
+	var refreshToken string
+	var err error
+
+	// Accept refresh token from Authorization header (for native/mobile clients)
+	// or from cookie (for browser clients)
+	authHeader := c.GetHeader("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		refreshToken = strings.TrimPrefix(authHeader, "Bearer ")
+	} else {
+		refreshToken, err = c.Cookie("refresh_token")
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token missing"})
+			return
+		}
 	}
 
 	tokenHash := models.ComputeRefreshTokenHash(refreshToken)
@@ -1264,7 +1274,7 @@ func CreateUser(c *gin.Context) {
 		password = hex.EncodeToString(b)
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCostFromConfig())
 	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to hash password")
 		return
@@ -2104,4 +2114,16 @@ func EnsureUserExists(userId, email string) error {
 
 func sanitizeLog(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\n", ""), "\r", "")
+}
+
+func bcryptCostFromConfig() int {
+	cfg := config.Load()
+	cost := cfg.BCryptCost
+	if cost < bcrypt.MinCost {
+		return bcrypt.MinCost
+	}
+	if cost > bcrypt.MaxCost {
+		return bcrypt.MaxCost
+	}
+	return cost
 }

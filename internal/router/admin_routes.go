@@ -230,6 +230,9 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.PATCH("/subjects/:id/curriculum", handlers.UpdateCourseCurriculum)
 		admin.GET("/subjects/:id/curriculum", handlers.GetSubjectCurriculum)
 
+		// Course Students (view list of enrolled students)
+		admin.GET("/courses/:id/students", handlers.GetCourseStudents)
+
 		// Manual Enroll
 		admin.GET("/courses/enrollments", handlers.GetCourseEnrollments)
 		admin.POST("/courses/enroll", handlers.ManualEnroll)

@@ -142,8 +142,6 @@ var csrfSkipPaths = []string{
 	"/api/payments/paymob/callback",
 	"/api/auth/login",
 	"/api/auth/register",
-	"/api/auth/refresh",
-	"/api/auth/logout",
 }
 
 // isSafeMethod checks if the HTTP method is read-only

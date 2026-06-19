@@ -16,8 +16,10 @@ type Config struct {
 	DatabaseURL          string
 	DatabaseWriteURL     string
 	DatabaseReadReplicas []string
-	JWTSecret            string
-	Environment          string
+	JWTSecret          string
+	JWTRefreshSecret   string
+	Environment        string
+	BCryptCost         int
 
 	// Storage Configuration
 	StorageType string // "s3" (Cloudflare R2 / AWS S3 / MinIO) or "local"
@@ -71,9 +73,9 @@ type Config struct {
 func Load() *Config {
 	dbURL := getEnv("DATABASE_URL", "")
 	jwtSecret := getEnv("JWT_SECRET", "")
+	jwtRefreshSecret := getEnv("JWT_REFRESH_SECRET", "")
 	environment := getEnv("NODE_ENV", "development")
 
-	// CRITICAL SECURITY FIX: Never allow default or empty JWT secret in production
 	if environment == "production" {
 		if jwtSecret == "" || jwtSecret == "default_secret" || jwtSecret == "dev_only_secret_change_in_production" {
 			log.Fatal("FATAL: JWT_SECRET MUST be set to a secure, unique value in production environments.")
@@ -81,9 +83,21 @@ func Load() *Config {
 		if len(jwtSecret) < 32 {
 			log.Fatal("FATAL: JWT_SECRET must be at least 32 characters long for production security.")
 		}
-	} else if jwtSecret == "" {
-		log.Println("WARNING: JWT_SECRET is not set. Using insecure default for development only.")
-		jwtSecret = "dev_only_secret_change_in_production_" + generateRandomString(16)
+		if jwtRefreshSecret == "" {
+			log.Fatal("FATAL: JWT_REFRESH_SECRET must be set to a secure, unique value in production environments.")
+		}
+		if len(jwtRefreshSecret) < 32 {
+			log.Fatal("FATAL: JWT_REFRESH_SECRET must be at least 32 characters long for production security.")
+		}
+	} else {
+		if jwtSecret == "" {
+			log.Println("WARNING: JWT_SECRET is not set. Using insecure default for development only.")
+			jwtSecret = "dev_only_secret_change_in_production_" + generateRandomString(16)
+		}
+		if jwtRefreshSecret == "" {
+			log.Println("WARNING: JWT_REFRESH_SECRET is not set. Using fallback to JWT_SECRET for development only.")
+			jwtRefreshSecret = jwtSecret + "_refresh"
+		}
 	}
 
 	c := &Config{
@@ -91,7 +105,9 @@ func Load() *Config {
 		DatabaseWriteURL:     getEnv("DATABASE_WRITE_DSN", ""),
 		DatabaseReadReplicas: parseReplicas(getEnv("DATABASE_REPLICAS", "")),
 		JWTSecret:            jwtSecret,
+		JWTRefreshSecret:     jwtRefreshSecret,
 		Environment:          environment,
+		BCryptCost:           getEnvInt("BCRYPT_COST", 10),
 		StorageType:          getEnv("STORAGE_TYPE", "s3"),
 	}
 

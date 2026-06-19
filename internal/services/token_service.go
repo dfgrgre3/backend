@@ -161,16 +161,22 @@ func (s *TokenService) GenerateTokenPair(userId, role, email string) (*TokenPair
 		return nil, err
 	}
 
+	refreshSecret := cfg.JWTRefreshSecret
+	if refreshSecret == "" {
+		refreshSecret = cfg.JWTSecret
+	}
+
 	// Refresh Token (Long-lived: 30 days).
 	// The refresh token only carries subject + expiry; email/role are re-fetched
 	// from the DB on every token rotation to reflect any permission changes.
+	// Signed with JWT_REFRESH_SECRET to isolate access-token compromise.
 	refreshClaims := jwt.RegisteredClaims{
 		Subject:   userId,
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * 24 * time.Hour)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 		ID:        jti,
 	}
-	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims).SignedString([]byte(cfg.JWTSecret))
+	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims).SignedString([]byte(refreshSecret))
 	if err != nil {
 		return nil, err
 	}
@@ -256,6 +262,27 @@ func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 	// WithLeeway allows up to 30 seconds of clock skew between servers.
 	// Intentionally kept small to minimise the window for replaying near-expired tokens.
 	}, jwt.WithLeeway(30*time.Second))
+
+	// If validation failed with HS256, it could be a refresh token using JWTRefreshSecret.
+	// Try parsing with JWTRefreshSecret.
+	if err != nil && (strings.Contains(err.Error(), "signature is invalid") || err == jwt.ErrSignatureInvalid) {
+		token2, err2 := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
+			alg, _ := token.Header["alg"].(string)
+			if alg != "HS256" {
+				return nil, fmt.Errorf("unexpected signing method for refresh token: %v", alg)
+			}
+			refreshSecret := cfg.JWTRefreshSecret
+			if refreshSecret == "" {
+				refreshSecret = cfg.JWTSecret
+			}
+			return []byte(refreshSecret), nil
+		}, jwt.WithLeeway(30*time.Second))
+		if err2 == nil {
+			if claims, ok := token2.Claims.(*TokenClaims); ok && token2.Valid {
+				return claims, nil
+			}
+		}
+	}
 
 	if err != nil {
 		return nil, err

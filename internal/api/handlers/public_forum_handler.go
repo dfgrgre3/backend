@@ -2,12 +2,14 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // GetForumCategories returns all forum categories (public)
@@ -20,10 +22,25 @@ func GetForumCategories(c *gin.Context) {
 	c.JSON(http.StatusOK, cats)
 }
 
-// GetForumPosts returns all forum topics/posts (public)
+// GetForumPosts returns forum topics/posts with pagination
 func GetForumPosts(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
 	var topics []models.ForumTopic
-	if err := db.DB.Preload("Author").Preload("Category").Order("is_pinned DESC, created_at DESC").Find(&topics).Error; err != nil {
+	if err := db.DB.WithContext(c.Request.Context()).
+		Preload("Author").
+		Preload("Category").
+		Order("is_pinned DESC, created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&topics).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch forum posts"})
 		return
 	}
@@ -82,8 +99,8 @@ func CreateForumPost(c *gin.Context) {
 }
 
 func IncrementForumPostView(c *gin.Context) {
-	if err := db.DB.Model(&models.ForumTopic{}).Where(idQuery, c.Param("id")).
-		UpdateColumn("views", db.DB.Raw("views + 1")).Error; err != nil {
+	if err := db.DB.WithContext(c.Request.Context()).Model(&models.ForumTopic{}).Where(idQuery, c.Param("id")).
+		UpdateColumn("views", gorm.Expr("views + 1")).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update forum post view"})
 		return
 	}

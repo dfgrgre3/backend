@@ -424,8 +424,24 @@ func GetExamResults(c *gin.Context) {
 		userId = val.(string)
 	}
 
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
 	var results []models.ExamResult
-	if err := db.ReadDB().Preload("Exam.Subject").Preload("Exam.Questions").Where("user_id = ?", userId).Order("taken_at desc").Find(&results).Error; err != nil {
+	if err := db.ReadDB(c.Request.Context()).
+		Preload("Exam.Subject").
+		Preload("Exam.Questions").
+		Where("user_id = ?", userId).
+		Order("taken_at desc").
+		Limit(limit).
+		Offset(offset).
+		Find(&results).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch results"})
 		return
 	}

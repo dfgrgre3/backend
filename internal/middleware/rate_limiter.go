@@ -214,10 +214,13 @@ func (rl *RateLimiter) SlidingWindowRateLimit(key string, limit int, window time
 
 
 // LoginRateLimiter provides rate limiting for login attempts
+// FAIL CLOSED: if Redis is unavailable, deny requests to prevent brute-force bypass.
 func LoginRateLimiter() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if db.Redis == nil {
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+				"error": "rate limiter unavailable, please try again later",
+			})
 			return
 		}
 		NewRateLimiter(db.Redis).RateLimitByIP(20, time.Minute)(c)
@@ -225,10 +228,13 @@ func LoginRateLimiter() gin.HandlerFunc {
 }
 
 // AuthRateLimiter provides rate limiting for authentication-related requests
+// FAIL CLOSED: if Redis is unavailable, deny requests.
 func AuthRateLimiter() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if db.Redis == nil {
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+				"error": "rate limiter unavailable, please try again later",
+			})
 			return
 		}
 		NewRateLimiter(db.Redis).RateLimitByIP(60, time.Minute)(c)
