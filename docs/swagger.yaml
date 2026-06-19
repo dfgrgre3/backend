@@ -204,28 +204,6 @@ definitions:
       total:
         type: integer
     type: object
-  handlers.RegisterRequest:
-    properties:
-      educationType:
-        type: string
-      email:
-        type: string
-      gradeLevel:
-        type: string
-      password:
-        minLength: 8
-        type: string
-      phone:
-        type: string
-      section:
-        type: string
-      username:
-        type: string
-    required:
-    - email
-    - password
-    - username
-    type: object
   handlers.ReportDimension:
     properties:
       field:
@@ -2121,20 +2099,6 @@ paths:
       summary: User login
       tags:
       - Auth
-  /auth/logout:
-    post:
-      description: Invalidate user session and clear cookies
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Logout successful
-          schema:
-            additionalProperties: true
-            type: object
-      summary: User logout
-      tags:
-      - Auth
   /auth/me:
     get:
       description: Get detailed profile of the currently authenticated user
@@ -2154,34 +2118,6 @@ paths:
       security:
       - BearerAuth: []
       summary: Get user profile
-      tags:
-      - Auth
-  /auth/register:
-    post:
-      consumes:
-      - application/json
-      description: Register a new user account
-      parameters:
-      - description: Registration details
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/handlers.RegisterRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Registration successful
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad request
-          schema:
-            additionalProperties: true
-            type: object
-      summary: User registration
       tags:
       - Auth
 securityDefinitions:

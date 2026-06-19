@@ -11,6 +11,7 @@ import (
 const (
 	AuditEventLogin              = "auth.login"
 	AuditEventLogout             = "auth.logout"
+	AuditEventRegister           = "auth.register"
 	AuditEventLoginFailed        = "auth.login_failed"
 	AuditEventPasswordChange     = "user.password_change"
 	AuditEventProfileUpdate      = "user.profile_update"

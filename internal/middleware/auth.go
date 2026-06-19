@@ -127,6 +127,9 @@ func Auth() gin.HandlerFunc {
 		clerkID := claims.Subject
 		dbUserID := services.ClerkIDToUUID(clerkID)
 
+		// Set both "userId" and "user_id" keys to avoid breaking existing handlers.
+		// Note: "userId" is widely used throughout legacy handlers (>100 references),
+		// while "user_id" is used in standard middlewares and newer handlers.
 		c.Set("userId", dbUserID)
 		c.Set("user_id", dbUserID)
 		if clerkID != dbUserID {
@@ -178,6 +181,9 @@ func OptionalAuth() gin.HandlerFunc {
 		clerkID := claims.Subject
 		dbUserID := services.ClerkIDToUUID(clerkID)
 
+		// Set both "userId" and "user_id" keys to avoid breaking existing handlers.
+		// Note: "userId" is widely used throughout legacy handlers (>100 references),
+		// while "user_id" is used in standard middlewares and newer handlers.
 		c.Set("userId", dbUserID)
 		c.Set("user_id", dbUserID)
 		if clerkID != dbUserID {
@@ -285,7 +291,7 @@ func storeInLocalCache(userID string, ctx *userAuthContext) {
 // Returns nil if the user is not found in the database.
 func fetchDatabaseRolePerms(userID, clerkID, cacheKey string) *userAuthContext {
 	var user models.User
-	if err := db.DB.Unscoped().
+	if err := db.DB.
 		Select("role", "permissions").
 		Where("id = ?", userID).
 		Take(&user).Error; err != nil {
@@ -294,7 +300,7 @@ func fetchDatabaseRolePerms(userID, clerkID, cacheKey string) *userAuthContext {
 			_, errProvision := services.ProvisionUserFromClerk(clerkID)
 			if errProvision == nil {
 				// Retry query
-				if retryErr := db.DB.Unscoped().
+				if retryErr := db.DB.
 					Select("role", "permissions").
 					Where("id = ?", userID).
 					Take(&user).Error; retryErr == nil {
@@ -456,6 +462,9 @@ func processImpersonation(c *gin.Context, adminID string) {
 		}
 
 		c.Set("originalAdminId", adminID)
+		// Set both "userId" and "user_id" keys to avoid breaking existing handlers.
+		// Note: "userId" is widely used throughout legacy handlers (>100 references),
+		// while "user_id" is used in standard middlewares and newer handlers.
 		c.Set("userId", impersonatedID)
 		c.Set("user_id", impersonatedID)
 		c.Set("role", authCtx.Role)
@@ -647,14 +656,9 @@ func isLocalhostOrLAN(origin string) bool {
 
 // Helper to set CORS response headers
 func setCorsHeaders(c *gin.Context, origin string, isAllowed bool) {
-	if isAllowed {
-		if origin != "" {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		} else {
-			// To comply with standard credential tracking specs, wildcards must not accompany credential flags
-			c.Writer.Header().Set("Access-Control-Allow-Origin", "null")
-		}
+	if isAllowed && origin != "" {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 	}
 
 	c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Dev-Admin-Bypass, accept, origin, Cache-Control, X-Requested-With, Connect-Protocol-Version, Connect-Timeout-Ms, Connect-Content-Encoding, X-Grpc-Web, X-User-Agent, Idempotency-Key")

@@ -263,32 +263,39 @@ func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 	// Intentionally kept small to minimise the window for replaying near-expired tokens.
 	}, jwt.WithLeeway(30*time.Second))
 
-	// If validation failed with HS256, it could be a refresh token using JWTRefreshSecret.
-	// Try parsing with JWTRefreshSecret.
-	if err != nil && (strings.Contains(err.Error(), "signature is invalid") || err == jwt.ErrSignatureInvalid) {
-		token2, err2 := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-			alg, _ := token.Header["alg"].(string)
-			if alg != "HS256" {
-				return nil, fmt.Errorf("unexpected signing method for refresh token: %v", alg)
-			}
-			refreshSecret := cfg.JWTRefreshSecret
-			if refreshSecret == "" {
-				refreshSecret = cfg.JWTSecret
-			}
-			return []byte(refreshSecret), nil
-		}, jwt.WithLeeway(30*time.Second))
-		if err2 == nil {
-			if claims, ok := token2.Claims.(*TokenClaims); ok && token2.Valid {
-				return claims, nil
-			}
-		}
-	}
-
 	if err != nil {
 		return nil, err
 	}
 
 	if claims, ok := token.Claims.(*TokenClaims); ok && token.Valid {
+		return claims, nil
+	}
+
+	return nil, jwt.ErrSignatureInvalid
+}
+
+func (s *TokenService) ValidateRefreshToken(tokenString string) (*jwt.RegisteredClaims, error) {
+	cfg := config.Load()
+	token, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
+		alg, ok := token.Header["alg"].(string)
+		if !ok {
+			return nil, fmt.Errorf("missing signing algorithm")
+		}
+		if alg != "HS256" {
+			return nil, fmt.Errorf("unexpected signing method for refresh token: %v", alg)
+		}
+		refreshSecret := cfg.JWTRefreshSecret
+		if refreshSecret == "" {
+			refreshSecret = cfg.JWTSecret
+		}
+		return []byte(refreshSecret), nil
+	}, jwt.WithLeeway(30*time.Second))
+
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(*jwt.RegisteredClaims); ok && token.Valid {
 		return claims, nil
 	}
 
