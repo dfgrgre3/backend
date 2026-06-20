@@ -350,13 +350,16 @@ func ImpersonateUser(c *gin.Context) {
 
 	// Generate securely signed token for cookie to prevent tampering
 	signedToken := middleware.SignImpersonationToken(req.TargetUserID, adminID.(string))
+	csrfToken := middleware.SignImpersonationCSRFToken(adminID.(string))
 
 	// Set impersonation cookie with maximum security:
 	// HttpOnly=true — prevents JavaScript access (XSS protection)
 	// Secure=true — only sent over HTTPS
 	// SameSite=Strict — prevents CSRF attacks (never sent for cross-site requests)
+	// CSRF cookie is NOT HttpOnly so the frontend can read and send it as a header
 	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie("impersonate_user_id", signedToken, 3600, "/", "", true, true)
+	c.SetCookie("impersonate_csrf_token", csrfToken, 3600, "/", "", true, false)
 
 	// Force an immediate audit log entry for security tracking
 	services.GetAuditService().LogAsync(

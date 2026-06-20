@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"thanawy-backend/internal/models"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
@@ -26,6 +28,7 @@ var InvalidateCacheCallback func(string)
 var (
 	clerkProvisionCache   = make(map[string]*clerkCacheEntry)
 	clerkProvisionCacheMu sync.RWMutex
+	clerkProvisionGroup   singleflight.Group
 )
 
 type clerkCacheEntry struct {
@@ -113,24 +116,38 @@ func ProvisionUserFromClerk(userId string) (*models.User, error) {
 	}
 	clerkProvisionCacheMu.RUnlock()
 
-	clerkProvisionCacheMu.Lock()
-	defer clerkProvisionCacheMu.Unlock()
+	resVal, err, _ := clerkProvisionGroup.Do(userId, func() (interface{}, error) {
+		clerkProvisionCacheMu.RLock()
+		if entry, exists := clerkProvisionCache[userId]; exists && time.Now().Before(entry.expiresAt) {
+			user, err := entry.user, entry.err
+			clerkProvisionCacheMu.RUnlock()
+			return &clerkProvisionResult{user: user, err: err}, nil
+		}
+		clerkProvisionCacheMu.RUnlock()
 
-	// Double check
-	if entry, exists := clerkProvisionCache[userId]; exists && time.Now().Before(entry.expiresAt) {
-		return entry.user, entry.err
+		user, err := provisionUserFromClerkInternal(userId)
+
+		clerkProvisionCacheMu.Lock()
+		clerkProvisionCache[userId] = &clerkCacheEntry{
+			user:      user,
+			err:       err,
+			expiresAt: time.Now().Add(5 * time.Minute),
+		}
+		clerkProvisionCacheMu.Unlock()
+
+		return &clerkProvisionResult{user: user, err: err}, nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
+	result := resVal.(*clerkProvisionResult)
+	return result.user, result.err
+}
 
-	user, err := provisionUserFromClerkInternal(userId)
-
-	// Cache result for 5 minutes (both success and error)
-	clerkProvisionCache[userId] = &clerkCacheEntry{
-		user:      user,
-		err:       err,
-		expiresAt: time.Now().Add(5 * time.Minute),
-	}
-
-	return user, err
+type clerkProvisionResult struct {
+	user *models.User
+	err  error
 }
 
 func parseAndValidateClerkRole(raw string) models.UserRole {
@@ -143,6 +160,10 @@ func parseAndValidateClerkRole(raw string) models.UserRole {
 		return role
 	}
 	return models.RoleStudent
+}
+
+func SanitizeClerkString(s string) string {
+	return html.EscapeString(strings.TrimSpace(s))
 }
 
 func provisionUserFromClerkInternal(userId string) (*models.User, error) {
@@ -183,26 +204,26 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 
 	if clerkUser.UnsafeMetadata != nil {
 		if p, ok := clerkUser.UnsafeMetadata["phone"].(string); ok {
-			phone = p
+			phone = SanitizeClerkString(p)
 		}
 		if c, ok := clerkUser.UnsafeMetadata["country"].(string); ok {
-			country = c
+			country = SanitizeClerkString(c)
 		}
 		if g, ok := clerkUser.UnsafeMetadata["gradeLevel"].(string); ok {
-			gradeLevel = g
+			gradeLevel = SanitizeClerkString(g)
 		}
 		if e, ok := clerkUser.UnsafeMetadata["educationType"].(string); ok {
-			educationType = e
+			educationType = SanitizeClerkString(e)
 		}
 		if dob, ok := clerkUser.UnsafeMetadata["dateOfBirth"].(string); ok && dob != "" {
-			if parsedDob, err := time.Parse("2006-01-02", dob); err == nil {
+			if parsedDob, err := time.Parse("2006-01-02", SanitizeClerkString(dob)); err == nil {
 				dateOfBirth = &parsedDob
 			}
 		}
 		if is, ok := clerkUser.UnsafeMetadata["interestedSubjects"].([]any); ok {
 			for _, item := range is {
 				if s, ok := item.(string); ok {
-					interestedSubjects = append(interestedSubjects, s)
+					interestedSubjects = append(interestedSubjects, SanitizeClerkString(s))
 				}
 			}
 		}
@@ -274,19 +295,19 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 
 	if clerkUser.UnsafeMetadata != nil {
 		if p, ok := clerkUser.UnsafeMetadata["phone"].(string); ok && p != "" {
-			updates["phone"] = &p
+			updates["phone"] = SanitizeClerkString(p)
 		}
 		if c, ok := clerkUser.UnsafeMetadata["country"].(string); ok && c != "" {
-			updates["country"] = &c
+			updates["country"] = SanitizeClerkString(c)
 		}
 		if g, ok := clerkUser.UnsafeMetadata["gradeLevel"].(string); ok && g != "" {
-			updates["grade_level"] = &g
+			updates["grade_level"] = SanitizeClerkString(g)
 		}
 		if e, ok := clerkUser.UnsafeMetadata["educationType"].(string); ok && e != "" {
-			updates["education_type"] = &e
+			updates["education_type"] = SanitizeClerkString(e)
 		}
 		if dob, ok := clerkUser.UnsafeMetadata["dateOfBirth"].(string); ok && dob != "" {
-			if parsedDob, err := time.Parse("2006-01-02", dob); err == nil {
+			if parsedDob, err := time.Parse("2006-01-02", SanitizeClerkString(dob)); err == nil {
 				updates["date_of_birth"] = &parsedDob
 			}
 		}
@@ -294,7 +315,7 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 			var interestedSubjects []string
 			for _, item := range is {
 				if s, ok := item.(string); ok {
-					interestedSubjects = append(interestedSubjects, s)
+					interestedSubjects = append(interestedSubjects, SanitizeClerkString(s))
 				}
 			}
 			updates["interested_subjects"] = interestedSubjects

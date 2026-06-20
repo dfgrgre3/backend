@@ -1099,28 +1099,27 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 	var unsafeMetadata map[string]interface{}
 	if um, ok := clerkData["unsafe_metadata"].(map[string]interface{}); ok {
 		unsafeMetadata = um
-		// STRICT SECURITY CONTROL: role field is strictly ignored from unsafe_metadata to prevent privilege escalation.
 		if p, ok := unsafeMetadata["phone"].(string); ok {
-			phone = p
+			phone = services.SanitizeClerkString(p)
 		}
 		if c, ok := unsafeMetadata["country"].(string); ok {
-			country = c
+			country = services.SanitizeClerkString(c)
 		}
 		if g, ok := unsafeMetadata["gradeLevel"].(string); ok {
-			gradeLevel = g
+			gradeLevel = services.SanitizeClerkString(g)
 		}
 		if e, ok := unsafeMetadata["educationType"].(string); ok {
-			educationType = e
+			educationType = services.SanitizeClerkString(e)
 		}
 		if dob, ok := unsafeMetadata["dateOfBirth"].(string); ok && dob != "" {
-			if parsedDob, err := time.Parse("2006-01-02", dob); err == nil {
+			if parsedDob, err := time.Parse("2006-01-02", services.SanitizeClerkString(dob)); err == nil {
 				dateOfBirth = &parsedDob
 			}
 		}
 		if is, ok := unsafeMetadata["interestedSubjects"].([]interface{}); ok {
 			for _, item := range is {
 				if s, ok := item.(string); ok {
-					interestedSubjects = append(interestedSubjects, s)
+					interestedSubjects = append(interestedSubjects, services.SanitizeClerkString(s))
 				}
 			}
 		}

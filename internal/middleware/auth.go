@@ -69,18 +69,15 @@ func VerifyImpersonationToken(token string, currentAdminID string) (string, bool
 	adminID := parts[2]
 	signature := parts[3]
 
-	// Verify expiration
 	expiresAt, err := strconv.ParseInt(expiresStr, 10, 64)
 	if err != nil || time.Now().Unix() > expiresAt {
 		return "", false
 	}
 
-	// Verify admin ID binding
 	if adminID != currentAdminID {
 		return "", false
 	}
 
-	// Verify signature
 	payload := fmt.Sprintf("%s:%s:%s", userID, expiresStr, adminID)
 	key, err := getImpersonationSignKey()
 	if err != nil {
@@ -95,6 +92,50 @@ func VerifyImpersonationToken(token string, currentAdminID string) (string, bool
 		return userID, true
 	}
 	return "", false
+}
+
+func SignImpersonationCSRFToken(adminID string) string {
+	expiresAt := time.Now().Add(15 * time.Minute).Unix()
+	payload := fmt.Sprintf("csrf:%d:%s", expiresAt, adminID)
+
+	key, err := getImpersonationSignKey()
+	if err != nil {
+		log.Printf("[Security CRITICAL] SignImpersonationCSRFToken failed to retrieve key: %v", err)
+		return ""
+	}
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(payload))
+	signature := hex.EncodeToString(mac.Sum(nil))
+	return fmt.Sprintf("csrf.%d.%s.%s", expiresAt, adminID, signature)
+}
+
+func VerifyImpersonationCSRFToken(token, currentAdminID string) bool {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 || parts[0] != "csrf" {
+		return false
+	}
+	expiresStr := parts[1]
+	adminID := parts[2]
+
+	expiresAt, err := strconv.ParseInt(expiresStr, 10, 64)
+	if err != nil || time.Now().Unix() > expiresAt {
+		return false
+	}
+
+	if adminID != currentAdminID {
+		return false
+	}
+
+	payload := fmt.Sprintf("csrf:%s:%s", expiresStr, adminID)
+	key, err := getImpersonationSignKey()
+	if err != nil {
+		return false
+	}
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(payload))
+	expectedSignature := hex.EncodeToString(mac.Sum(nil))
+
+	return hmac.Equal([]byte(parts[2]), []byte(expectedSignature))
 }
 
 var (
@@ -348,16 +389,24 @@ func fetchDatabaseRolePerms(userID, clerkID, cacheKey string) *userAuthContext {
 		Select("role", "permissions").
 		Where("id = ?", userID).
 		Take(&user).Error; err != nil {
-		// Fallback: if user is not found, trigger background provisioning asynchronously
+
 		if clerkID != "" && strings.HasPrefix(clerkID, "user_") {
-			go func(cid string) {
-				_, errProvision := services.ProvisionUserFromClerk(cid)
-				if errProvision != nil {
-					log.Printf("[Auth Middleware] Asynchronous background dynamic provisioning failed for Clerk ID %s: %v", cid, errProvision)
-				}
-			}(clerkID)
+			_, errProvision := services.ProvisionUserFromClerk(clerkID)
+			if errProvision != nil {
+				log.Printf("[Auth Middleware] Synchronous provisioning failed for Clerk ID %s, falling back to role default: %v", clerkID, errProvision)
+				return nil
+			}
+
+			if errRetry := db.DB.
+				Select("role", "permissions").
+				Where("id = ?", userID).
+				Take(&user).Error; errRetry != nil {
+				log.Printf("[Auth Middleware] User still missing after provisioning (user_id=%s, clerk_id=%s): %v", userID, clerkID, errRetry)
+				return nil
+			}
+		} else {
+			return nil
 		}
-		return nil
 	}
 
 	roleVal := string(user.Role)
@@ -455,6 +504,18 @@ func processImpersonation(c *gin.Context, adminID string) {
 	currentRoleStr, _ := currentRole.(string)
 
 	if currentRoleStr != "ADMIN" && currentRoleStr != "SUPER_ADMIN" {
+		return
+	}
+
+	csrfToken := c.GetHeader("X-CSRF-Impersonation-Token")
+	if csrfToken == "" {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Missing impersonation CSRF token"})
+		return
+	}
+
+	if !VerifyImpersonationCSRFToken(csrfToken, adminID) {
+		log.Printf("[Security Alert] Admin %s provided invalid impersonation CSRF token", adminID)
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Invalid impersonation CSRF token"})
 		return
 	}
 
