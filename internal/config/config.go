@@ -61,6 +61,7 @@ type Config struct {
 	// Cookie Security
 	CookieSecure   bool
 	CookieSameSite string
+	CookieDomain   string
 
 	// App Env
 	AppEnv string
@@ -193,6 +194,7 @@ func Load() *Config {
 
 	c.CookieSecure = getEnv("COOKIE_SECURE", "false") == "true"
 	c.CookieSameSite = getEnv("COOKIE_SAME_SITE", "lax")
+	c.CookieDomain = getEnv("COOKIE_DOMAIN", "")
 
 	c.AppEnv = getEnv("APP_ENV", environment)
 
@@ -325,6 +327,7 @@ func LoadSafe() (*Config, error) {
 
 	c.CookieSecure = getEnv("COOKIE_SECURE", "false") == "true"
 	c.CookieSameSite = getEnv("COOKIE_SAME_SITE", "lax")
+	c.CookieDomain = getEnv("COOKIE_DOMAIN", "")
 
 	c.AppEnv = getEnv("APP_ENV", environment)
 

@@ -26,9 +26,10 @@ import (
 var InvalidateCacheCallback func(string)
 
 var (
-	clerkProvisionCache   = make(map[string]*clerkCacheEntry)
-	clerkProvisionCacheMu sync.RWMutex
-	clerkProvisionGroup   singleflight.Group
+	// clerkProvisionCache uses sync.Map to avoid global mutex contention during HTTP calls.
+	// Only singleflight.Group serializes concurrent requests for the same clerkId.
+	clerkProvisionCache sync.Map
+	clerkProvisionGroup singleflight.Group
 )
 
 type clerkCacheEntry struct {
@@ -108,32 +109,31 @@ func FetchUserFromClerk(userId string) (*clerkUserResponse, error) {
 }
 
 func ProvisionUserFromClerk(userId string) (*models.User, error) {
-	clerkProvisionCacheMu.RLock()
-	if entry, exists := clerkProvisionCache[userId]; exists && time.Now().Before(entry.expiresAt) {
-		user, err := entry.user, entry.err
-		clerkProvisionCacheMu.RUnlock()
-		return user, err
+	// Fast path: check sync.Map cache without blocking other users
+	if val, ok := clerkProvisionCache.Load(userId); ok {
+		entry := val.(*clerkCacheEntry)
+		if time.Now().Before(entry.expiresAt) {
+			return entry.user, entry.err
+		}
 	}
-	clerkProvisionCacheMu.RUnlock()
 
 	resVal, err, _ := clerkProvisionGroup.Do(userId, func() (interface{}, error) {
-		clerkProvisionCacheMu.RLock()
-		if entry, exists := clerkProvisionCache[userId]; exists && time.Now().Before(entry.expiresAt) {
-			user, err := entry.user, entry.err
-			clerkProvisionCacheMu.RUnlock()
-			return &clerkProvisionResult{user: user, err: err}, nil
+		// Re-check cache after acquiring singleflight (avoid duplicate work)
+		if val, ok := clerkProvisionCache.Load(userId); ok {
+			entry := val.(*clerkCacheEntry)
+			if time.Now().Before(entry.expiresAt) {
+				return &clerkProvisionResult{user: entry.user, err: entry.err}, nil
+			}
 		}
-		clerkProvisionCacheMu.RUnlock()
 
 		user, err := provisionUserFromClerkInternal(userId)
 
-		clerkProvisionCacheMu.Lock()
-		clerkProvisionCache[userId] = &clerkCacheEntry{
+		// Store result in sync.Map – no mutex contention with other users
+		clerkProvisionCache.Store(userId, &clerkCacheEntry{
 			user:      user,
 			err:       err,
 			expiresAt: time.Now().Add(5 * time.Minute),
-		}
-		clerkProvisionCacheMu.Unlock()
+		})
 
 		return &clerkProvisionResult{user: user, err: err}, nil
 	})

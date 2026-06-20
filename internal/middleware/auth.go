@@ -289,13 +289,11 @@ func extractToken(c *gin.Context) string {
 		}
 	}
 
-	// [إصلاح أمني]: لتفادي ثغرات CSRF بالكامل في البيئة الإنتاجية،
-	// يمنع استخراج التوكن من الكوكيز في الإنتاج، ويُكتفى بترويسة Authorization.
-	cfg := getConfig()
-	if cfg.Environment != "production" {
-		if cookieToken, err := c.Cookie("access_token"); err == nil {
-			return strings.TrimSpace(cookieToken)
-		}
+	// Try cookie as fallback for SSR support (Next.js server-side rendering).
+	// In production, Clerk JWT Bearer headers are the primary auth mechanism,
+	// but cookies may be needed for SSR requests from the same origin.
+	if cookieToken, err := c.Cookie("access_token"); err == nil {
+		return strings.TrimSpace(cookieToken)
 	}
 
 	return ""
@@ -382,7 +380,7 @@ func storeInLocalCache(userID string, ctx *userAuthContext) {
 
 // fetchDatabaseRolePerms retrieves user role/permissions from the database.
 // Caches the result in Redis (async) and local in-memory cache.
-// Returns nil if the user is not found in the database.
+// Returns nil if the user is not found in the database and cannot be provisioned.
 func fetchDatabaseRolePerms(userID, clerkID, cacheKey string) *userAuthContext {
 	var user models.User
 	if err := db.DB.
@@ -391,17 +389,27 @@ func fetchDatabaseRolePerms(userID, clerkID, cacheKey string) *userAuthContext {
 		Take(&user).Error; err != nil {
 
 		if clerkID != "" && strings.HasPrefix(clerkID, "user_") {
+			// ProvisionUserFromClerk uses singleflight.Group internally,
+			// so concurrent requests for the same clerkID share a single HTTP call.
 			_, errProvision := services.ProvisionUserFromClerk(clerkID)
 			if errProvision != nil {
-				log.Printf("[Auth Middleware] Synchronous provisioning failed for Clerk ID %s, falling back to role default: %v", clerkID, errProvision)
+				log.Printf("[Auth Middleware] Provisioning failed for Clerk ID %s: %v", clerkID, errProvision)
 				return nil
 			}
 
-			if errRetry := db.DB.
-				Select("role", "permissions").
-				Where("id = ?", userID).
-				Take(&user).Error; errRetry != nil {
-				log.Printf("[Auth Middleware] User still missing after provisioning (user_id=%s, clerk_id=%s): %v", userID, clerkID, errRetry)
+			// Retry up to 3 times with a short delay to handle any eventual-consistency delay
+			// (e.g. if a goroutine in a different request just created the user).
+			for i := 0; i < 3; i++ {
+				if errRetry := db.DB.
+					Select("role", "permissions").
+					Where("id = ?", userID).
+					Take(&user).Error; errRetry == nil {
+					break // user found, exit retry loop
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+			if user.ID == "" {
+				log.Printf("[Auth Middleware] User still missing after provisioning + retries (user_id=%s, clerk_id=%s)", userID, clerkID)
 				return nil
 			}
 		} else {

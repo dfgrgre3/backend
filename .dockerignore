@@ -28,6 +28,10 @@ bin/
 *.tmp
 *.go.*
 
+# Node.js build artifacts
+node_modules/
+.next/
+
 # Runtime data
 uploads/
 backups/

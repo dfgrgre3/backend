@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
+	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/repository"
@@ -35,11 +36,20 @@ func InitAuthService(repo *repository.UserRepository) {
 	authService = services.NewAuthService(repo)
 }
 
-// setAuthCookie writes an HttpOnly, SameSite=Strict auth cookie.
-// Using SameSite=Strict prevents CSRF on state-changing requests.
+// setAuthCookie writes an HttpOnly auth cookie.
+// SameSite=Lax allows SSR from Next.js (cookies sent on top-level GET navigations),
+// while CSRF protection is handled by the dedicated CSRFMiddleware for state-changing requests.
 func setAuthCookie(c *gin.Context, name, value string, maxAgeSec int) {
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie(name, value, maxAgeSec, "/", "", isProduction(), true)
+	c.SetSameSite(http.SameSiteLaxMode)
+	domain := ""
+	cfg := config.Load()
+	if isProduction() {
+		// Use top-level domain so cookies work across subdomains
+		// (e.g., app.thanawy.net → api.thanawy.net for SSR)
+		domain = cfg.CookieDomain
+	}
+	secure := isProduction()
+	c.SetCookie(name, value, maxAgeSec, "/", domain, secure, true)
 }
 
 func getLoginAttemptsKey(email, ip string) string {
