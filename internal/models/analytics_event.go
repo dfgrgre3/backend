@@ -1,3 +1,4 @@
+
 package models
 
 import "time"
@@ -16,7 +17,7 @@ type AnalyticsEvent struct {
 	UserAgent   *string    `gorm:"column:user_agent" json:"userAgent"`
 	ReceivedAt  time.Time  `gorm:"not null;index;column:received_at" json:"receivedAt"`
 	ProcessedAt *time.Time `gorm:"index;column:processed_at" json:"processedAt"`
-	CreatedAt   time.Time  `gorm:"column:created_at" json:"createdAt"`
+	CreatedAt   time.Time  `gorm:"column:created_at;<-:create" json:"createdAt"`
 }
 
 func (AnalyticsEvent) TableName() string {

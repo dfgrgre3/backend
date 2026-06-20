@@ -69,12 +69,12 @@ type Campaign struct {
 // ContentReport represents a content moderation report
 type ContentReport struct {
 	ID           string     `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	ReporterID   string     `gorm:"index;type:uuid;column:userId" json:"reporterId"`
+	ReporterID   string     `gorm:"index;type:uuid;column:reporter_id" json:"reporterId"`
 	Reporter     *User      `gorm:"foreignKey:ReporterID;constraint:OnDelete:SET NULL" json:"reporter,omitempty"`
-	ContentType  string     `gorm:"not null;column:targetType" json:"contentType"`
-	ContentID    string     `gorm:"index;not null;column:targetId" json:"contentId"`
-	ContentTitle string     `gorm:"-" json:"contentTitle"`
-	Reason       string     `gorm:"not null;column:issueType" json:"reason"`
+	ContentType  string     `gorm:"not null;column:content_type" json:"contentType"`
+	ContentID    string     `gorm:"index;not null;column:content_id" json:"contentId"`
+	ContentTitle string     `gorm:"column:content_title" json:"contentTitle"`
+	Reason       string     `gorm:"not null;column:reason" json:"reason"`
 	Description  string     `gorm:"type:text;column:description" json:"description"`
 	Status       string     `gorm:"default:'PENDING';column:status" json:"status"`
 	ResolvedBy   *string    `gorm:"type:uuid;column:resolved_by" json:"resolvedBy"`

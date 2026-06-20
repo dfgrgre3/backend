@@ -121,7 +121,7 @@ model AnalyticsEvent {
   user_agent    String?
   received_at   DateTime  @default(now()) @db.Timestamptz(6)
   processed_at  DateTime? @db.Timestamptz(6)
-  createdAt     DateTime? @default(now()) @db.Timestamptz(6)
+  createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -227,22 +227,19 @@ model BlogPost {
   content      String?
   excerpt      String?
   slug         String
-  categoryId   String
-  authorId     String
-  isPublished  Boolean   @default(false)
-  publishedAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime
   views        Int       @default(0)
-  deleted_at   DateTime? @db.Timestamptz(6)
-  author_id    String?   @db.Uuid
-  category_id  String?   @db.Uuid
-  tags         Json?
   status       String?   @default("DRAFT")
   image        String?
-  published_at DateTime? @db.Timestamptz(6)
-  created_at   DateTime? @db.Timestamptz(6)
-  updated_at   DateTime? @db.Timestamptz(6)
+  tags         Json?
+  
+  author_id    String?   @db.Uuid
+  category_id  String?   @db.Uuid
+  deleted_at   DateTime? @db.Timestamptz(6)
+
+  publishedAt  DateTime? @db.Timestamptz(6) @map("published_at")
+  createdAt    DateTime? @db.Timestamptz(6) @map("created_at")
+  updatedAt    DateTime? @db.Timestamptz(6) @map("updated_at")
+  
   User         User?     @relation(fields: [author_id], references: [id], onUpdate: NoAction, map: "fk_BlogPost_author")
 }
 
@@ -300,11 +297,10 @@ model Category {
   slug        String
   icon        String?
   type        String?   @default("COURSE")
-  createdAt   DateTime? @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime? @db.Timestamptz(6)
   deleted_at  DateTime? @db.Timestamptz(6)
-  created_at  DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+  
+  createdAt   DateTime? @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt   DateTime? @db.Timestamptz(6) @map("updated_at")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -356,23 +352,17 @@ model ContentPreference {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model ContentReport {
   id            String    @id @db.Uuid
-  userId        String
-  targetId      String
-  targetType    String
-  subjectId     String?
   reporter_id   String    @db.Uuid
-  content_title String?   @db.VarChar(500)
   content_type  String    @db.VarChar(50)
   content_id    String    @db.Uuid
+  content_title String?   @db.VarChar(500)
   reason        String    @db.Text
-  issueType     String
   description   String
   status        String    @default("PENDING")
-  adminNote     String?
   resolved_by   String?   @db.Uuid
   resolved_at   DateTime? @db.Timestamptz(6)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @map("updated_at")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -443,19 +433,16 @@ model Coupon {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model CourseReview {
   id         String    @id
-  subjectId  String?
-  userId     String?
   rating     BigInt    @default(5)
   comment    String?
-  isVisible  Boolean?  @default(true)
-  createdAt  DateTime? @db.Timestamptz(6)
-  updatedAt  DateTime? @db.Timestamptz(6)
-  deleted_at DateTime? @db.Timestamptz(6)
   subject_id String    @db.Uuid
   user_id    String    @db.Uuid
-  is_visible Boolean?  @default(true)
-  created_at DateTime? @db.Timestamptz(6)
-  updated_at DateTime? @db.Timestamptz(6)
+  deleted_at DateTime? @db.Timestamptz(6)
+
+  isVisible  Boolean?  @default(true) @map("is_visible")
+  createdAt  DateTime? @db.Timestamptz(6) @map("created_at")
+  updatedAt  DateTime? @db.Timestamptz(6) @map("updated_at")
+  
   User       User      @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_CourseReview_user")
 }
 
@@ -705,20 +692,15 @@ model LessonAnswer {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model LessonAttachment {
   id           String    @id @db.Uuid
-  subTopicId   String?
   title        String
-  fileUrl      String?
-  fileType     String?
-  fileSize     BigInt?
-  createdAt    DateTime? @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime?
   deleted_at   DateTime? @db.Timestamptz(6)
   sub_topic_id String?   @db.Uuid
-  file_url     String?
-  file_type    String?
-  file_size    BigInt?
-  created_at   DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+
+  fileUrl      String?   @map("file_url")
+  fileType     String?   @map("file_type")
+  fileSize     BigInt?   @map("file_size")
+  createdAt    DateTime? @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt    DateTime? @db.Timestamptz(6) @map("updated_at")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -1033,21 +1015,19 @@ model Reminder {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Resource {
   id           String    @id
-  subjectId    String
   title        String
   description  String?
   url          String
   free         Boolean   @default(true)
   type         String
   source       String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime
   price        Float?    @default(0)
   minPlanLevel Int       @default(0)
   subject_id   String?   @db.Uuid
-  created_at   DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
   deleted_at   DateTime? @db.Timestamptz(6)
+
+  createdAt    DateTime? @db.Timestamptz(6) @map("created_at")
+  updatedAt    DateTime? @db.Timestamptz(6) @map("updated_at")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -1055,23 +1035,20 @@ model Resource {
 model Reward {
   id          String    @id @db.Uuid
   name        String
+  title       String
   description String?
   type        String?   @default("VIRTUAL")
   rarity      String
-  imageUrl    String?
   metadata    String?
   isTradeable Boolean   @default(false)
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime
-  deleted_at  DateTime? @db.Timestamptz(6)
-  title       String
   cost        BigInt?   @default(0)
   stock       BigInt?   @default(-1)
-  image       String?
-  is_active   Boolean?  @default(true)
-  created_at  DateTime? @db.Timestamptz(6)
-  updated_at  DateTime? @db.Timestamptz(6)
+  deleted_at  DateTime? @db.Timestamptz(6)
+
+  image      String?   @map("image_url")
+  isActive   Boolean?  @default(true) @map("is_active")
+  createdAt  DateTime? @db.Timestamptz(6) @map("created_at")
+  updatedAt  DateTime? @db.Timestamptz(6) @map("updated_at")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -1102,20 +1079,15 @@ model Season {
   id          String    @id @db.Uuid
   name        String
   description String?
-  startDate   DateTime
-  endDate     DateTime
-  isActive    Boolean   @default(true)
   rewards     String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime
-  deletedAt   DateTime? @db.Timestamptz(6)
-  deleted_at  DateTime? @db.Timestamptz(6)
   title       String
-  start_date  DateTime? @db.Timestamptz(6)
-  end_date    DateTime? @db.Timestamptz(6)
-  is_active   Boolean?  @default(false)
-  created_at  DateTime? @db.Timestamptz(6)
-  updated_at  DateTime? @db.Timestamptz(6)
+
+  startDate   DateTime  @map("start_date")
+  endDate     DateTime  @map("end_date")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt   DateTime  @db.Timestamptz(6) @map("updated_at")
+  deletedAt   DateTime? @db.Timestamptz(6) @map("deleted_at")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -1577,7 +1549,6 @@ model User {
   challenge_xp                     Int                 @default(0)
   quest_xp                         Int                 @default(0)
   season_xp                        Int                 @default(0)
-  archiveReason                    String?
   password_hash                    String
   grade_level                      String?
   education_type                   String?
@@ -1586,7 +1557,7 @@ model User {
   subscription_expires_at          DateTime?           @db.Timestamptz(6)
   two_factor_enabled               Boolean?            @default(false)
   two_factor_secret                String?
-  archive_reason                   String?
+  archiveReason                    String?             @map("archive_reason")
   clerk_id                         String?             @unique(map: "idx_user_clerk_id") @db.VarChar(255)
   BlogPost                         BlogPost[]
   CourseReview                     CourseReview[]
@@ -1738,76 +1709,45 @@ model UserSession {
 model UserSettings {
   id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   theme                 String?   @default("light")
-  fontSize              String?   @default("medium")
-  reducedMotion         Boolean?  @default(false)
-  highContrast          Boolean?  @default(false)
-  compactMode           Boolean?  @default(false)
-  efficiencyMode        Boolean?  @default(false)
   language              String?   @default("ar")
-  numberFormat          String?   @default("english")
-  notificationsEnabled  Boolean?  @default(true)
-  studyReminders        Boolean?  @default(true)
-  emailNotifications    Boolean?  @default(true)
-  pushNotifications     Boolean?  @default(true)
-  profileVisibility     String?   @default("public")
-  showOnlineStatus      Boolean?  @default(true)
-  showProgress          Boolean?  @default(true)
+  user_id               String    @unique(map: "unique_user_settings") @db.Uuid
   created_at            DateTime? @db.Timestamptz(6)
   updated_at            DateTime? @db.Timestamptz(6)
-  deletedAt             DateTime? @db.Timestamptz(6)
-  user_id               String    @unique(map: "unique_user_settings") @db.Uuid
-  taskReminders         Boolean?  @default(true)
-  taskReminderTime      String?   @default("30")
-  dailyGoalReminders    Boolean?  @default(true)
-  examReminders         Boolean?  @default(true)
-  examReminderDays      BigInt?   @default(3)
-  deadlineReminders     Boolean?  @default(true)
-  progressReports       Boolean?  @default(true)
-  weeklyReport          Boolean?  @default(true)
-  achievementAlerts     Boolean?  @default(true)
-  commentNotifications  Boolean?  @default(true)
-  mentionNotifications  Boolean?  @default(true)
-  pushEnabled           Boolean?  @default(true)
-  emailEnabled          Boolean?  @default(true)
-  smsEnabled            Boolean?  @default(false)
-  quietHoursEnabled     Boolean?  @default(false)
-  quietHoursStart       String?   @default("22:00")
-  quietHoursEnd         String?   @default("07:00")
-  soundEnabled          Boolean?  @default(true)
-  vibrationEnabled      Boolean?  @default(true)
   deleted_at            DateTime? @db.Timestamptz(6)
-  font_size             String?   @default("medium")
-  reduced_motion        Boolean?  @default(false)
-  high_contrast         Boolean?  @default(false)
-  compact_mode          Boolean?  @default(false)
-  efficiency_mode       Boolean?  @default(false)
-  number_format         String?   @default("english")
-  notifications_enabled Boolean?  @default(true)
-  study_reminders       Boolean?  @default(true)
-  email_notifications   Boolean?  @default(true)
-  push_notifications    Boolean?  @default(true)
-  task_reminders        Boolean?  @default(true)
-  task_reminder_time    String?   @default("30")
-  daily_goal_reminders  Boolean?  @default(true)
-  exam_reminders        Boolean?  @default(true)
-  exam_reminder_days    BigInt?   @default(3)
-  deadline_reminders    Boolean?  @default(true)
-  progress_reports      Boolean?  @default(true)
-  weekly_report         Boolean?  @default(true)
-  achievement_alerts    Boolean?  @default(true)
-  comment_notifications Boolean?  @default(true)
-  mention_notifications Boolean?  @default(true)
-  push_enabled          Boolean?  @default(true)
-  email_enabled         Boolean?  @default(true)
-  sms_enabled           Boolean?  @default(false)
-  quiet_hours_enabled   Boolean?  @default(false)
-  quiet_hours_start     String?   @default("22:00")
-  quiet_hours_end       String?   @default("07:00")
-  sound_enabled         Boolean?  @default(true)
-  vibration_enabled     Boolean?  @default(true)
-  profile_visibility    String?   @default("public")
-  show_online_status    Boolean?  @default(true)
-  show_progress         Boolean?  @default(true)
+
+  profileVisibility     String?   @default("public") @map("profile_visibility")
+  showOnlineStatus      Boolean?  @default(true) @map("show_online_status")
+  showProgress          Boolean?  @default(true) @map("show_progress")
+  quietHoursEnabled     Boolean?  @default(false) @map("quiet_hours_enabled")
+  quietHoursStart       String?   @default("22:00") @map("quiet_hours_start")
+  quietHoursEnd         String?   @default("07:00") @map("quiet_hours_end")
+  soundEnabled          Boolean?  @default(true) @map("sound_enabled")
+  vibrationEnabled      Boolean?  @default(true) @map("vibration_enabled")
+  fontSize              String?   @default("medium") @map("font_size")
+  reducedMotion         Boolean?  @default(false) @map("reduced_motion")
+  highContrast          Boolean?  @default(false) @map("high_contrast")
+  compactMode           Boolean?  @default(false) @map("compact_mode")
+  efficiencyMode        Boolean?  @default(false) @map("efficiency_mode")
+  numberFormat          String?   @default("english") @map("number_format")
+  notificationsEnabled  Boolean?  @default(true) @map("notifications_enabled")
+  studyReminders        Boolean?  @default(true) @map("study_reminders")
+  emailNotifications    Boolean?  @default(true) @map("email_notifications")
+  pushNotifications     Boolean?  @default(true) @map("push_notifications")
+  taskReminders         Boolean?  @default(true) @map("task_reminders")
+  taskReminderTime      String?   @default("30") @map("task_reminder_time")
+  dailyGoalReminders    Boolean?  @default(true) @map("daily_goal_reminders")
+  examReminders         Boolean?  @default(true) @map("exam_reminders")
+  examReminderDays      BigInt?   @default(3) @map("exam_reminder_days")
+  deadlineReminders     Boolean?  @default(true) @map("deadline_reminders")
+  progressReports       Boolean?  @default(true) @map("progress_reports")
+  weeklyReport          Boolean?  @default(true) @map("weekly_report")
+  achievementAlerts     Boolean?  @default(true) @map("achievement_alerts")
+  commentNotifications  Boolean?  @default(true) @map("comment_notifications")
+  mentionNotifications  Boolean?  @default(true) @map("mention_notifications")
+  pushEnabled           Boolean?  @default(true) @map("push_enabled")
+  emailEnabled          Boolean?  @default(true) @map("email_enabled")
+  smsEnabled            Boolean?  @default(false) @map("sms_enabled")
+
   User                  User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_User_settings")
 }
 
