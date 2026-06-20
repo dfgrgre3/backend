@@ -20,7 +20,6 @@ const (
 	StatusActive    Status = "ACTIVE"
 	StatusInactive  Status = "INACTIVE"
 	StatusSuspended Status = "SUSPENDED"
-	StatusDeleted   Status = "DELETED"
 )
 
 type User struct {

@@ -28,7 +28,6 @@ const (
 	StatusActive    UserStatus = "ACTIVE"
 	StatusInactive  UserStatus = "INACTIVE"
 	StatusSuspended UserStatus = "SUSPENDED"
-	StatusDeleted   UserStatus = "DELETED"
 )
 
 type User struct {
@@ -82,7 +81,6 @@ type User struct {
 	ReferralCode              *string    `gorm:"column:referral_code" json:"referralCode"`
 	AdditionalAiCredits       int        `gorm:"default:0;column:additional_ai_credits" json:"additionalAiCredits"`
 	AdditionalExamCredits     int        `gorm:"default:0;column:additional_exam_credits" json:"additionalExamCredits"`
-	IsDeleted                 bool       `gorm:"default:false;column:is_deleted" json:"-"`
 	LastUsageReset            time.Time  `gorm:"column:last_usage_reset" json:"-"`
 	MonthlyAiMessageCount     int        `gorm:"default:0;column:monthly_ai_message_count" json:"-"`
 	MonthlyExamCount          int        `gorm:"default:0;column:monthly_exam_count" json:"-"`
