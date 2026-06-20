@@ -48,7 +48,7 @@ model Addon {
   name        String
   nameAr      String?
   description String?
-  price       Float
+  price       Decimal   @db.Decimal
   type        AddonType
   value       Int
   isActive    Boolean   @default(true)
@@ -271,7 +271,7 @@ model Book {
   created_at   DateTime       @default(now())
   updated_at   DateTime
   tags         String[]       @default([])
-  price        Float?         @default(0)
+  price        Decimal?       @default(0) @db.Decimal
   deleted_at   DateTime?      @db.Timestamptz(6)
   cover_url    String?
   download_url String?
@@ -774,7 +774,7 @@ model MarketingCampaign {
   content        String
   audience       String
   rewardType     String
-  rewardValue    Float?
+  rewardValue    Decimal?  @db.Decimal
   status         String    @default("draft")
   scheduledAt    DateTime?
   sentAt         DateTime?
@@ -1050,7 +1050,7 @@ model ReferralReward {
   id         String   @id @db.Uuid
   referrerId String   @db.Uuid
   referredId String   @db.Uuid
-  amount     Float
+  amount     Decimal  @db.Decimal
   status     String   @default("PENDING")
   createdAt  DateTime @default(now())
   updatedAt  DateTime
@@ -1085,7 +1085,7 @@ model Resource {
   free         Boolean   @default(true)
   type         String
   source       String?
-  price        Float?    @default(0)
+  price        Decimal?  @default(0) @db.Decimal
   minPlanLevel Int       @default(0)
   subject_id   String?   @db.Uuid
   deleted_at   DateTime? @db.Timestamptz(6)
@@ -1297,7 +1297,7 @@ model Subject {
   is_published             Boolean                  @default(false)
   learning_objectives      String?
   level                    Level?
-  price                    Float?                   @default(0)
+  price                    Decimal?                 @default(0) @db.Decimal
   rating                   Float?                   @default(0)
   requirements             String?
   thumbnail_url            String?
@@ -1510,8 +1510,8 @@ model TestResult {
   id          String   @id @db.Uuid
   userId      String   @db.Uuid
   examId      String   @db.Uuid
-  score       Float
-  totalScore  Float
+  score       Decimal  @db.Decimal
+  totalScore  Decimal  @db.Decimal
   answers     Json?
   timeTaken   Int
   completedAt DateTime @default(now())
