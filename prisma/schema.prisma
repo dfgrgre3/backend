@@ -111,11 +111,17 @@ model AiQuestion {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model AnalyticsEvent {
-  id        String   @id
-  userId    String?
-  type      String
-  metadata  String?
-  createdAt DateTime @default(now())
+  id            String    @id @db.Uuid
+  event_id      String    @unique @db.VarChar(255)
+  event_type    String    @db.VarChar(100)
+  user_id       String?   @db.Uuid
+  payload       Json      @default("{}")
+  source        String?   @default("frontend") @db.VarChar(50)
+  ip_address    String?   @db.VarChar(50)
+  user_agent    String?
+  received_at   DateTime  @default(now()) @db.Timestamptz(6)
+  processed_at  DateTime? @db.Timestamptz(6)
+  createdAt     DateTime? @default(now()) @db.Timestamptz(6)
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -349,17 +355,24 @@ model ContentPreference {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model ContentReport {
-  id          String   @id @db.Uuid
-  userId      String
-  targetId    String
-  targetType  String
-  subjectId   String?
-  issueType   String
-  description String
-  status      String   @default("PENDING")
-  adminNote   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime
+  id            String    @id @db.Uuid
+  userId        String
+  targetId      String
+  targetType    String
+  subjectId     String?
+  reporter_id   String    @db.Uuid
+  content_title String?   @db.VarChar(500)
+  content_type  String    @db.VarChar(50)
+  content_id    String    @db.Uuid
+  reason        String    @db.Text
+  issueType     String
+  description   String
+  status        String    @default("PENDING")
+  adminNote     String?
+  resolved_by   String?   @db.Uuid
+  resolved_at   DateTime? @db.Timestamptz(6)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -382,6 +395,8 @@ model Contest {
   pinCode     String?
   organizerId String?
   deleted_at  DateTime?     @db.Timestamptz(6)
+  questions_count     Int?      @default(0)
+  participants_count  Int?      @default(0)
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -390,6 +405,7 @@ model ContestQuestion {
   contestId     String
   question      String
   correctAnswer String
+  questionOrder Int      @default(0) @map("order")
   options       String[]
   duration      Int      @default(30)
   points        Int      @default(100)
@@ -1932,21 +1948,7 @@ model deleted_record_archive {
   @@ignore
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model ip_whitelist_entries {
-  id           String    @id @db.Uuid
-  ip_address   String
-  cidr         String?
-  description  String?
-  type         String
-  status       String?   @default("active")
-  is_temporary Boolean?  @default(false)
-  expires_at   DateTime? @db.Timestamptz(6)
-  last_used_at DateTime? @db.Timestamptz(6)
-  created_by   String    @db.Uuid
-  created_at   DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
-}
+
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model ip_whitelist_settings {
@@ -2052,6 +2054,275 @@ model Lesson {
   @@index([teacher_id], map: "idx_lessons_teacher")
   @@index([user_id], map: "idx_lessons_user")
   @@index([user_id, start_time], map: "idx_lessons_user_start")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model AIConversation {
+  id         String    @id @db.Uuid
+  user_id    String    @db.Uuid
+  subject_id String?   @db.Uuid
+  topic_id   String?   @db.Uuid
+  title      String?   @db.Text
+  is_active  Boolean?  @default(true)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at DateTime? @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model AIMessage {
+  id              String    @db.Uuid
+  conversation_id String    @db.Uuid
+  role            String    @db.Text
+  content         String    @db.Text
+  model           String?   @db.Text
+  tokens_used     Int?
+  latency         BigInt?
+  created_at      DateTime  @db.Timestamptz(6)
+  updated_at      DateTime? @db.Timestamptz(6)
+
+  @@id([id, created_at])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ticket_messages {
+  id            String    @id @db.Uuid
+  ticket_id     String    @db.Uuid
+  sender_id     String    @db.Uuid
+  sender_name   String    @db.VarChar(200)
+  sender_role   String    @db.VarChar(20)
+  message       String    @db.Text
+  attachments   Json?
+  is_internal   Boolean?  @default(false)
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  read_at       DateTime? @db.Timestamptz(6)
+  deleted_at    DateTime? @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model user_journey_steps {
+  id          String    @id @db.Uuid
+  journey_id  String    @db.Uuid
+  user_id     String    @db.Uuid
+  session_id  String    @db.VarChar(100)
+  page        String    @db.VarChar(500)
+  action      String    @db.VarChar(100)
+  metadata    Json?
+  timestamp   DateTime  @db.Timestamptz(6)
+  duration    BigInt?
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at  DateTime? @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model scheduled_items {
+  id            String    @id @db.Uuid
+  type          String    @db.VarChar(20)
+  title         String    @db.VarChar(200)
+  description   String?   @db.Text
+  content       Json?
+  scheduled_for DateTime  @db.Timestamptz(6)
+  timezone      String?   @default("UTC") @db.VarChar(50)
+  frequency     String?   @default("once") @db.VarChar(20)
+  status        String?   @default("pending") @db.VarChar(20)
+  retry_count   Int?      @default(0)
+  max_retries   Int?      @default(3)
+  error         String?   @db.Text
+  executed_at   DateTime? @db.Timestamptz(6)
+  cancelled_at  DateTime? @db.Timestamptz(6)
+  created_by    String    @db.Uuid
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at    DateTime? @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model backups {
+  id               String    @id @db.Uuid
+  name             String    @db.VarChar(100)
+  type             String    @db.VarChar(20)
+  size             BigInt?
+  status           String?   @default("pending") @db.VarChar(20)
+  checksum         String?   @db.VarChar(64)
+  download_url     String?   @db.VarChar(500)
+  includes_files   Boolean?  @default(false)
+  includes_database Boolean? @default(false)
+  tables           String[] @default([])
+  retention_days   Int?      @default(30)
+  created_by       String    @db.Uuid
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
+  completed_at     DateTime? @db.Timestamptz(6)
+  error            String?   @db.Text
+  restored_at      DateTime? @db.Timestamptz(6)
+  restored_by      String?   @db.Uuid
+  deleted_at       DateTime? @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model user_flows {
+  id         String    @id @db.Uuid
+  from_page  String    @db.VarChar(500)
+  to_page    String    @db.VarChar(500)
+  date       DateTime  @db.Date
+  count      BigInt?   @default(0)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at DateTime? @db.Timestamptz(6)
+
+  @@unique([from_page, to_page, date], map: "idx_flow")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Campaign {
+  id           String    @id @db.Uuid
+  name         String    @db.VarChar(255)
+  description  String?   @db.Text
+  type         String?   @default("email") @db.VarChar(50)
+  status       String?   @default("DRAFT") @db.VarChar(50)
+  target_role  String?   @db.VarChar(50)
+  content      String?   @db.Text
+  start_date   DateTime? @db.Timestamptz(6)
+  end_date     DateTime? @db.Timestamptz(6)
+  sent_count   Int?      @default(0)
+  open_count   Int?      @default(0)
+  click_count  Int?      @default(0)
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model support_tickets {
+  id                  String    @id @db.Uuid
+  ticket_number       String    @unique @db.VarChar(20)
+  user_id             String    @db.Uuid
+  user_name           String?   @db.VarChar(200)
+  user_email          String?   @db.VarChar(255)
+  subject             String    @db.VarChar(200)
+  description         String    @db.Text
+  category            String    @db.VarChar(20)
+  status              String?   @default("open") @db.VarChar(20)
+  priority            String?   @default("medium") @db.VarChar(10)
+  assigned_to         String?   @db.Uuid
+  assigned_to_name    String?   @db.VarChar(200)
+  tags                String[] @default([])
+  related_entity_type String?   @db.VarChar(50)
+  related_entity_id   String?   @db.Uuid
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  resolved_at         DateTime? @db.Timestamptz(6)
+  closed_at           DateTime? @db.Timestamptz(6)
+  satisfaction_rating Int?
+  deleted_at          DateTime? @db.Timestamptz(6)
+
+  @@unique([ticket_number], map: "idx_support_tickets_number")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model user_journeys {
+  id               String    @id @db.Uuid
+  user_id          String    @db.Uuid
+  session_id       String    @db.VarChar(100)
+  started_at       DateTime  @db.Timestamptz(6)
+  ended_at         DateTime? @db.Timestamptz(6)
+  total_duration   BigInt?
+  conversion_goal  String?   @db.VarChar(100)
+  completed        Boolean?  @default(false)
+  device_info      String?   @db.VarChar(500)
+  ip_address       String?   @db.VarChar(50)
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at       DateTime? @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model page_views {
+  id               String    @id @db.Uuid
+  page             String    @db.VarChar(500)
+  date             DateTime  @db.Date
+  views            BigInt?   @default(0)
+  unique_visitors  BigInt?   @default(0)
+  avg_duration     Float?
+  bounces          BigInt?   @default(0)
+  exits            BigInt?   @default(0)
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at       DateTime? @db.Timestamptz(6)
+
+  @@unique([page, date], map: "idx_page_date")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model conversion_events {
+  id              String    @id @db.Uuid
+  user_id         String    @db.Uuid
+  session_id      String    @db.VarChar(100)
+  journey_id      String?   @db.Uuid
+  goal            String    @db.VarChar(100)
+  value           Float?
+  currency        String?   @db.VarChar(3)
+  timestamp       DateTime  @db.Timestamptz(6)
+  journey_steps   Int?
+  source          String?   @db.VarChar(100)
+  campaign_id     String?   @db.Uuid
+  metadata        Json?
+  ip_address      String?   @db.VarChar(50)
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at      DateTime? @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model active_user_stats {
+  id                    String    @id @db.Uuid
+  date                  DateTime  @db.Date
+  daily_active          BigInt?   @default(0)
+  weekly_active         BigInt?   @default(0)
+  monthly_active        BigInt?   @default(0)
+  new_users             BigInt?   @default(0)
+  returning_users       BigInt?   @default(0)
+  avg_session_duration  Float?
+  total_sessions        BigInt?   @default(0)
+  created_at            DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@unique([date], map: "idx_active_user_stats_date")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model custom_reports {
+  id                 String    @id @db.Uuid
+  name               String    @db.VarChar(100)
+  description        String?   @db.Text
+  widgets            Json?
+  filters            Json?
+  date_range_from    DateTime? @db.Timestamptz(6)
+  date_range_to      DateTime? @db.Timestamptz(6)
+  created_by         String    @db.Uuid
+  created_at         DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at         DateTime? @db.Timestamptz(6)
+  is_public          Boolean?  @default(false)
+  last_run_at        DateTime? @db.Timestamptz(6)
+  schedule_frequency String?   @db.VarChar(20)
+  schedule_email_to  String[] @default([])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ip_whitelist_entries {
+  id           String    @id @db.Uuid
+  ip_address   String
+  cidr         String?
+  description  String?
+  type         String
+  status       String?   @default("active")
+  is_temporary Boolean?  @default(false)
+  expires_at   DateTime? @db.Timestamptz(6)
+  last_used_at DateTime? @db.Timestamptz(6)
+  created_by   String    @db.Uuid
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at   DateTime? @db.Timestamptz(6)
+  country      String?   @db.VarChar(100)
+  city         String?   @db.VarChar(100)
 }
 
 enum AchievementCategory {
