@@ -3,10 +3,8 @@ package handlers
 import (
 	"context"
 	"crypto/hmac"
-	cryptoRand "crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -42,8 +40,6 @@ var (
 )
 
 const (
-	MaxLoginAttempts          = 5
-	LockoutDuration           = 15 * time.Minute
 	errFailedToGenerateTokens = "Failed to generate tokens"
 	refreshTokenPath          = "/"
 	errInvalidEmail           = "Invalid email"
@@ -162,8 +158,7 @@ func GetUsers(c *gin.Context) {
 		query = query.Where("role = ?", role)
 	}
 	if search != "" {
-		like := "%" + search + "%"
-		query = query.Where("email ILIKE ? OR name ILIKE ? OR username ILIKE ?", like, like, like)
+		query = query.Where("email ILIKE CONCAT('%', ?, '%') OR name ILIKE CONCAT('%', ?, '%') OR username ILIKE CONCAT('%', ?, '%')", search, search, search)
 	}
 
 	var total int64
@@ -254,6 +249,31 @@ func UpdateUser(c *gin.Context) {
 	if err := db.DB.First(&user, idQuery, userID).Error; err != nil {
 		api_response.Error(c, http.StatusNotFound, errUserNotFound)
 		return
+	}
+
+	// Authorization checks to prevent privilege escalation
+	currentUserID, exists := c.Get("userId")
+	if !exists {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	currentUserIDStr, _ := currentUserID.(string)
+	currentUserRole, _ := c.Get("role")
+	currentUserRoleStr, _ := currentUserRole.(string)
+
+	isAdmin := currentUserRoleStr == "ADMIN" || currentUserRoleStr == "SUPER_ADMIN"
+	isSelf := currentUserIDStr == user.ID
+
+	if !isAdmin && !isSelf {
+		api_response.Error(c, http.StatusForbidden, "You are not authorized to update this user")
+		return
+	}
+
+	if isSelf && !isAdmin {
+		if req.Role != "" || req.Permissions != nil {
+			api_response.Error(c, http.StatusForbidden, "You are not authorized to update role or permissions")
+			return
+		}
 	}
 
 	type userUpdates struct {
@@ -358,7 +378,7 @@ func CreateUser(c *gin.Context) {
 		Username *string `json:"username"`
 		Role     string  `json:"role"`
 		Phone    *string `json:"phone"`
-		Password string  `json:"password"`
+		Password string  `json:"password" binding:"required,min=8"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
@@ -375,14 +395,7 @@ func CreateUser(c *gin.Context) {
 		role = models.UserRole(input.Role)
 	}
 
-	password := input.Password
-	if password == "" {
-		b := make([]byte, 16)
-		_, _ = cryptoRand.Read(b)
-		password = hex.EncodeToString(b)
-	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCostFromConfig())
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcryptCostFromConfig())
 	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to hash password")
 		return
@@ -989,7 +1002,7 @@ func verifyWebhookTimestamp(svixTimestamp string) error {
 	if err != nil {
 		return fmt.Errorf("Invalid svix-timestamp")
 	}
-	if time.Now().Unix()-ts > 300 {
+	if time.Now().Unix()-ts > 180 {
 		return fmt.Errorf("Webhook timestamp too old")
 	}
 	return nil
@@ -1061,24 +1074,32 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 
 	// Extract metadata fields from public_metadata or unsafe_metadata
 	role := models.RoleStudent
+	roleExistsInMetadata := false
 	var phone, country, gradeLevel, educationType string
 	var dateOfBirth *time.Time
 	var interestedSubjects []string
 
-	// Try extracting from public_metadata first
+	// Extract from public_metadata (trusted server-side metadata)
 	if publicMetadata, ok := clerkData["public_metadata"].(map[string]interface{}); ok {
 		if r, ok := publicMetadata["role"].(string); ok && r != "" {
-			role = models.UserRole(strings.ToUpper(r))
+			roleVal := models.UserRole(strings.ToUpper(strings.TrimSpace(r)))
+			// Do not allow webhook to sync ADMIN/SUPER_ADMIN roles directly unless verified
+			if roleVal == models.RoleAdmin || roleVal == models.RoleSuperAdmin {
+				log.Printf("[Security Warning] Clerk webhook attempt to sync administrative role %q rejected during syncUserFromClerk. Fallback to STUDENT.", r)
+				role = models.RoleStudent
+				roleExistsInMetadata = true
+			} else if models.IsValidUserRole(roleVal) {
+				role = roleVal
+				roleExistsInMetadata = true
+			}
 		}
 	}
 
-	// Try extracting from unsafe_metadata (which is set by our frontend sign-up form)
+	// Extract from unsafe_metadata (untrusted client-side metadata)
 	var unsafeMetadata map[string]interface{}
 	if um, ok := clerkData["unsafe_metadata"].(map[string]interface{}); ok {
 		unsafeMetadata = um
-		if r, ok := unsafeMetadata["role"].(string); ok && r != "" {
-			role = models.UserRole(strings.ToUpper(r))
-		}
+		// STRICT SECURITY CONTROL: role field is strictly ignored from unsafe_metadata to prevent privilege escalation.
 		if p, ok := unsafeMetadata["phone"].(string); ok {
 			phone = p
 		}
@@ -1107,6 +1128,7 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 
 	user := models.User{
 		ID:                 dbUserID,
+		ClerkID:            &userId,
 		Email:              primaryEmail,
 		EmailVerified:      true,
 		Status:             models.StatusActive,
@@ -1132,7 +1154,7 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 	}
 
 	var existing models.User
-	err := db.DB.Unscoped().Where("id = ?", dbUserID).First(&existing).Error
+	err := db.DB.Unscoped().Where("clerk_id = ? OR id = ?", userId, dbUserID).First(&existing).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// New user creation
@@ -1146,9 +1168,12 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 	} else {
 		// Existing user: update metadata and core profile fields
 		updates := map[string]interface{}{
+			"clerk_id":       userId,
 			"email":          primaryEmail,
 			"email_verified": true,
-			"role":           role,
+		}
+		if roleExistsInMetadata && existing.Role != models.RoleAdmin && existing.Role != models.RoleSuperAdmin {
+			updates["role"] = role
 		}
 		if name != "" {
 			updates["name"] = &name
@@ -1191,7 +1216,7 @@ func syncUserFromClerk(clerkData map[string]interface{}) error {
 func EnsureUserExists(userId, email string) error {
 	dbUserID := services.ClerkIDToUUID(userId)
 	var user models.User
-	err := db.DB.First(&user, idQuery, dbUserID).Error
+	err := db.DB.Where("clerk_id = ? OR id = ?", userId, dbUserID).First(&user).Error
 
 	if err == nil {
 		return nil
@@ -1199,6 +1224,7 @@ func EnsureUserExists(userId, email string) error {
 
 	newUser := models.User{
 		ID:            dbUserID,
+		ClerkID:       &userId,
 		Email:         email,
 		EmailVerified: false,
 		Status:        models.StatusActive,
@@ -1232,8 +1258,8 @@ func bcryptCostFromConfig() int {
 	if cost < 12 {
 		return 12
 	}
-	if cost > bcrypt.MaxCost {
-		return bcrypt.MaxCost
+	if cost > 14 {
+		return 14
 	}
 	return cost
 }

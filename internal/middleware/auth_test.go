@@ -1,14 +1,20 @@
 package middleware
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/models"
 
 	"github.com/gin-gonic/gin"
+	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -684,33 +690,49 @@ func TestImpersonationTokens(t *testing.T) {
 		cachedConfig.ImpersonationSecret = originalSecret
 	}()
 
-	// 1. Test invalid/empty secret (should panic)
+	// 1. Test invalid/empty secret (should return empty token, not panic)
 	cachedConfig.ImpersonationSecret = ""
-	assert.Panics(t, func() {
-		SignImpersonationToken("user-123")
-	}, "should panic when secret is empty")
+	tokenEmpty := SignImpersonationToken("user-123", "admin-999")
+	assert.Empty(t, tokenEmpty, "should return empty token when secret is empty")
 
 	cachedConfig.ImpersonationSecret = "too-short"
-	assert.Panics(t, func() {
-		SignImpersonationToken("user-123")
-	}, "should panic when secret is not 32-byte hex")
+	tokenShort := SignImpersonationToken("user-123", "admin-999")
+	assert.Empty(t, tokenShort, "should return empty token when secret is not 32-byte hex")
 
 	// 2. Test valid 32-byte hex key
 	cachedConfig.ImpersonationSecret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	
-	token := SignImpersonationToken("user-123")
+	token := SignImpersonationToken("user-123", "admin-999")
 	assert.NotEmpty(t, token)
 
-	userID, ok := VerifyImpersonationToken(token)
+	userID, ok := VerifyImpersonationToken(token, "admin-999")
 	assert.True(t, ok)
 	assert.Equal(t, "user-123", userID)
 
-	// Test invalid token
-	_, ok = VerifyImpersonationToken("user-123.invalid_signature")
+	// Test bound admin ID validation (rejection if admin ID doesn't match)
+	_, ok = VerifyImpersonationToken(token, "admin-888")
+	assert.False(t, ok, "should reject token when verified with a different admin ID")
+
+	// Test invalid token format
+	_, ok = VerifyImpersonationToken("user-123.invalid_signature", "admin-999")
 	assert.False(t, ok)
 
-	_, ok = VerifyImpersonationToken("invalid_token_format")
+	_, ok = VerifyImpersonationToken("invalid_token_format", "admin-999")
 	assert.False(t, ok)
+
+	// Test expired token validation
+	// Manually construct an expired token payload (10 minutes in the past)
+	expiresAt := time.Now().Add(-10 * time.Minute).Unix()
+	payload := fmt.Sprintf("%s:%d:%s", "user-123", expiresAt, "admin-999")
+	key, err := getImpersonationSignKey()
+	assert.NoError(t, err)
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(payload))
+	signature := hex.EncodeToString(mac.Sum(nil))
+	expiredToken := fmt.Sprintf("%s.%d.%s.%s", "user-123", expiresAt, "admin-999", signature)
+
+	_, ok = VerifyImpersonationToken(expiredToken, "admin-999")
+	assert.False(t, ok, "should reject expired impersonation tokens")
 }
 
 // ─── SUPER_ADMIN Role Tests ───────────────────────────────────────────────────
@@ -838,4 +860,25 @@ func TestImpersonation_SuperAdmin_CannotImpersonateAdmin(t *testing.T) {
 	assert.True(t, roleHierarchy["SUPER_ADMIN"] <= roleHierarchy["SUPER_ADMIN"],
 		"SUPER_ADMIN cannot impersonate another SUPER_ADMIN (equal rank)")
 }
+
+// TestDistributedCacheInvalidation_LocalEviction verifies that localRolePermsCache entries
+// are deleted correctly upon calling InvalidateRolePermsCache.
+func TestDistributedCacheInvalidation_LocalEviction(t *testing.T) {
+	userID := "test-invalidate-user-123"
+	
+	// Seed local cache
+	localRolePermsCache.Set(userID, &userAuthContext{Role: "STUDENT"}, cache.DefaultExpiration)
+	
+	// Ensure it exists
+	_, exists := localRolePermsCache.Get(userID)
+	assert.True(t, exists)
+	
+	// Perform invalidation
+	InvalidateRolePermsCache(userID)
+	
+	// Ensure it has been evicted from local cache
+	_, exists = localRolePermsCache.Get(userID)
+	assert.False(t, exists)
+}
+
 

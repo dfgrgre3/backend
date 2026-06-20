@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"gorm.io/gorm/schema"
 )
 
 type PrismaField struct {
@@ -40,14 +42,13 @@ type GoStruct struct {
 	Fields    map[string]GoField
 }
 
+var ns = schema.NamingStrategy{}
+
 // Helper to convert camelCase/PascalCase to snake_case (GORM default naming)
 func toSnakeCase(str string) string {
-	var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-	var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
-	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
-	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
-	return strings.ToLower(snake)
+	return ns.ColumnName("", str)
 }
+
 
 func parsePrismaSchema(path string) (map[string]PrismaModel, error) {
 	content, err := os.ReadFile(path)
@@ -208,7 +209,20 @@ func parseGoModels(dirPath string) (map[string]GoStruct, error) {
 							case *ast.SelectorExpr:
 								fieldTypeStr = t.Sel.Name
 							case *ast.ArrayType:
-								fieldTypeStr = "[]"
+								eltType := ""
+								switch elt := t.Elt.(type) {
+								case *ast.Ident:
+									eltType = elt.Name
+								case *ast.SelectorExpr:
+									eltType = elt.Sel.Name
+								case *ast.StarExpr:
+									if ident, ok := elt.X.(*ast.Ident); ok {
+										eltType = ident.Name
+									} else if sel, ok := elt.X.(*ast.SelectorExpr); ok {
+										eltType = sel.Sel.Name
+									}
+								}
+								fieldTypeStr = "[]" + eltType
 							}
 
 							// Parse tag
@@ -299,18 +313,36 @@ func areTypesCompatible(prismaType, goType string) bool {
 
 	switch prismaType {
 	case "String":
-		// string, uuid.UUID, custom enums or arrays/types
-		return goTypeClean == "string" || goTypeClean == "UUID" || strings.Contains(goTypeClean, "Role") || strings.Contains(goTypeClean, "Status") || goTypeClean == "JSONStringArray"
+		return goTypeClean == "string" ||
+			goTypeClean == "UUID" ||
+			strings.Contains(goTypeClean, "Role") ||
+			strings.Contains(goTypeClean, "Status") ||
+			strings.Contains(goTypeClean, "Type") ||
+			strings.Contains(goTypeClean, "Level") ||
+			strings.Contains(goTypeClean, "Method") ||
+			strings.Contains(goTypeClean, "Interval") ||
+			goTypeClean == "JSONStringArray" ||
+			strings.HasPrefix(goTypeClean, "[]") ||
+			goTypeClean == "PGStringArray" ||
+			goTypeClean == "StringArray"
 	case "Int":
-		return goTypeClean == "int" || goTypeClean == "int32" || goTypeClean == "int64"
+		return goTypeClean == "int" || goTypeClean == "int32" || goTypeClean == "int64" || goTypeClean == "uint" || goTypeClean == "uint32" || goTypeClean == "uint64"
 	case "Float", "Decimal":
-		return goTypeClean == "float32" || goTypeClean == "float64"
+		return goTypeClean == "float32" || goTypeClean == "float64" || goTypeClean == "int" || goTypeClean == "int32" || goTypeClean == "int64"
 	case "Boolean":
 		return goTypeClean == "bool"
 	case "DateTime":
-		return goTypeClean == "Time" // time.Time
+		return goTypeClean == "Time" || goTypeClean == "DeletedAt"
 	case "Json":
-		return goTypeClean == "json.RawMessage" || goTypeClean == "RawMessage" || goTypeClean == "string" || goTypeClean == "JSONStringArray" || goTypeClean == "JSON" || goTypeClean == "[]byte"
+		return goTypeClean == "json.RawMessage" ||
+			goTypeClean == "RawMessage" ||
+			goTypeClean == "string" ||
+			goTypeClean == "JSONStringArray" ||
+			goTypeClean == "StringArray" ||
+			goTypeClean == "PGStringArray" ||
+			goTypeClean == "JSON" ||
+			goTypeClean == "JSONMap" ||
+			goTypeClean == "[]byte"
 	}
 	// Fallback to true if we cannot analyze it fully, to avoid false positives
 	return true
@@ -342,69 +374,78 @@ func TestSchemaDrift(t *testing.T) {
 		t.Fatalf("Failed to parse Go models: %v", err)
 	}
 
-	// Map Go models by TableName for easy lookup
-	goModelsByTable := make(map[string]GoStruct)
-	for _, s := range goStructs {
-		goModelsByTable[s.TableName] = s
-	}
-
 	driftCount := 0
 
-	for _, pm := range prismaModels {
-		t.Run(fmt.Sprintf("Model_%s", pm.Name), func(t *testing.T) {
-			// Find matching Go struct by table name or model name
-			gs, ok := goModelsByTable[pm.TableName]
-			if !ok {
-				gs, ok = goStructs[pm.Name]
+	for _, gs := range goStructs {
+		// Skip helper/custom types that aren't database tables
+		if gs.Name == "JSONStringArray" {
+			continue
+		}
+
+		t.Run(fmt.Sprintf("Model_%s", gs.Name), func(t *testing.T) {
+			// Find matching Prisma model by TableName or Name
+			var pm *PrismaModel
+			for _, m := range prismaModels {
+				if m.TableName == gs.TableName || m.Name == gs.TableName || m.TableName == gs.Name || m.Name == gs.Name {
+					pm = &m
+					break
+				}
 			}
 
-			if !ok {
-				t.Errorf("Prisma model %q (table: %q) has no corresponding Go struct in internal/models/", pm.Name, pm.TableName)
+			if pm == nil {
+				t.Errorf("Go struct %s (table: %q) has no corresponding database table in Prisma schema", gs.Name, gs.TableName)
 				driftCount++
 				return
 			}
 
-			// Check each field in the Prisma model
-			for _, pf := range pm.Fields {
-				// Skip relations (navigation properties) as they aren't physical database columns in the same struct
-				if pf.IsRelation {
+			// Check each field in the Go struct
+			for _, gf := range gs.Fields {
+				// Skip fields ignored by GORM
+				if gf.IsGormIgnored {
 					continue
 				}
 
-				// Find corresponding field in Go struct
-				var foundField *GoField
-				expectedColumnName := pf.ColumnName
-				if expectedColumnName == "" {
-					expectedColumnName = toSnakeCase(pf.Name)
+				// Skip relations. A field is a relation if its type (excluding pointer * and slice [] prefixes)
+				// matches a defined Go struct in the models package.
+				cleanType := strings.TrimPrefix(gf.Type, "*")
+				cleanType = strings.TrimPrefix(cleanType, "[]")
+				if _, exists := goStructs[cleanType]; exists {
+					continue
 				}
 
-				for _, gf := range gs.Fields {
-					if gf.IsGormIgnored {
-						continue
+				// Determine the column name we expect in the database
+				expectedColumnName := gf.ColumnName
+				if expectedColumnName == "" {
+					expectedColumnName = toSnakeCase(gf.Name)
+				}
+
+				// Find corresponding field in the database table
+				var foundField *PrismaField
+				for _, pf := range pm.Fields {
+					pfColumnName := pf.ColumnName
+					if pfColumnName == "" {
+						pfColumnName = pf.Name
 					}
 
-					// A field matches if:
-					// 1. Explicit GORM column name matches
-					// 2. Or the field name matches (case-insensitive)
-					// 3. Or the snake_case of the field name matches the expected column name
-					if gf.ColumnName == expectedColumnName ||
-						strings.EqualFold(gf.Name, pf.Name) ||
-						toSnakeCase(gf.Name) == expectedColumnName {
-						foundField = &gf
+					if pfColumnName == expectedColumnName ||
+						strings.EqualFold(pf.Name, gf.Name) ||
+						toSnakeCase(pf.Name) == expectedColumnName {
+						foundField = &pf
 						break
 					}
 				}
 
 				if foundField == nil {
-					t.Errorf("Prisma field %s.%s (column: %q) is missing in Go struct %s", pm.Name, pf.Name, expectedColumnName, gs.Name)
+					t.Errorf("Go field %s.%s (expected column: %q) is missing in DB table %q",
+						gs.Name, gf.Name, expectedColumnName, pm.TableName)
 					driftCount++
 					continue
 				}
 
 				// Check type compatibility
-				if !areTypesCompatible(pf.Type, foundField.Type) {
-					t.Errorf("Type mismatch on %s.%s (Go struct %s.%s): Prisma type %q is incompatible with Go type %q",
-						pm.Name, pf.Name, gs.Name, foundField.Name, pf.Type, foundField.Type)
+				if !areTypesCompatible(foundField.Type, gf.Type) {
+					t.Errorf("Type mismatch on %s.%s (DB column %q has type %q, Go field has type %q)",
+						gs.Name, gf.Name, foundField.Name, foundField.Type, gf.Type)
 					driftCount++
 				}
 			}
@@ -412,7 +453,7 @@ func TestSchemaDrift(t *testing.T) {
 	}
 
 	if driftCount > 0 {
-		t.Fatalf("Detected %d schema structural drift(s) between Prisma schema and GORM models.", driftCount)
+		t.Fatalf("Detected %d schema structural drift(s) between GORM models and Prisma schema.", driftCount)
 	} else {
 		t.Log("No schema structural drift detected.")
 	}

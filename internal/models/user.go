@@ -33,6 +33,7 @@ const (
 
 type User struct {
 	ID           string         `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	ClerkID      *string        `gorm:"uniqueIndex;column:clerk_id" json:"clerkId"`
 	Email        string         `gorm:"uniqueIndex;not null" json:"email"`
 	Name         *string        `gorm:"index" json:"name"`
 	Username     *string        `gorm:"uniqueIndex" json:"username"`

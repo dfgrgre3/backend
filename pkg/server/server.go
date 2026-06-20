@@ -98,6 +98,7 @@ func initApp() {
 		redisURL := os.Getenv("REDIS_URL")
 		if redisURL != "" {
 			db.ConnectRedis(redisURL)
+			middleware.StartDistributedCacheInvalidator()
 		}
 
 		// Initialize Hexagonal Architecture (Dependency Injection)

@@ -123,20 +123,36 @@ const (
 
 func knownAppliedMigrations() map[string]bool {
 	return map[string]bool{
-		"0000_baseline_schema":                   true,
-		"0001_add_user_session":                  true,
-		"0021_add_missing_tables":                true,
-		"0022_fix_notification_table":            true,
-		"0023_add_foreign_keys":                  true,
-		"0024_add_check_constraints":             true,
-		"0025_add_not_null_unique_constraints":   true,
-		"0026_add_performance_indexes":           true,
-		"0027_create_materialized_views":         true, // superseded by 0033
-		"0028_create_analytics_event_log":        true, // Prisma schema differs
-		"0029_cleanup_constraints_and_integrity": true,
-		"0030_table_partitioning":                true,
-		"0031_enforce_critical_constraints":      true,
-		"0033_fix_materialized_views":            true,
+		"0000_baseline_schema":                       true,
+		"0001_add_user_session":                      true,
+		"0021_add_missing_tables":                    true,
+		"0022_fix_notification_table":                true,
+		"0023_add_foreign_keys":                      true,
+		"0024_add_check_constraints":                 true,
+		"0025_add_not_null_unique_constraints":       true,
+		"0026_add_performance_indexes":               true,
+		"0027_create_materialized_views":             true, // superseded by 0033
+		"0028_create_analytics_event_log":            true, // Prisma schema differs
+		"0029_cleanup_constraints_and_integrity":     true,
+		"0030_table_partitioning":                    true,
+		"0031_enforce_critical_constraints":          true,
+		"0033_fix_materialized_views":                true,
+		"0039_cuid_function":                         true,
+		"0043_database_health_hardening":             true,
+		"0044_safe_database_optimization":            true,
+		"0045_auth_log_uuid_and_password_hash_compat": true,
+		"0046_add_missing_user_archive_reason":       true,
+		"0047_user_session_schema_compat":            true,
+		"0048_security_and_subscription_schema_compat": true,
+		"0049_security_invoker_active_enrollments":   true,
+		"0050_add_broadcasts_and_push_tokens":        true,
+		"0051_fix_course_review_schema":              true,
+		"0052_default_reviews_visible":               true,
+		"0053_lesson_attachment_compat":              true,
+		"0054_fix_user_permissions_jsonb":            true,
+		"0055_add_certificates":                      true,
+		"0055_add_super_admin_role":                  true,
+		"0056_add_lesson_table":                      true,
 	}
 }
 

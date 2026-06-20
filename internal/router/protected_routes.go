@@ -19,117 +19,130 @@ func SetupProtectedRoutes(router *gin.Engine) {
 	protected := router.Group("/api")
 	protected.Use(middleware.Auth())
 	protected.Use(middleware.Idempotency())
-	protected.Use(middleware.AnyAuthenticatedUser())
-	protected.Use(middleware.StrictRBAC())
 	{
-		protected.GET("/progress/summary", handlers.GetProgressSummary)
-		protected.GET("/analytics/weekly", handlers.GetWeeklyAnalytics)
-		protected.GET("/analytics/time", handlers.GetTimeAnalytics)
-		protected.GET("/analytics/performance", handlers.GetWeeklyAnalytics)
-		protected.GET("/analytics/predictions", handlers.GetWeeklyAnalytics)
-		protected.GET("/recommendations", handlers.GetAIRecommendations)
+		// Sub-group for Admin-only routes.
+		// AdminRequired() runs first, followed by StrictRBAC() to enforce Deny-by-Default.
+		adminProtectedRoutes := protected.Group("")
+		adminProtectedRoutes.Use(middleware.AdminRequired())
+		adminProtectedRoutes.Use(middleware.StrictRBAC())
+		{
+			adminProtectedRoutes.POST("/billing/wallet", handlers.HandleWalletDeposit)
+		}
 
-		// Protected Activity routes
-		protected.GET("/schedule", handlers.GetSchedule)
-		protected.GET("/lessons", handlers.GetLessons)
-		protected.POST("/lessons", handlers.CreateLesson)
-		protected.GET(pathTasks, handlers.GetTasks)
-		protected.GET("/study-sessions", handlers.GetStudySessions)
-		protected.GET("/reminders", handlers.GetReminders)
-		protected.GET("/resources", handlers.GetResources)
-		protected.POST("/schedule", handlers.UpdateSchedule)
-		protected.POST(pathTasks, handlers.CreateTask)
-		protected.PATCH(pathTasksID, handlers.UpdateTask)
-		protected.PUT(pathTasksID, handlers.UpdateTask)
-		protected.DELETE(pathTasksID, handlers.DeleteTask)
-		protected.POST("/study-sessions", handlers.CreateStudySession)
-		protected.POST("/reminders", handlers.CreateReminder)
+		// General endpoints accessible to any authenticated user.
+		// AnyAuthenticatedUser() runs first, followed by StrictRBAC() to enforce Deny-by-Default.
+		userRoutes := protected.Group("")
+		userRoutes.Use(middleware.AnyAuthenticatedUser())
+		userRoutes.Use(middleware.StrictRBAC())
+		{
+			userRoutes.GET("/progress/summary", handlers.GetProgressSummary)
+			userRoutes.GET("/analytics/weekly", handlers.GetWeeklyAnalytics)
+			userRoutes.GET("/analytics/time", handlers.GetTimeAnalytics)
+			userRoutes.GET("/analytics/performance", handlers.GetWeeklyAnalytics)
+			userRoutes.GET("/analytics/predictions", handlers.GetWeeklyAnalytics)
+			userRoutes.GET("/recommendations", handlers.GetAIRecommendations)
 
-		// Notifications
-		protected.GET("/notifications", handlers.GetNotifications)
-		protected.GET("/notifications/unread-count", handlers.GetUnreadNotificationsCount)
-		protected.POST("/notifications/mark-read", handlers.MarkNotificationRead)
-		protected.POST("/notifications/enqueue", handlers.CreateNotificationTask)
+			// Protected Activity routes
+			userRoutes.GET("/schedule", handlers.GetSchedule)
+			userRoutes.GET("/lessons", handlers.GetLessons)
+			userRoutes.POST("/lessons", handlers.CreateLesson)
+			userRoutes.GET(pathTasks, handlers.GetTasks)
+			userRoutes.GET("/study-sessions", handlers.GetStudySessions)
+			userRoutes.GET("/reminders", handlers.GetReminders)
+			userRoutes.GET("/resources", handlers.GetResources)
+			userRoutes.POST("/schedule", handlers.UpdateSchedule)
+			userRoutes.POST(pathTasks, handlers.CreateTask)
+			userRoutes.PATCH(pathTasksID, handlers.UpdateTask)
+			userRoutes.PUT(pathTasksID, handlers.UpdateTask)
+			userRoutes.DELETE(pathTasksID, handlers.DeleteTask)
+			userRoutes.POST("/study-sessions", handlers.CreateStudySession)
+			userRoutes.POST("/reminders", handlers.CreateReminder)
 
-		// Settings
-		protected.GET("/settings/preferences", handlers.GetSettings)
-		protected.PATCH("/settings/preferences", handlers.UpdateSettings)
+			// Notifications
+			userRoutes.GET("/notifications", handlers.GetNotifications)
+			userRoutes.GET("/notifications/unread-count", handlers.GetUnreadNotificationsCount)
+			userRoutes.POST("/notifications/mark-read", handlers.MarkNotificationRead)
+			userRoutes.POST("/notifications/enqueue", handlers.CreateNotificationTask)
 
-		// Profile
-		protected.GET("/users/billing-summary", handlers.GetBillingSummary)
-		protected.GET("/users/profile", handlers.GetUserProfile)
-		protected.PATCH("/users/profile", handlers.UpdateProfile)
-		protected.GET("/users/progress/courses", handlers.GetUserCoursesProgress)
-		protected.GET("/users/progress/time", handlers.GetUserTimeProgress)
-		protected.GET("/users/progress/achievements", handlers.GetUserAchievementsProgress)
+			// Settings
+			userRoutes.GET("/settings/preferences", handlers.GetSettings)
+			userRoutes.PATCH("/settings/preferences", handlers.UpdateSettings)
 
-		// Activities
-		protected.GET("/activities/recent", handlers.GetRecentActivities)
-		protected.POST("/activities/:id/read", handlers.MarkActivityRead)
-		protected.POST("/activities/read-all", handlers.MarkAllActivitiesRead)
+			// Profile
+			userRoutes.GET("/users/billing-summary", handlers.GetBillingSummary)
+			userRoutes.GET("/users/profile", handlers.GetUserProfile)
+			userRoutes.PATCH("/users/profile", handlers.UpdateProfile)
+			userRoutes.GET("/users/progress/courses", handlers.GetUserCoursesProgress)
+			userRoutes.GET("/users/progress/time", handlers.GetUserTimeProgress)
+			userRoutes.GET("/users/progress/achievements", handlers.GetUserAchievementsProgress)
 
-		// Billing & Subscriptions
-		protected.GET("/billing/wallet", handlers.GetWalletBalance)
-		protected.POST("/billing/wallet", middleware.AdminRequired(), handlers.HandleWalletDeposit)
-		protected.GET("/billing/wallet/transactions", handlers.GetUserWalletTransactions)
-		protected.GET("/subscriptions/plans", handlers.GetSubscriptionPlans)
-		protected.GET("/subscriptions", handlers.GetUserSubscription)
-		protected.GET("/subscriptions/addons", handlers.GetSubscriptionAddons)
-		protected.POST("/subscriptions/addons", handlers.PurchaseAddon)
-		protected.POST("/subscriptions/purchase", handlers.PurchasePlan)
-		protected.POST("/subscriptions/initiate-payment", handlers.InitiatePlanPayment)
-		protected.POST("/subscriptions/cancel", handlers.CancelSubscription)
-		protected.POST("/subscriptions/renew", handlers.RenewSubscription)
-		protected.POST("/coupons/validate", handlers.ValidateCoupon)
+			// Activities
+			userRoutes.GET("/activities/recent", handlers.GetRecentActivities)
+			userRoutes.POST("/activities/:id/read", handlers.MarkActivityRead)
+			userRoutes.POST("/activities/read-all", handlers.MarkAllActivitiesRead)
 
-		// User Subjects & Courses
-		protected.GET("/subjects", handlers.GetUserSubjects)
-		protected.GET("/my-courses", handlers.GetMyCourses)
+			// Billing & Subscriptions
+			userRoutes.GET("/billing/wallet", handlers.GetWalletBalance)
+			userRoutes.GET("/billing/wallet/transactions", handlers.GetUserWalletTransactions)
+			userRoutes.GET("/subscriptions/plans", handlers.GetSubscriptionPlans)
+			userRoutes.GET("/subscriptions", handlers.GetUserSubscription)
+			userRoutes.GET("/subscriptions/addons", handlers.GetSubscriptionAddons)
+			userRoutes.POST("/subscriptions/addons", handlers.PurchaseAddon)
+			userRoutes.POST("/subscriptions/purchase", handlers.PurchasePlan)
+			userRoutes.POST("/subscriptions/initiate-payment", handlers.InitiatePlanPayment)
+			userRoutes.POST("/subscriptions/cancel", handlers.CancelSubscription)
+			userRoutes.POST("/subscriptions/renew", handlers.RenewSubscription)
+			userRoutes.POST("/coupons/validate", handlers.ValidateCoupon)
 
-		// Search
-		protected.GET("/search", handlers.GlobalSearch)
+			// User Subjects & Courses
+			userRoutes.GET("/subjects", handlers.GetUserSubjects)
+			userRoutes.GET("/my-courses", handlers.GetMyCourses)
 
-		// Library
-		protected.GET("/library/books", handlers.GetLibraryBooks)
-		protected.POST("/library/books", handlers.CreateLibraryBook)
+			// Search
+			userRoutes.GET("/search", handlers.GlobalSearch)
 
-		// Enrollment & Progress
-		protected.POST("/courses/:id/enroll", handlers.EnrollCourse)
-		protected.DELETE("/courses/:id/enroll", handlers.UnenrollCourse)
-		protected.GET("/courses/:id/enrollment-status", handlers.GetEnrollmentStatus)
-		protected.POST("/courses/:id/complete", handlers.CompleteCourse)
-		protected.POST("/courses/:id/checkout", handlers.CourseCheckout)
-		protected.GET("/courses/:id/curriculum", handlers.GetSubjectCurriculum)
-		protected.POST("/courses/lessons/:id/progress", handlers.UpdateLessonProgress)
+			// Library
+			userRoutes.GET("/library/books", handlers.GetLibraryBooks)
+			userRoutes.POST("/library/books", handlers.CreateLibraryBook)
 
-		// Lesson Notes & Reviews
-		protected.GET("/courses/lessons/:id/notes", handlers.GetLessonNotes)
-		protected.POST("/courses/lessons/:id/notes", handlers.CreateLessonNote)
-		protected.POST("/courses/:id/reviews", handlers.CreateCourseReview)
+			// Enrollment & Progress
+			userRoutes.POST("/courses/:id/enroll", handlers.EnrollCourse)
+			userRoutes.DELETE("/courses/:id/enroll", handlers.UnenrollCourse)
+			userRoutes.GET("/courses/:id/enrollment-status", handlers.GetEnrollmentStatus)
+			userRoutes.POST("/courses/:id/complete", handlers.CompleteCourse)
+			userRoutes.POST("/courses/:id/checkout", handlers.CourseCheckout)
+			userRoutes.GET("/courses/:id/curriculum", handlers.GetSubjectCurriculum)
+			userRoutes.POST("/courses/lessons/:id/progress", handlers.UpdateLessonProgress)
 
-		// Upload
-		protected.POST("/upload/presign", handlers.PresignUpload)
-		protected.POST(pathUpload, handlers.Upload)
-		protected.DELETE(pathUpload, handlers.DeleteUpload)
-		protected.POST(pathUploadChunked, handlers.UploadChunked)
-		protected.PUT(pathUploadChunked, handlers.UploadChunked)
-		protected.PATCH(pathUploadChunked, handlers.UploadChunked)
-		protected.GET("/upload/chunked/:uploadId/status", handlers.GetUploadStatus)
+			// Lesson Notes & Reviews
+			userRoutes.GET("/courses/lessons/:id/notes", handlers.GetLessonNotes)
+			userRoutes.POST("/courses/lessons/:id/notes", handlers.CreateLessonNote)
+			userRoutes.POST("/courses/:id/reviews", handlers.CreateCourseReview)
 
-		// Exam routes
-		protected.POST("/exams/:id/submit", handlers.SubmitExam)
+			// Upload
+			userRoutes.POST("/upload/presign", handlers.PresignUpload)
+			userRoutes.POST(pathUpload, handlers.Upload)
+			userRoutes.DELETE(pathUpload, handlers.DeleteUpload)
+			userRoutes.POST(pathUploadChunked, handlers.UploadChunked)
+			userRoutes.PUT(pathUploadChunked, handlers.UploadChunked)
+			userRoutes.PATCH(pathUploadChunked, handlers.UploadChunked)
+			userRoutes.GET("/upload/chunked/:uploadId/status", handlers.GetUploadStatus)
 
-		// Gamification routes
-		protected.GET("/gamification/progress", handlers.GetUserProgress)
-		protected.GET("/gamification/achievements", handlers.GetUserAchievements)
-		protected.POST("/gamification/goals", handlers.CreateCustomGoal)
-		protected.PATCH("/gamification/goals/:id", handlers.UpdateCustomGoal)
+			// Exam routes
+			userRoutes.POST("/exams/:id/submit", handlers.SubmitExam)
 
-		// Event Ingestion (lightweight, fire-and-forget to Redis Stream)
-		protected.POST("/events/ingest", handlers.IngestEvent)
+			// Gamification routes
+			userRoutes.GET("/gamification/progress", handlers.GetUserProgress)
+			userRoutes.GET("/gamification/achievements", handlers.GetUserAchievements)
+			userRoutes.POST("/gamification/goals", handlers.CreateCustomGoal)
+			userRoutes.PATCH("/gamification/goals/:id", handlers.UpdateCustomGoal)
 
-		// Payment routes
-		protected.POST("/payments/create", handlers.CreatePayment)
-		protected.GET("/payments/history", handlers.GetPaymentHistory)
+			// Event Ingestion (lightweight, fire-and-forget to Redis Stream)
+			userRoutes.POST("/events/ingest", handlers.IngestEvent)
+
+			// Payment routes
+			userRoutes.POST("/payments/create", handlers.CreatePayment)
+			userRoutes.GET("/payments/history", handlers.GetPaymentHistory)
+		}
 	}
 }

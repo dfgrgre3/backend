@@ -1,0 +1,182 @@
+﻿=== RUN   TestSchemaDrift
+=== RUN   TestSchemaDrift/Model_Broadcast
+=== RUN   TestSchemaDrift/Model_AIMessage
+    schema_drift_test.go:396: Go struct AIMessage (table: "AIMessage") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_Reminder
+=== RUN   TestSchemaDrift/Model_Contest
+    schema_drift_test.go:439: Go field Contest.QuestionsCount (expected column: "questions_count") is missing in DB table "Contest"
+    schema_drift_test.go:439: Go field Contest.ParticipantsCount (expected column: "participants_count") is missing in DB table "Contest"
+=== RUN   TestSchemaDrift/Model_SecurityLog
+=== RUN   TestSchemaDrift/Model_ExamResult
+=== RUN   TestSchemaDrift/Model_TicketMessage
+    schema_drift_test.go:396: Go struct TicketMessage (table: "ticket_messages") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_Automation
+=== RUN   TestSchemaDrift/Model_Payment
+=== RUN   TestSchemaDrift/Model_BlockedIPAttempt
+=== RUN   TestSchemaDrift/Model_Question
+=== RUN   TestSchemaDrift/Model_UserJourneyStep
+    schema_drift_test.go:396: Go struct UserJourneyStep (table: "user_journey_steps") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_Topic
+=== RUN   TestSchemaDrift/Model_Schedule
+=== RUN   TestSchemaDrift/Model_ScheduledItem
+    schema_drift_test.go:396: Go struct ScheduledItem (table: "scheduled_items") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_Notification
+=== RUN   TestSchemaDrift/Model_AuditLog
+=== RUN   TestSchemaDrift/Model_SubscriptionPlan
+=== RUN   TestSchemaDrift/Model_Category
+=== RUN   TestSchemaDrift/Model_Lesson
+=== RUN   TestSchemaDrift/Model_AIConversation
+    schema_drift_test.go:396: Go struct AIConversation (table: "AIConversation") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_Challenge
+=== RUN   TestSchemaDrift/Model_Subject
+=== RUN   TestSchemaDrift/Model_Backup
+    schema_drift_test.go:396: Go struct Backup (table: "backups") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_IPWhitelistEntry
+    schema_drift_test.go:439: Go field IPWhitelistEntry.DeletedAt (expected column: "deleted_at") is missing in DB table "ip_whitelist_entries"
+    schema_drift_test.go:439: Go field IPWhitelistEntry.Country (expected column: "country") is missing in DB table "ip_whitelist_entries"
+    schema_drift_test.go:439: Go field IPWhitelistEntry.City (expected column: "city") is missing in DB table "ip_whitelist_entries"
+=== RUN   TestSchemaDrift/Model_Book
+=== RUN   TestSchemaDrift/Model_UserChallenge
+=== RUN   TestSchemaDrift/Model_SystemSetting
+=== RUN   TestSchemaDrift/Model_ContestQuestion
+    schema_drift_test.go:439: Go field ContestQuestion.Order (expected column: "order") is missing in DB table "ContestQuestion"
+=== RUN   TestSchemaDrift/Model_UserFlow
+    schema_drift_test.go:396: Go struct UserFlow (table: "user_flows") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_CustomGoal
+=== RUN   TestSchemaDrift/Model_LessonAttachment
+=== RUN   TestSchemaDrift/Model_Exam
+=== RUN   TestSchemaDrift/Model_ABExperiment
+=== RUN   TestSchemaDrift/Model_Resource
+=== RUN   TestSchemaDrift/Model_SecurityAuditLog
+=== RUN   TestSchemaDrift/Model_BlogPost
+=== RUN   TestSchemaDrift/Model_Achievement
+=== RUN   TestSchemaDrift/Model_Task
+=== RUN   TestSchemaDrift/Model_Campaign
+    schema_drift_test.go:396: Go struct Campaign (table: "Campaign") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_TwoFactorSettings
+=== RUN   TestSchemaDrift/Model_IPWhitelistSettings
+=== RUN   TestSchemaDrift/Model_User
+=== RUN   TestSchemaDrift/Model_UserAchievement
+=== RUN   TestSchemaDrift/Model_StudySession
+=== RUN   TestSchemaDrift/Model_UserSubscription
+=== RUN   TestSchemaDrift/Model_SupportTicket
+    schema_drift_test.go:396: Go struct SupportTicket (table: "support_tickets") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_ContentReport
+    schema_drift_test.go:439: Go field ContentReport.Reason (expected column: "reason") is missing in DB table "ContentReport"
+    schema_drift_test.go:439: Go field ContentReport.ResolvedAt (expected column: "resolved_at") is missing in DB table "ContentReport"
+    schema_drift_test.go:439: Go field ContentReport.ContentType (expected column: "content_type") is missing in DB table "ContentReport"
+    schema_drift_test.go:439: Go field ContentReport.ContentID (expected column: "content_id") is missing in DB table "ContentReport"
+    schema_drift_test.go:439: Go field ContentReport.ResolvedBy (expected column: "resolved_by") is missing in DB table "ContentReport"
+    schema_drift_test.go:439: Go field ContentReport.ReporterID (expected column: "reporter_id") is missing in DB table "ContentReport"
+    schema_drift_test.go:439: Go field ContentReport.ContentTitle (expected column: "content_title") is missing in DB table "ContentReport"
+=== RUN   TestSchemaDrift/Model_UserJourney
+    schema_drift_test.go:396: Go struct UserJourney (table: "user_journeys") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_PageView
+    schema_drift_test.go:396: Go struct PageView (table: "page_views") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_UserSession
+=== RUN   TestSchemaDrift/Model_CourseReview
+=== RUN   TestSchemaDrift/Model_AnalyticsEvent
+    schema_drift_test.go:439: Go field AnalyticsEvent.EventType (expected column: "event_type") is missing in DB table "AnalyticsEvent"
+    schema_drift_test.go:439: Go field AnalyticsEvent.Payload (expected column: "payload") is missing in DB table "AnalyticsEvent"
+    schema_drift_test.go:439: Go field AnalyticsEvent.Source (expected column: "source") is missing in DB table "AnalyticsEvent"
+    schema_drift_test.go:439: Go field AnalyticsEvent.IPAddress (expected column: "ip_address") is missing in DB table "AnalyticsEvent"
+    schema_drift_test.go:439: Go field AnalyticsEvent.UserAgent (expected column: "user_agent") is missing in DB table "AnalyticsEvent"
+    schema_drift_test.go:439: Go field AnalyticsEvent.ProcessedAt (expected column: "processed_at") is missing in DB table "AnalyticsEvent"
+    schema_drift_test.go:439: Go field AnalyticsEvent.EventID (expected column: "event_id") is missing in DB table "AnalyticsEvent"
+    schema_drift_test.go:439: Go field AnalyticsEvent.ReceivedAt (expected column: "received_at") is missing in DB table "AnalyticsEvent"
+=== RUN   TestSchemaDrift/Model_UserSettings
+=== RUN   TestSchemaDrift/Model_LessonProgress
+=== RUN   TestSchemaDrift/Model_WalletTransaction
+=== RUN   TestSchemaDrift/Model_PushToken
+=== RUN   TestSchemaDrift/Model_ConversionEvent
+    schema_drift_test.go:396: Go struct ConversionEvent (table: "conversion_events") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_ActiveUserStats
+    schema_drift_test.go:396: Go struct ActiveUserStats (table: "active_user_stats") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_LiveEvent
+=== RUN   TestSchemaDrift/Model_Season
+=== RUN   TestSchemaDrift/Model_CustomReport
+    schema_drift_test.go:396: Go struct CustomReport (table: "custom_reports") has no corresponding database table in Prisma schema
+=== RUN   TestSchemaDrift/Model_Enrollment
+=== RUN   TestSchemaDrift/Model_Invoice
+=== RUN   TestSchemaDrift/Model_Event
+=== RUN   TestSchemaDrift/Model_Reward
+=== RUN   TestSchemaDrift/Model_SubTopic
+=== RUN   TestSchemaDrift/Model_ForumCategory
+=== RUN   TestSchemaDrift/Model_ForumTopic
+=== RUN   TestSchemaDrift/Model_Coupon
+=== NAME  TestSchemaDrift
+    schema_drift_test.go:456: Detected 35 schema structural drift(s) between GORM models and Prisma schema.
+--- FAIL: TestSchemaDrift (0.02s)
+    --- PASS: TestSchemaDrift/Model_Broadcast (0.00s)
+    --- FAIL: TestSchemaDrift/Model_AIMessage (0.00s)
+    --- PASS: TestSchemaDrift/Model_Reminder (0.00s)
+    --- FAIL: TestSchemaDrift/Model_Contest (0.00s)
+    --- PASS: TestSchemaDrift/Model_SecurityLog (0.00s)
+    --- PASS: TestSchemaDrift/Model_ExamResult (0.00s)
+    --- FAIL: TestSchemaDrift/Model_TicketMessage (0.00s)
+    --- PASS: TestSchemaDrift/Model_Automation (0.00s)
+    --- PASS: TestSchemaDrift/Model_Payment (0.00s)
+    --- PASS: TestSchemaDrift/Model_BlockedIPAttempt (0.00s)
+    --- PASS: TestSchemaDrift/Model_Question (0.00s)
+    --- FAIL: TestSchemaDrift/Model_UserJourneyStep (0.00s)
+    --- PASS: TestSchemaDrift/Model_Topic (0.00s)
+    --- PASS: TestSchemaDrift/Model_Schedule (0.00s)
+    --- FAIL: TestSchemaDrift/Model_ScheduledItem (0.00s)
+    --- PASS: TestSchemaDrift/Model_Notification (0.00s)
+    --- PASS: TestSchemaDrift/Model_AuditLog (0.00s)
+    --- PASS: TestSchemaDrift/Model_SubscriptionPlan (0.00s)
+    --- PASS: TestSchemaDrift/Model_Category (0.00s)
+    --- PASS: TestSchemaDrift/Model_Lesson (0.00s)
+    --- FAIL: TestSchemaDrift/Model_AIConversation (0.00s)
+    --- PASS: TestSchemaDrift/Model_Challenge (0.00s)
+    --- PASS: TestSchemaDrift/Model_Subject (0.00s)
+    --- FAIL: TestSchemaDrift/Model_Backup (0.00s)
+    --- FAIL: TestSchemaDrift/Model_IPWhitelistEntry (0.00s)
+    --- PASS: TestSchemaDrift/Model_Book (0.00s)
+    --- PASS: TestSchemaDrift/Model_UserChallenge (0.00s)
+    --- PASS: TestSchemaDrift/Model_SystemSetting (0.00s)
+    --- FAIL: TestSchemaDrift/Model_ContestQuestion (0.00s)
+    --- FAIL: TestSchemaDrift/Model_UserFlow (0.00s)
+    --- PASS: TestSchemaDrift/Model_CustomGoal (0.00s)
+    --- PASS: TestSchemaDrift/Model_LessonAttachment (0.00s)
+    --- PASS: TestSchemaDrift/Model_Exam (0.00s)
+    --- PASS: TestSchemaDrift/Model_ABExperiment (0.00s)
+    --- PASS: TestSchemaDrift/Model_Resource (0.00s)
+    --- PASS: TestSchemaDrift/Model_SecurityAuditLog (0.00s)
+    --- PASS: TestSchemaDrift/Model_BlogPost (0.00s)
+    --- PASS: TestSchemaDrift/Model_Achievement (0.00s)
+    --- PASS: TestSchemaDrift/Model_Task (0.00s)
+    --- FAIL: TestSchemaDrift/Model_Campaign (0.00s)
+    --- PASS: TestSchemaDrift/Model_TwoFactorSettings (0.00s)
+    --- PASS: TestSchemaDrift/Model_IPWhitelistSettings (0.00s)
+    --- PASS: TestSchemaDrift/Model_User (0.00s)
+    --- PASS: TestSchemaDrift/Model_UserAchievement (0.00s)
+    --- PASS: TestSchemaDrift/Model_StudySession (0.00s)
+    --- PASS: TestSchemaDrift/Model_UserSubscription (0.00s)
+    --- FAIL: TestSchemaDrift/Model_SupportTicket (0.00s)
+    --- FAIL: TestSchemaDrift/Model_ContentReport (0.00s)
+    --- FAIL: TestSchemaDrift/Model_UserJourney (0.00s)
+    --- FAIL: TestSchemaDrift/Model_PageView (0.00s)
+    --- PASS: TestSchemaDrift/Model_UserSession (0.00s)
+    --- PASS: TestSchemaDrift/Model_CourseReview (0.00s)
+    --- FAIL: TestSchemaDrift/Model_AnalyticsEvent (0.00s)
+    --- PASS: TestSchemaDrift/Model_UserSettings (0.00s)
+    --- PASS: TestSchemaDrift/Model_LessonProgress (0.00s)
+    --- PASS: TestSchemaDrift/Model_WalletTransaction (0.00s)
+    --- PASS: TestSchemaDrift/Model_PushToken (0.00s)
+    --- FAIL: TestSchemaDrift/Model_ConversionEvent (0.00s)
+    --- FAIL: TestSchemaDrift/Model_ActiveUserStats (0.00s)
+    --- PASS: TestSchemaDrift/Model_LiveEvent (0.00s)
+    --- PASS: TestSchemaDrift/Model_Season (0.00s)
+    --- FAIL: TestSchemaDrift/Model_CustomReport (0.00s)
+    --- PASS: TestSchemaDrift/Model_Enrollment (0.00s)
+    --- PASS: TestSchemaDrift/Model_Invoice (0.00s)
+    --- PASS: TestSchemaDrift/Model_Event (0.00s)
+    --- PASS: TestSchemaDrift/Model_Reward (0.00s)
+    --- PASS: TestSchemaDrift/Model_SubTopic (0.00s)
+    --- PASS: TestSchemaDrift/Model_ForumCategory (0.00s)
+    --- PASS: TestSchemaDrift/Model_ForumTopic (0.00s)
+    --- PASS: TestSchemaDrift/Model_Coupon (0.00s)
+FAIL
+FAIL	thanawy-backend/internal/db	0.653s
+FAIL

@@ -349,7 +349,7 @@ func ImpersonateUser(c *gin.Context) {
 	}
 
 	// Generate securely signed token for cookie to prevent tampering
-	signedToken := middleware.SignImpersonationToken(req.TargetUserID)
+	signedToken := middleware.SignImpersonationToken(req.TargetUserID, adminID.(string))
 
 	// Set impersonation cookie with maximum security:
 	// HttpOnly=true — prevents JavaScript access (XSS protection)

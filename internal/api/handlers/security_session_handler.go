@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
+	"thanawy-backend/internal/services"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -134,6 +136,18 @@ func RevokeUserSessions(c *gin.Context) {
 			"revoked_at": time.Now(),
 			"revoked_by": adminID,
 		})
+
+	// [إصلاح أمني]: مزامنة إلغاء الجلسات الفوري مع Clerk لمنع المستخدم المطرود من الاستمرار بالوصول
+	var user models.User
+	if err := db.DB.Select("email").First(&user, "id = ?", userID).Error; err == nil && user.Email != "" {
+		go func(email string) {
+			if err := services.RevokeClerkUserSessions(email); err != nil {
+				log.Printf("[Clerk Sync] Failed to revoke Clerk sessions for %s: %v", email, err)
+			} else {
+				log.Printf("[Clerk Sync] Successfully revoked all Clerk sessions for %s", email)
+			}
+		}(user.Email)
+	}
 
 	middleware.LogCriticalOperation(c, "user_sessions_revoked", map[string]interface{}{
 		"target_user":   userID,

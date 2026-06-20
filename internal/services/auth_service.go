@@ -75,8 +75,8 @@ func (s *AuthService) Register(input RegisterInput) (*models.User, error) {
 	if cost < 12 {
 		cost = 12
 	}
-	if cost > bcrypt.MaxCost {
-		cost = bcrypt.MaxCost
+	if cost > 14 {
+		cost = 14
 	}
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.Password), cost)
 	if err != nil {
@@ -239,8 +239,8 @@ func (s *AuthService) ResetPassword(token, newPassword string) error {
 	if cost < 12 {
 		cost = 12
 	}
-	if cost > bcrypt.MaxCost {
-		cost = bcrypt.MaxCost
+	if cost > 14 {
+		cost = 14
 	}
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), cost)
 	if err != nil {

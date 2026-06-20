@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -210,12 +211,13 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 	dbUserID := ClerkIDToUUID(userId)
 
 	var existing models.User
-	err = db.DB.Unscoped().Where("id = ?", dbUserID).First(&existing).Error
+	err = db.DB.Unscoped().Where("clerk_id = ? OR id = ?", userId, dbUserID).First(&existing).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Create user
 			newUser := models.User{
 				ID:                 dbUserID,
+				ClerkID:            &userId,
 				Email:              primaryEmail,
 				EmailVerified:      true,
 				Status:             models.StatusActive,
@@ -256,6 +258,7 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 
 	// Update existing user email & metadata (never override role after initial provisioning)
 	updates := map[string]any{
+		"clerk_id":       userId,
 		"email":          primaryEmail,
 		"email_verified": true,
 	}
@@ -308,4 +311,69 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 
 	log.Printf("[Clerk Provisioning] Dynamic user sync successful: %s (%s)", dbUserID, primaryEmail)
 	return &existing, nil
+}
+
+// RevokeClerkUserSessions queries Clerk to find the user's Clerk ID by email,
+// and then calls Clerk's logout endpoint to invalidate all active Clerk sessions immediately.
+func RevokeClerkUserSessions(email string) error {
+	cfg := config.Load()
+	if cfg.ClerkSecretKey == "" {
+		return errors.New("CLERK_SECRET_KEY is not configured")
+	}
+
+	// 1. Get user from Clerk by email
+	clerkQueryURL := fmt.Sprintf("https://api.clerk.com/v1/users?email_address=%s", url.QueryEscape(email))
+	req, err := http.NewRequest("GET", clerkQueryURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.ClerkSecretKey)
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("clerk lookup returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var users []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+		return err
+	}
+
+	if len(users) == 0 {
+		return fmt.Errorf("user with email %s not found in Clerk", email)
+	}
+
+	clerkUserID := users[0].ID
+
+	// 2. Call Clerk logout endpoint to revoke all sessions
+	logoutURL := fmt.Sprintf("https://api.clerk.com/v1/users/%s/logout", clerkUserID)
+	logoutReq, err := http.NewRequest("POST", logoutURL, nil)
+	if err != nil {
+		return err
+	}
+	logoutReq.Header.Set("Authorization", "Bearer "+cfg.ClerkSecretKey)
+	logoutReq.Header.Set("Accept", "application/json")
+
+	logoutResp, err := client.Do(logoutReq)
+	if err != nil {
+		return err
+	}
+	defer logoutResp.Body.Close()
+
+	if logoutResp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(logoutResp.Body)
+		return fmt.Errorf("clerk logout returned status %d: %s", logoutResp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
 }

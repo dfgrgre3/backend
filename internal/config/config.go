@@ -40,6 +40,8 @@ type Config struct {
 	ClerkPEMPublicKey  string
 	ClerkSecretKey     string
 	ClerkJWKSURL       string
+	ClerkIssuerURL     string
+	ClerkClientID      string
 	InternalIPRanges   []string
 	ImpersonationSecret string
 
@@ -152,7 +154,21 @@ func Load() *Config {
 	c.ClerkPEMPublicKey = getEnv("CLERK_PEM_PUBLIC_KEY", "")
 	c.ClerkSecretKey = getEnv("CLERK_SECRET_KEY", "")
 	c.ClerkJWKSURL = getEnv("CLERK_JWKS_URL", "")
+	c.ClerkIssuerURL = getEnv("CLERK_ISSUER_URL", "")
+	c.ClerkClientID = getEnv("CLERK_CLIENT_ID", "")
 	c.ImpersonationSecret = getEnv("IMPERSONATION_SECRET", "")
+
+	if environment == "production" {
+		if c.ClerkSecretKey == "" {
+			log.Fatal("FATAL: CLERK_SECRET_KEY must be set in production.")
+		}
+		if c.ClerkWebhookSecret == "" {
+			log.Fatal("FATAL: CLERK_WEBHOOK_SECRET must be set in production.")
+		}
+		if c.ClerkPEMPublicKey == "" && c.ClerkJWKSURL == "" {
+			log.Fatal("FATAL: Either CLERK_PEM_PUBLIC_KEY or CLERK_JWKS_URL must be set in production.")
+		}
+	}
 
 	// Stability & Production configurations
 	c.HTTPReadTimeout = getEnv("HTTP_READ_TIMEOUT", "10s")
@@ -270,7 +286,21 @@ func LoadSafe() (*Config, error) {
 	c.ClerkPEMPublicKey = getEnv("CLERK_PEM_PUBLIC_KEY", "")
 	c.ClerkSecretKey = getEnv("CLERK_SECRET_KEY", "")
 	c.ClerkJWKSURL = getEnv("CLERK_JWKS_URL", "")
+	c.ClerkIssuerURL = getEnv("CLERK_ISSUER_URL", "")
+	c.ClerkClientID = getEnv("CLERK_CLIENT_ID", "")
 	c.ImpersonationSecret = getEnv("IMPERSONATION_SECRET", "")
+
+	if environment == "production" {
+		if c.ClerkSecretKey == "" {
+			return nil, fmt.Errorf("CLERK_SECRET_KEY must be set in production")
+		}
+		if c.ClerkWebhookSecret == "" {
+			return nil, fmt.Errorf("CLERK_WEBHOOK_SECRET must be set in production")
+		}
+		if c.ClerkPEMPublicKey == "" && c.ClerkJWKSURL == "" {
+			return nil, fmt.Errorf("either CLERK_PEM_PUBLIC_KEY or CLERK_JWKS_URL must be set in production")
+		}
+	}
 
 	// Stability & Production configurations
 	c.HTTPReadTimeout = getEnv("HTTP_READ_TIMEOUT", "10s")

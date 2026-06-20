@@ -255,6 +255,9 @@ func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 		}
 
 		if alg == "HS256" {
+			if cfg.Environment == "production" {
+				return nil, fmt.Errorf("HS256 signing method is disabled in production")
+			}
 			return []byte(cfg.JWTSecret), nil
 		}
 
@@ -268,6 +271,24 @@ func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 	}
 
 	if claims, ok := token.Claims.(*TokenClaims); ok && token.Valid {
+		// Validate Issuer (iss) and Audience (aud) claims for RS256 Clerk tokens
+		if token.Method.Alg() == "RS256" {
+			if cfg.ClerkIssuerURL != "" && !strings.HasPrefix(claims.Issuer, cfg.ClerkIssuerURL) {
+				return nil, fmt.Errorf("invalid token issuer: expected prefix %s, got %s", cfg.ClerkIssuerURL, claims.Issuer)
+			}
+			if cfg.ClerkClientID != "" {
+				matched := false
+				for _, aud := range claims.Audience {
+					if aud == cfg.ClerkClientID {
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					return nil, fmt.Errorf("invalid token audience: expected %s", cfg.ClerkClientID)
+				}
+			}
+		}
 		return claims, nil
 	}
 

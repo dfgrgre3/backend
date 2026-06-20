@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,37 +29,66 @@ func init() {
 	services.InvalidateCacheCallback = InvalidateRolePermsCache
 }
 
-func getImpersonationSignKey() []byte {
+func getImpersonationSignKey() ([]byte, error) {
 	cfg := getConfig()
 	if cfg.ImpersonationSecret == "" {
-		log.Panic("CRITICAL SECURITY ERROR: ImpersonationSecret environment variable is unconfigured.")
+		return nil, fmt.Errorf("impersonation secret is unconfigured")
 	}
 	decodedKey, err := hex.DecodeString(cfg.ImpersonationSecret)
-	if err != nil || len(decodedKey) < 32 {
-		log.Println("WARNING: ImpersonationSecret should be at least 32 bytes for security. Using available key material.")
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode impersonation secret: %w", err)
 	}
-	return decodedKey
+	if len(decodedKey) < 32 {
+		return nil, fmt.Errorf("impersonation secret must be at least 32 bytes of valid hex")
+	}
+	return decodedKey, nil
 }
 
-func SignImpersonationToken(userID string) string {
-	key := getImpersonationSignKey()
+func SignImpersonationToken(userID string, adminID string) string {
+	expiresAt := time.Now().Add(15 * time.Minute).Unix()
+	payload := fmt.Sprintf("%s:%d:%s", userID, expiresAt, adminID)
+
+	key, err := getImpersonationSignKey()
+	if err != nil {
+		log.Printf("[Security CRITICAL] SignImpersonationToken failed to retrieve key: %v", err)
+		return ""
+	}
 	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(userID))
+	mac.Write([]byte(payload))
 	signature := hex.EncodeToString(mac.Sum(nil))
-	return userID + "." + signature
+	return fmt.Sprintf("%s.%d.%s.%s", userID, expiresAt, adminID, signature)
 }
 
-func VerifyImpersonationToken(token string) (string, bool) {
+func VerifyImpersonationToken(token string, currentAdminID string) (string, bool) {
 	parts := strings.Split(token, ".")
-	if len(parts) != 2 {
+	if len(parts) != 4 {
 		return "", false
 	}
 	userID := parts[0]
-	signature := parts[1]
+	expiresStr := parts[1]
+	adminID := parts[2]
+	signature := parts[3]
 
-	key := getImpersonationSignKey()
+	// Verify expiration
+	expiresAt, err := strconv.ParseInt(expiresStr, 10, 64)
+	if err != nil || time.Now().Unix() > expiresAt {
+		return "", false
+	}
+
+	// Verify admin ID binding
+	if adminID != currentAdminID {
+		return "", false
+	}
+
+	// Verify signature
+	payload := fmt.Sprintf("%s:%s:%s", userID, expiresStr, adminID)
+	key, err := getImpersonationSignKey()
+	if err != nil {
+		log.Printf("[Security CRITICAL] VerifyImpersonationToken failed to retrieve key: %v", err)
+		return "", false
+	}
 	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(userID))
+	mac.Write([]byte(payload))
 	expectedSignature := hex.EncodeToString(mac.Sum(nil))
 
 	if hmac.Equal([]byte(signature), []byte(expectedSignature)) {
@@ -78,6 +108,7 @@ var (
 
 var (
 	localRolePermsCache = cache.New(localRolePermsTTL, 10*time.Minute)
+	clerkToDBIDCache    = cache.New(localRolePermsTTL, 10*time.Minute)
 	userContextSF       singleflight.Group
 )
 
@@ -86,9 +117,42 @@ type userAuthContext struct {
 	Permissions []string
 }
 
-// InvalidateRolePermsCache evicts a user's cached role/permissions
+const rolePermsInvalidateChannel = "cache:invalidate:user_role_perms"
+
+// InvalidateRolePermsCache evicts a user's cached role/permissions locally and broadcasts it globally via Redis.
 func InvalidateRolePermsCache(userID string) {
 	localRolePermsCache.Delete(userID)
+
+	if db.Redis != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := db.Redis.Publish(ctx, rolePermsInvalidateChannel, userID).Err(); err != nil {
+			log.Printf("[Cache Incoherence] Failed to publish invalidation for user %s: %v", userID, err)
+		}
+	}
+}
+
+// StartDistributedCacheInvalidator subscribes to Redis Pub/Sub to listen for role/permissions invalidation events.
+func StartDistributedCacheInvalidator() {
+	if db.Redis == nil {
+		log.Println("[Cache Incoherence] Redis not available, distributed cache invalidator listener skipped")
+		return
+	}
+
+	go func() {
+		pubsub := db.Redis.Subscribe(context.Background(), rolePermsInvalidateChannel)
+		defer pubsub.Close()
+
+		ch := pubsub.Channel()
+		log.Printf("[Cache Incoherence] Subscribed to distributed cache invalidation channel: %s", rolePermsInvalidateChannel)
+
+		for msg := range ch {
+			userID := msg.Payload
+			if userID != "" {
+				localRolePermsCache.Delete(userID)
+			}
+		}
+	}()
 }
 
 // Context keys for storing user information in request context
@@ -107,10 +171,14 @@ func getConfig() *config.Config {
 	return cachedConfig
 }
 
-func Auth() gin.HandlerFunc {
+func authMiddleware(optional bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := extractToken(c)
 		if tokenString == "" {
+			if optional {
+				c.Next()
+				return
+			}
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 			return
 		}
@@ -118,18 +186,19 @@ func Auth() gin.HandlerFunc {
 		tokenService := &services.TokenService{}
 		claims, err := tokenService.ValidateToken(tokenString)
 		if err != nil || claims.Subject == "" {
-			log.Printf("[Auth Middleware] Token validation failed: %v (subject: %s)", err, claims.Subject)
-			log.Printf("[Auth Middleware] Token validation failed: %v (claims subject empty: %t)", err, claims == nil || claims.Subject == "")
+			if optional {
+				c.Next()
+				return
+			}
+			log.Printf("[Auth Middleware] Token validation failed: %v", err)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			return
 		}
 
 		clerkID := claims.Subject
-		dbUserID := services.ClerkIDToUUID(clerkID)
+		dbUserID := resolveUserIDFromClerkID(clerkID)
 
 		// Set both "userId" and "user_id" keys to avoid breaking existing handlers.
-		// Note: "userId" is widely used throughout legacy handlers (>100 references),
-		// while "user_id" is used in standard middlewares and newer handlers.
 		c.Set("userId", dbUserID)
 		c.Set("user_id", dbUserID)
 		if clerkID != dbUserID {
@@ -148,14 +217,12 @@ func Auth() gin.HandlerFunc {
 
 		// Propagate to standard context for gRPC/Connect RPC handlers
 		ctx := c.Request.Context()
-		if finalUserID, exists := c.Get("userId"); exists {
-			ctx = context.WithValue(ctx, UserContextKey, finalUserID)
-		}
+		ctx = context.WithValue(ctx, UserContextKey, dbUserID)
 		if finalRole, exists := c.Get("role"); exists {
 			ctx = context.WithValue(ctx, RoleContextKey, finalRole)
 		}
-		if finalEmail, exists := c.Get("user_email"); exists {
-			ctx = context.WithValue(ctx, EmailContextKey, finalEmail)
+		if claims.Email != "" {
+			ctx = context.WithValue(ctx, EmailContextKey, claims.Email)
 		}
 		c.Request = c.Request.WithContext(ctx)
 
@@ -163,58 +230,12 @@ func Auth() gin.HandlerFunc {
 	}
 }
 
+func Auth() gin.HandlerFunc {
+	return authMiddleware(false)
+}
+
 func OptionalAuth() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		tokenString := extractToken(c)
-		if tokenString == "" {
-			c.Next()
-			return
-		}
-
-		tokenService := &services.TokenService{}
-		claims, err := tokenService.ValidateToken(tokenString)
-		if err != nil || claims.Subject == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
-			return
-		}
-
-		clerkID := claims.Subject
-		dbUserID := services.ClerkIDToUUID(clerkID)
-
-		// Set both "userId" and "user_id" keys to avoid breaking existing handlers.
-		// Note: "userId" is widely used throughout legacy handlers (>100 references),
-		// while "user_id" is used in standard middlewares and newer handlers.
-		c.Set("userId", dbUserID)
-		c.Set("user_id", dbUserID)
-		if clerkID != dbUserID {
-			c.Set("clerkUserId", clerkID)
-		}
-		c.Set("jti", claims.JTI)
-		if claims.ExpiresAt != nil {
-			c.Set("accessTokenExpiresAt", claims.ExpiresAt.Time.UnixMilli())
-		}
-		if claims.Email != "" {
-			c.Set("user_email", claims.Email)
-		}
-
-		hydrateUserContext(c, dbUserID, claims.Role)
-		processImpersonation(c, dbUserID)
-
-		// Propagate to standard context for gRPC/Connect RPC handlers
-		ctx := c.Request.Context()
-		if finalUserID, exists := c.Get("userId"); exists {
-			ctx = context.WithValue(ctx, UserContextKey, finalUserID)
-		}
-		if finalRole, exists := c.Get("role"); exists {
-			ctx = context.WithValue(ctx, RoleContextKey, finalRole)
-		}
-		if finalEmail, exists := c.Get("user_email"); exists {
-			ctx = context.WithValue(ctx, EmailContextKey, finalEmail)
-		}
-		c.Request = c.Request.WithContext(ctx)
-
-		c.Next()
-	}
+	return authMiddleware(true)
 }
 
 // Helper to extract JWT token from Authorization header or access_token cookie or query parameter
@@ -227,8 +248,13 @@ func extractToken(c *gin.Context) string {
 		}
 	}
 
-	if cookieToken, err := c.Cookie("access_token"); err == nil {
-		return strings.TrimSpace(cookieToken)
+	// [إصلاح أمني]: لتفادي ثغرات CSRF بالكامل في البيئة الإنتاجية،
+	// يمنع استخراج التوكن من الكوكيز في الإنتاج، ويُكتفى بترويسة Authorization.
+	cfg := getConfig()
+	if cfg.Environment != "production" {
+		if cookieToken, err := c.Cookie("access_token"); err == nil {
+			return strings.TrimSpace(cookieToken)
+		}
 	}
 
 	return ""
@@ -241,6 +267,33 @@ func setContextPermissions(c *gin.Context, permissions models.JSONStringArray) {
 	} else {
 		c.Set("permissions", []string(permissions))
 	}
+}
+
+// resolveUserIDFromClerkID checks local in-memory cache and then DB for clerkID mapping.
+// Returns resolved dbUserID. Fallback is deterministically generated from clerkID.
+func resolveUserIDFromClerkID(clerkID string) string {
+	if clerkID == "" {
+		return ""
+	}
+
+	// 1. Check local mapping cache
+	if val, found := clerkToDBIDCache.Get(clerkID); found {
+		return val.(string)
+	}
+
+	if db.DB == nil {
+		return services.ClerkIDToUUID(clerkID)
+	}
+
+	// 2. Query DB
+	var user models.User
+	if err := db.DB.Select("id").Where("clerk_id = ?", clerkID).Take(&user).Error; err == nil && user.ID != "" {
+		clerkToDBIDCache.Set(clerkID, user.ID, cache.DefaultExpiration)
+		return user.ID
+	}
+
+	// 3. Fallback to deterministic UUID v5
+	return services.ClerkIDToUUID(clerkID)
 }
 
 // fetchCachedRolePerms checks local in-memory cache for user role/permissions.
@@ -295,25 +348,17 @@ func fetchDatabaseRolePerms(userID, clerkID, cacheKey string) *userAuthContext {
 		Select("role", "permissions").
 		Where("id = ?", userID).
 		Take(&user).Error; err != nil {
-		// Fallback: if user is not found, try to dynamically provision them from Clerk API
+		// Fallback: if user is not found, trigger background provisioning asynchronously
 		if clerkID != "" && strings.HasPrefix(clerkID, "user_") {
-			_, errProvision := services.ProvisionUserFromClerk(clerkID)
-			if errProvision == nil {
-				// Retry query
-				if retryErr := db.DB.
-					Select("role", "permissions").
-					Where("id = ?", userID).
-					Take(&user).Error; retryErr == nil {
-					goto querySuccess
+			go func(cid string) {
+				_, errProvision := services.ProvisionUserFromClerk(cid)
+				if errProvision != nil {
+					log.Printf("[Auth Middleware] Asynchronous background dynamic provisioning failed for Clerk ID %s: %v", cid, errProvision)
 				}
-			} else {
-				log.Printf("[Auth Middleware] Failed to provision user %s (Clerk: %s) from Clerk: %v", userID, clerkID, errProvision)
-			}
+			}(clerkID)
 		}
 		return nil
 	}
-
-querySuccess:
 
 	roleVal := string(user.Role)
 	permsVal := []string(user.Permissions)
@@ -366,9 +411,11 @@ func buildSingleFlightCallback(userID, clerkID, fallbackRole string) func() (int
 func hydrateUserContext(c *gin.Context, userID, fallbackRole string) {
 	if db.DB == nil {
 		log.Printf("WARN: Database connection is nil in hydrateUserContext for user %s", userID)
-		c.Set("role", strings.ToUpper(fallbackRole))
-		c.Set("user_role", strings.ToUpper(fallbackRole))
+		fallbackUpper := strings.ToUpper(fallbackRole)
+		c.Set("role", fallbackUpper)
+		c.Set("user_role", fallbackUpper)
 		c.Set("permissions", []string{})
+		c.Set("is_admin", fallbackUpper == "ADMIN" || fallbackUpper == "SUPER_ADMIN")
 		return
 	}
 
@@ -377,6 +424,7 @@ func hydrateUserContext(c *gin.Context, userID, fallbackRole string) {
 		c.Set("role", cached.Role)
 		c.Set("user_role", cached.Role)
 		c.Set("permissions", cached.Permissions)
+		c.Set("is_admin", cached.Role == "ADMIN" || cached.Role == "SUPER_ADMIN")
 		return
 	}
 
@@ -391,10 +439,13 @@ func hydrateUserContext(c *gin.Context, userID, fallbackRole string) {
 		c.Set("role", authCtx.Role)
 		c.Set("user_role", authCtx.Role)
 		c.Set("permissions", authCtx.Permissions)
+		c.Set("is_admin", authCtx.Role == "ADMIN" || authCtx.Role == "SUPER_ADMIN")
 	} else {
-		c.Set("role", strings.ToUpper(fallbackRole))
-		c.Set("user_role", strings.ToUpper(fallbackRole))
+		fallbackUpper := strings.ToUpper(fallbackRole)
+		c.Set("role", fallbackUpper)
+		c.Set("user_role", fallbackUpper)
 		c.Set("permissions", []string{})
+		c.Set("is_admin", fallbackUpper == "ADMIN" || fallbackUpper == "SUPER_ADMIN")
 	}
 }
 
@@ -412,7 +463,7 @@ func processImpersonation(c *gin.Context, adminID string) {
 		return
 	}
 
-	impersonatedID, ok := VerifyImpersonationToken(impersonatedCookie)
+	impersonatedID, ok := VerifyImpersonationToken(impersonatedCookie, adminID)
 	if !ok {
 		log.Printf("Security Warning: Admin %s attempted to impersonate with an invalid or tampered token: %s", adminID, impersonatedCookie)
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Invalid or tampered impersonation token"})
@@ -470,6 +521,7 @@ func processImpersonation(c *gin.Context, adminID string) {
 		c.Set("role", authCtx.Role)
 		c.Set("user_role", authCtx.Role)
 		c.Set("isImpersonating", true)
+		c.Set("is_admin", authCtx.Role == "ADMIN" || authCtx.Role == "SUPER_ADMIN")
 		c.Set("permissions", authCtx.Permissions)
 	}
 }
@@ -615,6 +667,11 @@ func isOriginAllowed(origin string, isDev bool, allowedOrigins []string) bool {
 		if origin == o {
 			return true
 		}
+	}
+
+	// Allow Vercel preview deployments (e.g. https://*.vercel.app)
+	if strings.HasPrefix(origin, "https://") && strings.HasSuffix(origin, ".vercel.app") {
+		return true
 	}
 
 	return false

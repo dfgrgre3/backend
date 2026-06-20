@@ -1,25 +1,2193 @@
-// ============================================================
-// Prisma Schema — Thanawy Backend
-// ============================================================
-// NOTE: This schema is intentionally minimal. The Go backend uses
-// GORM (not Prisma) for all runtime database access. Prisma is
-// used here solely as a migration management tool (prisma migrate
-// deploy / prisma db push) against the Supabase PostgreSQL instance.
-//
-// The full SQL migration history lives in:
-//   internal/db/migrations/*.sql   (Go GORM-based, applied by the app)
-//   supabase/migrations/*.sql       (Supabase-specific extensions)
-//
-// Use `prisma db pull` to introspect the live DB and regenerate
-// this schema from the actual tables whenever needed.
-// ============================================================
-
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
-  provider  = "postgresql"
+  provider = "postgresql"
 }
 
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ABExperiment {
+  id          String    @id @db.Uuid
+  name        String
+  description String?
+  status      String?   @default("DRAFT")
+  variants    String?
+  traffic_pct BigInt?   @default(100)
+  start_date  DateTime? @db.Timestamptz(6)
+  end_date    DateTime? @db.Timestamptz(6)
+  created_at  DateTime? @db.Timestamptz(6)
+  updated_at  DateTime? @db.Timestamptz(6)
+}
 
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Achievement {
+  id              String            @id @db.Uuid
+  key             String
+  title           String
+  description     String?
+  icon            String?
+  rarity          String            @default("common")
+  xp_reward       BigInt?           @default(0)
+  requirements    String
+  is_secret       Boolean           @default(false)
+  unlocked_count  Int               @default(0)
+  created_at      DateTime?         @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime?         @db.Timestamptz(6)
+  category        String?
+  difficulty      String?           @default("EASY")
+  deleted_at      DateTime?         @db.Timestamptz(6)
+  criteria        String?
+  UserAchievement UserAchievement[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Addon {
+  id          String    @id
+  name        String
+  nameAr      String?
+  description String?
+  price       Float
+  type        AddonType
+  value       Int
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model AiChatMessage {
+  id        String   @id
+  userId    String
+  role      String
+  content   String
+  sentiment String?
+  metadata  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model AiGeneratedContent {
+  id        String   @id
+  userId    String
+  type      String
+  title     String
+  content   String
+  subjectId String?
+  metadata  String?
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model AiGeneratedExam {
+  id         String     @id
+  userId     String
+  subjectId  String
+  title      String
+  duration   Int
+  year       Int?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime
+  difficulty Difficulty @default(MEDIUM)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model AiQuestion {
+  id            String   @id
+  examId        String
+  question      String
+  correctAnswer String
+  explanation   String?
+  points        Int      @default(1)
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime
+  options       String[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model AnalyticsEvent {
+  id        String   @id
+  userId    String?
+  type      String
+  metadata  String?
+  createdAt DateTime @default(now())
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Announcement {
+  id        String   @id
+  title     String
+  content   String
+  type      String   @default("INFO")
+  priority  Int      @default(0)
+  isActive  Boolean  @default(true)
+  authorId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model AuditLog {
+  id          String    @id @db.Uuid
+  user_id     String?   @db.Uuid
+  event_type  String
+  action      String?
+  resource    String?
+  resource_id String?
+  changes     String?
+  metadata    String?
+  ip_address  String?
+  user_agent  String?
+  device_info String?
+  location    String?
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Automation {
+  id          String    @id @db.Uuid
+  name        String
+  description String?
+  event       String
+  trigger     String?
+  conditions  String?
+  actions     String?
+  is_active   Boolean?  @default(true)
+  last_run_at DateTime? @db.Timestamptz(6)
+  created_at  DateTime? @db.Timestamptz(6)
+  updated_at  DateTime? @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model AutomationLog {
+  id          String   @id
+  ruleId      String
+  userId      String
+  actionTaken String
+  metadata    String?
+  createdAt   DateTime @default(now())
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model AutomationRule {
+  id          String   @id
+  name        String
+  description String?
+  triggerType String
+  conditions  String
+  actionType  String
+  actionData  String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model BiometricChallenge {
+  id        String   @id
+  challenge String
+  type      String
+  userId    String?
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model BiometricCredential {
+  id           String   @id
+  userId       String
+  credentialId String
+  publicKey    String
+  counter      Int      @default(0)
+  deviceType   String?
+  deviceName   String?
+  transports   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model BlogPost {
+  id           String    @id @db.Uuid
+  title        String
+  content      String?
+  excerpt      String?
+  slug         String
+  categoryId   String
+  authorId     String
+  isPublished  Boolean   @default(false)
+  publishedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime
+  views        Int       @default(0)
+  deleted_at   DateTime? @db.Timestamptz(6)
+  author_id    String?   @db.Uuid
+  category_id  String?   @db.Uuid
+  tags         Json?
+  status       String?   @default("DRAFT")
+  image        String?
+  published_at DateTime? @db.Timestamptz(6)
+  created_at   DateTime? @db.Timestamptz(6)
+  updated_at   DateTime? @db.Timestamptz(6)
+  User         User?     @relation(fields: [author_id], references: [id], onUpdate: NoAction, map: "fk_BlogPost_author")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Book {
+  id           String    @id @db.Uuid
+  title        String
+  author       String?
+  description  String?
+  rating       Float     @default(0)
+  views        Int       @default(0)
+  downloads    Int       @default(0)
+  created_at   DateTime  @default(now())
+  updated_at   DateTime
+  tags         String[]  @default([])
+  price        Float?    @default(0)
+  deleted_at   DateTime? @db.Timestamptz(6)
+  cover_url    String?
+  download_url String?
+  subject_id   String?   @db.Uuid
+  is_free      Boolean?  @default(true)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model BookProgress {
+  id          String   @id
+  userId      String
+  bookId      String
+  progress    Float    @default(0)
+  lastReadAt  DateTime @default(now())
+  isCompleted Boolean  @default(false)
+  currentPage Int      @default(0)
+  totalPages  Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model BookReview {
+  id        String   @id
+  bookId    String
+  userId    String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Category {
+  id          String    @id @db.Uuid
+  name        String
+  description String?
+  slug        String
+  icon        String?
+  type        String?   @default("COURSE")
+  createdAt   DateTime? @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime? @db.Timestamptz(6)
+  deleted_at  DateTime? @db.Timestamptz(6)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Challenge {
+  id            String          @id @db.Uuid
+  title         String
+  description   String?
+  type          String?         @default("daily")
+  category      String?
+  xp_reward     BigInt?         @default(0)
+  requirements  String
+  start_date    DateTime?       @db.Timestamptz(6)
+  end_date      DateTime?       @db.Timestamptz(6)
+  is_active     Boolean         @default(true)
+  subject_id    String?         @db.Uuid
+  levelRange    String?
+  created_at    DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime?       @db.Timestamptz(6)
+  difficulty    String?         @default("EASY")
+  deleted_at    DateTime?       @db.Timestamptz(6)
+  Subject       Subject?        @relation(fields: [subject_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_Challenge_subject")
+  UserChallenge UserChallenge[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ChallengeCompletion {
+  id          String   @id
+  userId      String
+  challengeId String
+  completedAt DateTime @default(now())
+  progress    Float    @default(0)
+  isCompleted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ContentPreference {
+  id        String   @id
+  userId    String
+  itemType  String
+  itemValue String
+  weight    Float    @default(1.0)
+  source    String?
+  updatedAt DateTime
+  createdAt DateTime @default(now())
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ContentReport {
+  id          String   @id @db.Uuid
+  userId      String
+  targetId    String
+  targetType  String
+  subjectId   String?
+  issueType   String
+  description String
+  status      String   @default("PENDING")
+  adminNote   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Contest {
+  id          String        @id @db.Uuid
+  title       String
+  description String?
+  imageUrl    String?
+  category    String?
+  tags        String[]
+  startDate   DateTime
+  endDate     DateTime
+  rules       String?
+  prizes      String?
+  isActive    Boolean       @default(true)
+  status      ContestStatus @default(DRAFT)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  pinCode     String?
+  organizerId String?
+  deleted_at  DateTime?     @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ContestQuestion {
+  id            String   @id @db.Uuid
+  contestId     String
+  question      String
+  correctAnswer String
+  options       String[]
+  duration      Int      @default(30)
+  points        Int      @default(100)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Coupon {
+  id               String       @id @db.Uuid
+  code             String
+  description      String?
+  discount_type    DiscountType @default(PERCENTAGE)
+  discount_value   Decimal      @db.Decimal
+  max_uses         BigInt?
+  used_count       Int          @default(0)
+  expiryDate       DateTime?
+  is_active        Boolean      @default(true)
+  minOrderAmount   Float?       @default(0)
+  created_at       DateTime?    @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime?    @db.Timestamptz(6)
+  isWinBack        Boolean?     @default(false)
+  minInactiveDays  Int?
+  regionTarget     String?
+  schoolTarget     String?
+  userTargetId     String?
+  deleted_at       DateTime?    @db.Timestamptz(6)
+  min_order_amount Decimal?     @default(0) @db.Decimal
+  expiry_date      DateTime?    @db.Timestamptz(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model CourseReview {
+  id         String    @id
+  subjectId  String?
+  userId     String?
+  rating     BigInt    @default(5)
+  comment    String?
+  isVisible  Boolean?  @default(true)
+  createdAt  DateTime? @db.Timestamptz(6)
+  updatedAt  DateTime? @db.Timestamptz(6)
+  deleted_at DateTime? @db.Timestamptz(6)
+  subject_id String    @db.Uuid
+  user_id    String    @db.Uuid
+  is_visible Boolean?  @default(true)
+  created_at DateTime? @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+  User       User      @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_CourseReview_user")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model CustomGoal {
+  id           String    @id
+  userId       String
+  title        String
+  description  String?
+  targetValue  Float
+  currentValue Float     @default(0)
+  unit         String
+  category     String
+  isCompleted  Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  completedAt  DateTime?
+  xpReward     Int       @default(10)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Event {
+  id              String          @id @db.Uuid
+  title           String
+  description     String?
+  startDate       DateTime
+  endDate         DateTime
+  location        String?
+  maxAttendees    Int?
+  imageUrl        String?
+  organizerId     String
+  category        String
+  isPublic        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime
+  tags            String[]        @default([])
+  deleted_at      DateTime?       @db.Timestamptz(6)
+  type            String?         @default("workshop")
+  start_date      DateTime?       @db.Timestamptz(6)
+  end_date        DateTime?       @db.Timestamptz(6)
+  is_online       Boolean?        @default(true)
+  attendees_count Int?            @default(0)
+  is_active       Boolean?        @default(true)
+  EventAttendee   EventAttendee[]
+
+  @@index([is_active], map: "idx_event_is_active", where: raw("(deleted_at IS NULL)"))
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EventAttendee {
+  id        String   @id
+  event_id  String   @db.Uuid
+  user_id   String   @db.Uuid
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+  Event     Event    @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_event_attendee_event")
+  User      User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_event_attendee_user")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Exam {
+  id          String       @id @db.Uuid
+  subject_id  String       @db.Uuid
+  title       String
+  year        Int
+  url         String
+  type        String?      @default("QUIZ")
+  created_at  DateTime?    @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime?    @db.Timestamptz(6)
+  duration    BigInt?
+  max_score   Decimal?     @default(100) @db.Decimal
+  deleted_at  DateTime?    @db.Timestamptz(6)
+  description String?
+  difficulty  String?      @default("medium") @db.VarChar(20)
+  is_active   Boolean?     @default(true)
+  Subject     Subject      @relation(fields: [subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_Exam_subject")
+  ExamResult  ExamResult[]
+  Question    Question[]
+  SubTopic    SubTopic[]
+}
+
+/// This table is a partition table and requires additional setup for migrations. Visit https://pris.ly/d/partition-tables for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ExamResult {
+  id         String    @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  exam_id    String    @db.Uuid
+  score      Decimal?  @default(0) @db.Decimal
+  max_score  Float?    @default(0)
+  passed     Boolean?  @default(false)
+  answers    String?
+  taken_at   DateTime  @default(now()) @db.Timestamptz(6)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at DateTime? @db.Timestamptz(6)
+  Exam       Exam      @relation(fields: [exam_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_exam_results_exam_id")
+  User       User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_exam_results_user_id")
+
+  @@id([id, taken_at])
+  @@index([user_id, taken_at(sort: Desc)], map: "idx_exam_result_user_taken_active", where: raw("(deleted_at IS NULL)"))
+  @@index([user_id, taken_at(sort: Desc)], map: "idx_exam_result_user_taken_safe", where: raw("(deleted_at IS NULL)"))
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Experiment {
+  id            String    @id
+  title         String
+  description   String?
+  status        String    @default("draft")
+  variantAName  String
+  variantBName  String
+  variantAViews Int       @default(0)
+  variantAComps Int       @default(0)
+  variantBViews Int       @default(0)
+  variantBComps Int       @default(0)
+  startDate     DateTime  @default(now())
+  endDate       DateTime?
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ForumCategory {
+  id          String    @id @db.Uuid
+  name        String
+  description String?
+  icon        String?
+  order       BigInt?   @default(0)
+  created_at  DateTime? @db.Timestamptz(6)
+  updated_at  DateTime? @db.Timestamptz(6)
+  deleted_at  DateTime? @db.Timestamptz(6)
+
+  @@index([order, created_at(sort: Desc)], map: "idx_forum_category_order_active", where: raw("(deleted_at IS NULL)"))
+  @@index([order, created_at(sort: Desc)], map: "idx_forum_category_order_safe", where: raw("(deleted_at IS NULL)"))
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ForumPost {
+  id         String   @id
+  title      String
+  content    String
+  categoryId String
+  authorId   String
+  isPinned   Boolean  @default(false)
+  isLocked   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+  views      Int      @default(0)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ForumReply {
+  id        String   @id
+  content   String
+  postId    String
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ForumTopic {
+  id          String    @id @db.Uuid
+  title       String
+  content     String?
+  author_id   String?   @db.Uuid
+  category_id String?   @db.Uuid
+  views       BigInt?   @default(0)
+  is_pinned   Boolean?  @default(false)
+  is_locked   Boolean?  @default(false)
+  created_at  DateTime? @db.Timestamptz(6)
+  updated_at  DateTime? @db.Timestamptz(6)
+  deleted_at  DateTime? @db.Timestamptz(6)
+  User        User?     @relation(fields: [author_id], references: [id], onUpdate: NoAction, map: "fk_ForumTopic_author")
+
+  @@index([category_id, created_at(sort: Desc)], map: "idx_forum_topic_category_created_active", where: raw("(deleted_at IS NULL)"))
+  @@index([category_id, created_at(sort: Desc)], map: "idx_forum_topic_category_created_safe", where: raw("(deleted_at IS NULL)"))
+  @@index([is_pinned(sort: Desc), created_at(sort: Desc), id, title, author_id, category_id, views, is_locked], map: "idx_forum_topic_pinned_created_active", where: raw("(deleted_at IS NULL)"))
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model GroupSubscription {
+  id        String   @id
+  ownerId   String
+  planId    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Invoice {
+  id             String        @id @db.Uuid
+  invoice_number String?
+  user_id        String?       @db.Uuid
+  payment_id     String?       @db.Uuid
+  amount         Float
+  currency       String        @default("EGP")
+  status         InvoiceStatus @default(DRAFT)
+  issueDate      DateTime      @default(now())
+  due_date       DateTime?     @db.Timestamptz(6)
+  paidDate       DateTime?
+  pdf_url        String?
+  billingDetails String?
+  items          String
+  created_at     DateTime?     @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime      @db.Timestamptz(6)
+  deleted_at     DateTime?     @db.Timestamptz(6)
+  User           User?         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_invoices_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model LeaderboardEntry {
+  id          String   @id
+  userId      String
+  type        String
+  period      String?
+  subjectId   String?
+  levelRange  String?
+  seasonId    String?
+  totalXP     Int      @default(0)
+  studyXP     Int      @default(0)
+  taskXP      Int      @default(0)
+  examXP      Int      @default(0)
+  challengeXP Int      @default(0)
+  questXP     Int      @default(0)
+  rank        Int?
+  level       Int      @default(1)
+  lastUpdated DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model LessonAnswer {
+  id         String   @id
+  questionId String
+  userId     String
+  content    String
+  isTeacher  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model LessonAttachment {
+  id           String    @id @db.Uuid
+  subTopicId   String?
+  title        String
+  fileUrl      String?
+  fileType     String?
+  fileSize     BigInt?
+  createdAt    DateTime? @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime?
+  deleted_at   DateTime? @db.Timestamptz(6)
+  sub_topic_id String?   @db.Uuid
+  file_url     String?
+  file_type    String?
+  file_size    BigInt?
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model LessonNote {
+  id         String   @id
+  userId     String
+  subTopicId String
+  content    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model LessonQuestion {
+  id         String   @id
+  userId     String
+  subTopicId String
+  content    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model LiveEvent {
+  id          String    @id @db.Uuid
+  title       String
+  description String?
+  type        String?   @default("LIVE")
+  status      String?   @default("UPCOMING")
+  start_time  DateTime? @db.Timestamptz(6)
+  end_time    DateTime? @db.Timestamptz(6)
+  speaker     String?
+  join_link   String?
+  image       String?
+  subject_id  String?   @db.Uuid
+  created_at  DateTime? @db.Timestamptz(6)
+  updated_at  DateTime? @db.Timestamptz(6)
+  deleted_at  DateTime? @db.Timestamptz(6)
+  Subject     Subject?  @relation(fields: [subject_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_LiveEvent_subject")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model MarketingCampaign {
+  id             String    @id
+  title          String
+  content        String
+  audience       String
+  rewardType     String
+  rewardValue    Float?
+  status         String    @default("draft")
+  scheduledAt    DateTime?
+  sentAt         DateTime?
+  deliveredCount Int       @default(0)
+  openedCount    Int       @default(0)
+  claimedCount   Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Message {
+  id         String   @id
+  senderId   String
+  receiverId String
+  content    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model MlRecommendation {
+  id          String    @id
+  userId      String
+  itemType    String
+  itemId      String
+  score       Float
+  algorithm   String
+  reason      String?
+  shownAt     DateTime?
+  clickedAt   DateTime?
+  completedAt DateTime?
+  feedback    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Notification {
+  id           String           @id @db.Uuid
+  user_id      String           @db.Uuid
+  title        String
+  message      String
+  is_read      Boolean          @default(false)
+  action_url   String?
+  icon         String?
+  created_at   DateTime?        @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime?        @db.Timestamptz(6)
+  type         NotificationType @default(INFO)
+  is_deleted   Boolean          @default(false)
+  link         String?
+  deleted_at   DateTime?        @db.Timestamptz(6)
+  category     String?          @default("GENERAL")
+  priority     String?          @default("MEDIUM")
+  status       String?          @default("pending")
+  channels     Json?            @default("[]")
+  broadcast_id String?          @db.Uuid
+  actions      Json?            @default("[]")
+  User         User             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_notifications_user_id")
+
+  @@index([category], map: "idx_notification_category")
+  @@index([is_read], map: "idx_notification_is_read")
+  @@index([status], map: "idx_notification_status")
+  @@index([user_id, created_at(sort: Desc), id, type, title, message, is_read], map: "idx_notification_user_created_covering", where: raw("(deleted_at IS NULL)"))
+  @@index([user_id, created_at(sort: Desc), id, type, title, message, is_read], map: "idx_notification_user_created_read_safe", where: raw("(deleted_at IS NULL)"))
+  @@index([user_id, is_read, created_at(sort: Desc)], map: "idx_notification_user_read_created")
+  @@index([user_id, created_at(sort: Desc)], map: "idx_notification_user_unread_active", where: raw("((deleted_at IS NULL) AND (is_read = false))"))
+  @@index([user_id, created_at(sort: Desc)], map: "idx_notification_user_unread_safe", where: raw("((deleted_at IS NULL) AND (is_read = false))"))
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model OfflineLesson {
+  id          String   @id
+  userId      String
+  title       String
+  description String?
+  subjectId   String
+  teacherId   String?
+  location    String?
+  startTime   DateTime
+  endTime     DateTime
+  maxStudents Int?
+  price       Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model PasswordHistory {
+  id           String   @id
+  userId       String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model PasswordPolicy {
+  id               String   @id
+  role             String
+  expirationDays   Int?
+  minLength        Int      @default(8)
+  maxLength        Int      @default(128)
+  requireUppercase Boolean  @default(true)
+  requireLowercase Boolean  @default(true)
+  requireNumbers   Boolean  @default(true)
+  requireSpecial   Boolean  @default(true)
+  historyCount     Int      @default(10)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime
+  warningDays      Int[]    @default([7, 3, 1])
+  bannedPasswords  String[] @default([])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Payment {
+  id                String    @id @db.Uuid
+  user_id           String    @db.Uuid
+  plan_id           String?   @db.Uuid
+  amount            Decimal   @db.Decimal
+  currency          String    @default("EGP")
+  status            String    @default("pending")
+  method            String
+  reference         String    @unique
+  paymob_order_id   BigInt?
+  external_txn_id   String?
+  completed_at      DateTime? @db.Timestamptz(6)
+  created_at        DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime? @db.Timestamptz(6)
+  deleted_at        DateTime? @db.Timestamptz(6)
+  subject_id        String?   @db.Uuid
+  paymentData       String?
+  errorMessage      String?
+  couponId          String?
+  discountAmount    Float?    @default(0)
+  referralRewardId  String?
+  creditAmount      Float?    @default(0)
+  balanceUsed       Float?    @default(0)
+  promoDiscount     Float?    @default(0)
+  prorationDiscount Float?    @default(0)
+  archiveReason     String?
+  Subject           Subject?  @relation(fields: [subject_id], references: [id], onUpdate: NoAction, map: "fk_Payment_subject")
+  User              User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_User_payments")
+
+  @@index([user_id, created_at(sort: Desc)], map: "idx_payment_user_created")
+  @@index([user_id, created_at(sort: Desc), amount, status], map: "idx_payment_user_created_covering", where: raw("(deleted_at IS NULL)"))
+  @@index([user_id, created_at(sort: Desc), amount, status], map: "idx_payment_user_created_covering_safe", where: raw("(deleted_at IS NULL)"))
+  @@index([user_id, status, created_at(sort: Desc)], map: "idx_payment_user_status_active", where: raw("(deleted_at IS NULL)"))
+  @@index([user_id, status, created_at(sort: Desc)], map: "idx_payment_user_status_active_safe", where: raw("(deleted_at IS NULL)"))
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model PaymentStatusLookup {
+  code        String    @id @db.VarChar(20)
+  label       String    @db.VarChar(50)
+  description String?
+  color       String?   @default("#000000") @db.VarChar(7)
+  isActive    Boolean?  @default(true)
+  sortOrder   Int?      @default(0)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ProgressSnapshot {
+  id                String   @id
+  userId            String
+  date              DateTime
+  totalStudyMinutes Int      @default(0)
+  averageFocusScore Float    @default(0)
+  completedTasks    Int      @default(0)
+  streakDays        Int      @default(0)
+  gradeAverage      Float?
+  improvementRate   Float?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Quest {
+  id            String   @id
+  chainId       String
+  title         String
+  description   String
+  order         Int
+  xpReward      Int
+  requirements  String
+  prerequisites String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model QuestChain {
+  id          String     @id
+  title       String
+  description String
+  category    String
+  totalQuests Int        @default(1)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime
+  difficulty  Difficulty @default(MEDIUM)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model QuestProgress {
+  id          String    @id
+  userId      String
+  questId     String
+  chainId     String
+  progress    Float     @default(0)
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+  startedAt   DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Question {
+  id         String    @id @db.Uuid
+  exam_id    String    @db.Uuid
+  text       String
+  type       String?   @default("MCQ")
+  options    String?
+  answer     String
+  deleted_at DateTime? @db.Timestamptz(6)
+  Exam       Exam      @relation(fields: [exam_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_Exam_questions")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ReferralReward {
+  id         String   @id
+  referrerId String
+  referredId String
+  amount     Float
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Reminder {
+  id         String    @id @db.Uuid
+  user_id    String    @db.Uuid
+  title      String
+  message    String?
+  remind_at  DateTime? @db.Timestamptz(6)
+  repeat     String?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+  type       String?   @default("STUDY")
+  priority   String?   @default("MEDIUM")
+  is_active  Boolean?  @default(true)
+  deleted_at DateTime? @db.Timestamptz(6)
+  User       User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_reminders_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Resource {
+  id           String    @id
+  subjectId    String
+  title        String
+  description  String?
+  url          String
+  free         Boolean   @default(true)
+  type         String
+  source       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime
+  price        Float?    @default(0)
+  minPlanLevel Int       @default(0)
+  subject_id   String?   @db.Uuid
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at   DateTime? @db.Timestamptz(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Reward {
+  id          String    @id @db.Uuid
+  name        String
+  description String?
+  type        String?   @default("VIRTUAL")
+  rarity      String
+  imageUrl    String?
+  metadata    String?
+  isTradeable Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime
+  deleted_at  DateTime? @db.Timestamptz(6)
+  title       String
+  cost        BigInt?   @default(0)
+  stock       BigInt?   @default(-1)
+  image       String?
+  is_active   Boolean?  @default(true)
+  created_at  DateTime? @db.Timestamptz(6)
+  updated_at  DateTime? @db.Timestamptz(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Schedule {
+  id          String    @id @db.Uuid
+  user_id     String    @db.Uuid
+  name        String?
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  subjectId   String?
+  type        String    @default("study")
+  color       String?
+  active      Boolean   @default(true)
+  plan_json   String?
+  version     Int       @default(0)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @db.Timestamptz(6)
+  deleted_at  DateTime? @db.Timestamptz(6)
+  User        User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_schedules_user_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Season {
+  id          String    @id @db.Uuid
+  name        String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean   @default(true)
+  rewards     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deleted_at  DateTime? @db.Timestamptz(6)
+  title       String
+  start_date  DateTime? @db.Timestamptz(6)
+  end_date    DateTime? @db.Timestamptz(6)
+  is_active   Boolean?  @default(false)
+  created_at  DateTime? @db.Timestamptz(6)
+  updated_at  DateTime? @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SeasonParticipation {
+  id        String   @id
+  userId    String
+  seasonId  String
+  seasonXP  Int      @default(0)
+  rank      Int?
+  joinedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SecurityLog {
+  id         String    @id @db.Uuid
+  user_id    String?   @db.Uuid
+  event_type String
+  ip         String
+  user_agent String?
+  deviceInfo String?
+  location   String?
+  metadata   String?
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+  deleted_at DateTime? @db.Timestamptz(6)
+  User       User?     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_security_logs_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SecurityQuestion {
+  id         String   @id
+  userId     String
+  question   String
+  answerHash String
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SentimentAnalysis {
+  id         String   @id
+  userId     String
+  text       String
+  sentiment  String
+  score      Float
+  confidence Float
+  emotions   String?
+  context    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Session {
+  id           String    @id
+  userId       String
+  userAgent    String?
+  ip           String
+  deviceInfo   String?
+  createdAt    DateTime? @default(now()) @db.Timestamptz(6)
+  expiresAt    DateTime? @db.Timestamptz(6)
+  lastAccessed DateTime? @default(now()) @db.Timestamptz(6)
+  isActive     Boolean   @default(true)
+  isTrusted    Boolean   @default(false)
+  location     String?
+  refreshToken String?
+  updatedAt    DateTime? @db.Timestamptz(6)
+  deviceType   String?
+  deletedAt    DateTime? @db.Timestamptz(6)
+  deleted_at   DateTime? @db.Timestamptz(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model StudySession {
+  id           String         @id @db.Uuid
+  user_id      String         @db.Uuid
+  subject_id   String?        @db.Uuid
+  taskId       String?
+  start_time   DateTime?      @db.Timestamptz(6)
+  end_time     DateTime?      @db.Timestamptz(6)
+  duration_min Int?           @default(0)
+  focus_score  Int            @default(0)
+  notes        String?
+  created_at   DateTime?      @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime?      @db.Timestamptz(6)
+  strategy     FocusStrategy?
+  isDeleted    Boolean        @default(false)
+  deletedAt    DateTime?
+  status       TaskStatus     @default(PENDING)
+  deleted_at   DateTime?      @db.Timestamptz(6)
+  User         User           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_User_study_sessions")
+  Subject      Subject?       @relation(fields: [subject_id], references: [id], onUpdate: NoAction, map: "fk_study_sessions_subject_id")
+
+  @@index([user_id, start_time(sort: Desc)], map: "idx_study_session_user_start_active", where: raw("(deleted_at IS NULL)"))
+  @@index([user_id, start_time(sort: Desc)], map: "idx_study_session_user_start_safe", where: raw("(deleted_at IS NULL)"))
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SubTopic {
+  id               String          @id @db.Uuid
+  topic_id         String          @db.Uuid
+  title            String          @default("")
+  description      String?
+  content          String?
+  video_url        String?
+  order            Int             @default(0)
+  created_at       DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime?       @db.Timestamptz(6)
+  duration_minutes Int             @default(0)
+  is_free          Boolean         @default(false)
+  type             LessonType      @default(VIDEO)
+  exam_id          String?         @db.Uuid
+  deleted_at       DateTime?       @db.Timestamptz(6)
+  Exam             Exam?           @relation(fields: [exam_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_SubTopic_exam")
+  Topic            Topic           @relation(fields: [topic_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_Topic_sub_topics")
+  TopicProgress    TopicProgress[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Subject {
+  id                       String                   @id @db.Uuid
+  name                     String
+  name_ar                  String?
+  code                     String?
+  description              String?
+  icon                     String?
+  color                    String?                  @default("#3b82f6")
+  type                     String?                  @default("COURSE")
+  is_active                Boolean                  @default(true)
+  created_at               DateTime?                @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime?                @db.Timestamptz(6)
+  category_id              String?                  @db.Uuid
+  duration_hours           Int?                     @default(0)
+  enrolled_count           Int?                     @default(0)
+  instructor_id            String?                  @db.Uuid
+  instructor_name          String?
+  is_published             Boolean                  @default(false)
+  learning_objectives      String?
+  level                    String?                  @default("INTERMEDIATE")
+  price                    Float?                   @default(0)
+  rating                   Float?                   @default(0)
+  requirements             String?
+  thumbnail_url            String?
+  trailer_url              String?
+  seo_title                String?
+  seo_description          String?
+  slug                     String?
+  completion_rate          Float?                   @default(0)
+  course_prerequisites     String[]                 @default([])
+  is_featured              Boolean                  @default(false)
+  language                 String?                  @default("ar")
+  last_content_update      DateTime?
+  target_audience          String[]                 @default([])
+  video_count              Int?                     @default(0)
+  what_you_learn           String[]                 @default([])
+  trailer_duration_minutes Int?                     @default(0)
+  deleted_at               DateTime?                @db.Timestamptz(6)
+  search_vector            Unsupported("tsvector")?
+  Challenge                Challenge[]
+  Exam                     Exam[]
+  LiveEvent                LiveEvent[]
+  Payment                  Payment[]
+  StudySession             StudySession[]
+  SubjectEnrollment        SubjectEnrollment[]
+  Task                     Task[]
+  Topic                    Topic[]
+
+  @@index([id], map: "idx_subject_active_rows", where: raw("(deleted_at IS NULL)"))
+  @@index([category_id, created_at(sort: Desc)], map: "idx_subject_category_created_active", where: raw("(deleted_at IS NULL)"))
+  @@index([created_at(sort: Desc), id], map: "idx_subject_created_active", where: raw("(deleted_at IS NULL)"))
+  @@index([created_at(sort: Desc), id], map: "idx_subject_created_active_safe", where: raw("(deleted_at IS NULL)"))
+  @@index([is_published, is_active, level, category_id, created_at(sort: Desc)], map: "idx_subject_public_catalog_active", where: raw("(deleted_at IS NULL)"))
+  @@index([is_published, is_active, level, category_id, created_at(sort: Desc)], map: "idx_subject_public_catalog_safe", where: raw("(deleted_at IS NULL)"))
+  @@index([search_vector], map: "idx_subject_search_vector", type: Gin)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SubjectCertificate {
+  id        String   @id
+  subjectId String
+  userId    String
+  issuedAt  DateTime @default(now())
+  certUrl   String?
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SubjectEnrollment {
+  id          String    @id @db.Uuid
+  user_id     String    @db.Uuid
+  subject_id  String    @db.Uuid
+  enrolled_at DateTime? @db.Timestamptz(6)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @db.Timestamptz(6)
+  progress    Float?    @default(0)
+  deleted_at  DateTime? @db.Timestamptz(6)
+  Subject     Subject   @relation(fields: [subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_Subject_enrollments")
+  User        User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_User_enrollments")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SubjectReview {
+  id        String   @id
+  subjectId String
+  userId    String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Subscription {
+  id                 String             @id
+  userId             String
+  planId             String
+  status             SubscriptionStatus @default(INACTIVE)
+  startDate          DateTime           @default(now())
+  endDate            DateTime
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime
+  gracePeriodEndDate DateTime?
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SubscriptionPlan {
+  id               String             @id @db.Uuid
+  name             String
+  name_ar          String?
+  description      String?
+  descriptionAr    String?
+  price            Float
+  currency         String             @default("EGP")
+  interval         PlanInterval       @default(MONTHLY)
+  features         String[]           @default([])
+  featuresAr       String[]           @default([])
+  is_active        Boolean            @default(true)
+  level            Int                @default(0)
+  memberLimit      Int                @default(1)
+  created_at       DateTime           @default(now())
+  updated_at       DateTime
+  aiMessageLimit   Int?
+  examLimit        Int?
+  extraExamPrice   Float?             @default(0)
+  deleted_at       DateTime?          @db.Timestamptz(6)
+  UserSubscription UserSubscription[]
+
+  @@index([is_active], map: "idx_subscription_plan_is_active")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SystemSetting {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key        String    @unique @db.VarChar(100)
+  value      String?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at DateTime? @db.Timestamptz(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Task {
+  id             String     @id @db.Uuid
+  user_id        String     @db.Uuid
+  title          String
+  description    String?
+  subject_id     String?    @db.Uuid
+  due_at         DateTime?  @db.Timestamptz(6)
+  scheduledAt    DateTime?
+  completed_at   DateTime?
+  priority       String?    @default("MEDIUM")
+  created_at     DateTime?  @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime?  @db.Timestamptz(6)
+  status         TaskStatus @default(PENDING)
+  isDeleted      Boolean    @default(false)
+  deletedAt      DateTime?
+  estimated_time BigInt?
+  actual_time    BigInt?
+  deleted_at     DateTime?  @db.Timestamptz(6)
+  Subject        Subject?   @relation(fields: [subject_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_Task_subject")
+  User           User       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_User_tasks")
+
+  @@index([user_id, status, created_at(sort: Desc)], map: "idx_task_user_status_active_created", where: raw("(deleted_at IS NULL)"))
+  @@index([user_id, status, created_at(sort: Desc)], map: "idx_task_user_status_created_safe", where: raw("(deleted_at IS NULL)"))
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Teacher {
+  id        String   @id
+  userId    String
+  name      String
+  bio       String?
+  image     String?
+  onlineUrl String?
+  rating    Float    @default(0.0)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model TeacherEarnings {
+  id              String   @id
+  teacherId       String
+  balance         Float    @default(0)
+  totalEarned     Float    @default(0)
+  withdrawnAmount Float    @default(0)
+  currency        String   @default("EGP")
+  updatedAt       DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model TestResult {
+  id          String   @id
+  userId      String
+  examId      String
+  score       Float
+  totalScore  Float
+  answers     String
+  timeTaken   Int
+  completedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Topic {
+  id          String     @id @db.Uuid
+  subject_id  String     @db.Uuid
+  title       String     @default("")
+  description String?
+  order       Int        @default(0)
+  created_at  DateTime?  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime?  @db.Timestamptz(6)
+  deleted_at  DateTime?  @db.Timestamptz(6)
+  SubTopic    SubTopic[]
+  Subject     Subject    @relation(fields: [subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_Subject_topics")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model TopicProgress {
+  id                    String    @id
+  user_id               String    @db.Uuid
+  sub_topic_id          String    @db.Uuid
+  completed             Boolean   @default(false)
+  completed_at          DateTime?
+  lastVideoPosition     Int       @default(0)
+  created_at            DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime? @db.Timestamptz(6)
+  deleted_at            DateTime? @db.Timestamptz(6)
+  status                String?   @default("NOT_STARTED")
+  time_spent_seconds    BigInt?   @default(0)
+  last_watched_position BigInt?   @default(0)
+  User                  User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_User_lesson_progresses")
+  SubTopic              SubTopic  @relation(fields: [sub_topic_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_topic_progress_subtopic")
+
+  @@unique([user_id, sub_topic_id], map: "unique_user_lesson")
+  @@unique([user_id, sub_topic_id], map: "unique_user_lesson_snake")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model TwoFactorChallenge {
+  id        String   @id
+  userId    String?
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model User {
+  id                               String              @id @db.Uuid
+  email                            String
+  name                             String?
+  username                         String?
+  avatar                           String?
+  created_at                       DateTime?           @default(now()) @db.Timestamptz(6)
+  updated_at                       DateTime?           @db.Timestamptz(6)
+  wake_up_time                     String?
+  sleep_time                       String?
+  focus_strategy                   String?             @default("POMODORO")
+  email_notifications              Boolean?            @default(true)
+  email_verification_token         String?
+  email_verification_expires       DateTime?
+  email_verified                   Boolean?            @default(false)
+  last_login                       DateTime?
+  phone                            String?
+  phone_verified                   Boolean?            @default(false)
+  phone_verification_otp           String?
+  phone_verification_expires       DateTime?
+  phone_verification_attempts      Int                 @default(0)
+  phone_verification_last_sent     DateTime?
+  reset_token                      String?
+  reset_token_expires              DateTime?
+  recovery_codes                   String?
+  sms_notifications                Boolean?            @default(false)
+  biometric_enabled                Boolean             @default(false)
+  magic_link_token                 String?
+  magic_link_expires               DateTime?
+  google_id                        String?
+  github_id                        String?
+  password_changed_at              DateTime?
+  password_expires_at              DateTime?
+  password_expiration_warning_sent Boolean             @default(false)
+  role                             UserRole            @default(STUDENT)
+  status                           UserStatus          @default(ACTIVE)
+  country                          String?
+  date_of_birth                    DateTime?
+  gender                           String?
+  alternative_phone                String?
+  section                          String?
+  interested_subjects              String[]            @default([])
+  study_goal                       String?
+  subjects_taught                  String[]            @default([])
+  classes_taught                   String[]            @default([])
+  experience_years                 String?
+  bio                              String?
+  permissions                      Json?               @default("[]")
+  school                           String?
+  referral_code                    String?
+  referred_by_id                   String?             @db.Uuid
+  additional_ai_credits            Int                 @default(0)
+  additional_exam_credits          Int                 @default(0)
+  is_deleted                       Boolean             @default(false)
+  last_usage_reset                 DateTime            @default(now())
+  monthly_ai_message_count         Int                 @default(0)
+  monthly_exam_count               Int                 @default(0)
+  total_xp                         BigInt?             @default(0)
+  level                            BigInt?             @default(1)
+  balance                          Decimal?            @default(0) @db.Decimal
+  ai_credits                       BigInt?             @default(0)
+  exam_credits                     BigInt?             @default(0)
+  reset_password_token             String?
+  reset_password_expires           DateTime?           @db.Timestamptz(6)
+  verification_token               String?
+  verification_expires             DateTime?           @db.Timestamptz(6)
+  deleted_at                       DateTime?           @db.Timestamptz(6)
+  current_streak                   Int                 @default(0)
+  longest_streak                   Int                 @default(0)
+  total_study_time                 Int                 @default(0)
+  tasks_completed                  Int                 @default(0)
+  exams_passed                     Int                 @default(0)
+  study_xp                         Int                 @default(0)
+  task_xp                          Int                 @default(0)
+  exam_xp                          Int                 @default(0)
+  challenge_xp                     Int                 @default(0)
+  quest_xp                         Int                 @default(0)
+  season_xp                        Int                 @default(0)
+  archiveReason                    String?
+  password_hash                    String
+  grade_level                      String?
+  education_type                   String?
+  version                          BigInt?             @default(1)
+  active_subscription_id           String?             @db.Uuid
+  subscription_expires_at          DateTime?           @db.Timestamptz(6)
+  two_factor_enabled               Boolean?            @default(false)
+  two_factor_secret                String?
+  archive_reason                   String?
+  clerk_id                         String?             @unique(map: "idx_user_clerk_id") @db.VarChar(255)
+  BlogPost                         BlogPost[]
+  CourseReview                     CourseReview[]
+  EventAttendee                    EventAttendee[]
+  ExamResult                       ExamResult[]
+  ForumTopic                       ForumTopic[]
+  Invoice                          Invoice[]
+  Lesson_Lesson_teacher_idToUser   Lesson[]            @relation("Lesson_teacher_idToUser")
+  Lesson_Lesson_user_idToUser      Lesson[]            @relation("Lesson_user_idToUser")
+  Notification                     Notification[]
+  Payment                          Payment[]
+  Reminder                         Reminder[]
+  Schedule                         Schedule[]
+  SecurityLog                      SecurityLog[]
+  StudySession                     StudySession[]
+  SubjectEnrollment                SubjectEnrollment[]
+  Task                             Task[]
+  TopicProgress                    TopicProgress[]
+  User                             User?               @relation("UserToUser", fields: [referred_by_id], references: [id], onUpdate: NoAction, map: "fk_user_referred_by_id")
+  other_User                       User[]              @relation("UserToUser")
+  UserAchievement                  UserAchievement[]
+  UserChallenge                    UserChallenge[]
+  UserSession                      UserSession[]
+  UserSettings                     UserSettings?
+  UserSubscription                 UserSubscription[]
+  WalletTransaction                WalletTransaction[]
+
+  @@index([id], map: "idx_user_pkey_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserAchievement {
+  id             String      @id @db.Uuid
+  user_id        String      @db.Uuid
+  achievementKey String
+  earnedAt       DateTime    @default(now())
+  created_at     DateTime    @default(now())
+  updated_at     DateTime
+  deleted_at     DateTime?   @db.Timestamptz(6)
+  achievement_id String      @db.Uuid
+  unlocked_at    DateTime?   @db.Timestamptz(6)
+  Achievement    Achievement @relation(fields: [achievement_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_UserAchievement_achievement")
+  User           User        @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_UserAchievement_user")
+
+  @@index([user_id, unlocked_at(sort: Desc), achievementKey], map: "idx_achievement_user_unlocked_active", where: raw("(deleted_at IS NULL)"))
+  @@index([user_id, unlocked_at(sort: Desc)], map: "idx_user_achievement_user_unlocked_safe", where: raw("(deleted_at IS NULL)"))
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserActivity {
+  userId           String   @id
+  currentStreak    Int      @default(0)
+  longestStreak    Int      @default(0)
+  totalStudyTime   Int      @default(0)
+  tasksCompleted   Int      @default(0)
+  examsPassed      Int      @default(0)
+  pomodoroSessions Int      @default(0)
+  deepWorkSessions Int      @default(0)
+  lastActiveAt     DateTime @default(now())
+  updatedAt        DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserChallenge {
+  id           String    @id @db.Uuid
+  user_id      String    @db.Uuid
+  challenge_id String    @db.Uuid
+  progress     BigInt?   @default(0)
+  is_completed Boolean?  @default(false)
+  completed_at DateTime? @db.Timestamptz(6)
+  deleted_at   DateTime? @db.Timestamptz(6)
+  Challenge    Challenge @relation(fields: [challenge_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_UserChallenge_challenge")
+  User         User      @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_UserChallenge_user")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserGrade {
+  id        String    @id
+  userId    String
+  subjectId String
+  grade     Float
+  maxGrade  Float
+  examName  String?
+  date      DateTime?
+  examDate  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserInteraction {
+  id        String   @id
+  userId    String
+  type      String
+  itemType  String
+  itemId    String
+  metadata  String?
+  timestamp DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserReward {
+  id         String   @id
+  userId     String
+  rewardId   String
+  earnedAt   DateTime @default(now())
+  source     String?
+  nftTokenId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserSession {
+  id                 String    @id @db.Uuid
+  user_id            String    @db.Uuid
+  refresh_token      String    @unique(map: "idx_usersession_refresh_token")
+  user_agent         String?
+  ip                 String
+  location           String?
+  device_type        String?
+  status             String?   @default("active")
+  is_active          Boolean?  @default(true)
+  last_accessed      DateTime? @db.Timestamptz(6)
+  expires_at         DateTime? @db.Timestamptz(6)
+  revoked_at         DateTime? @db.Timestamptz(6)
+  revoked_by         String?   @db.Uuid
+  created_at         DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at         DateTime? @db.Timestamptz(6)
+  refresh_token_hash String?   @unique(map: "idx_user_session_refresh_hash", where: raw("(refresh_token_hash IS NOT NULL)"))
+  User               User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_User_Sessions")
+
+  @@index([id, refresh_token_hash, is_active], map: "idx_user_session_id_hash_active")
+  @@index([user_id, is_active, last_accessed(sort: Desc)], map: "idx_user_session_user_active_recent", where: raw("(deleted_at IS NULL)"))
+  @@index([user_id, is_active, last_accessed(sort: Desc)], map: "idx_user_session_user_active_recent_safe", where: raw("(deleted_at IS NULL)"))
+  @@index([id, refresh_token, is_active], map: "idx_user_sessions_active_refresh_token", where: raw("((is_active = true) AND (deleted_at IS NULL))"))
+  @@index([user_id, is_active, last_accessed(sort: Desc)], map: "idx_user_sessions_user_active_recent", where: raw("(deleted_at IS NULL)"))
+  @@index([deleted_at], map: "idx_usersession_deleted_at")
+  @@index([expires_at], map: "idx_usersession_expires_at")
+  @@index([is_active], map: "idx_usersession_is_active")
+  @@index([user_id], map: "idx_usersession_user_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserSettings {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  theme                 String?   @default("light")
+  fontSize              String?   @default("medium")
+  reducedMotion         Boolean?  @default(false)
+  highContrast          Boolean?  @default(false)
+  compactMode           Boolean?  @default(false)
+  efficiencyMode        Boolean?  @default(false)
+  language              String?   @default("ar")
+  numberFormat          String?   @default("english")
+  notificationsEnabled  Boolean?  @default(true)
+  studyReminders        Boolean?  @default(true)
+  emailNotifications    Boolean?  @default(true)
+  pushNotifications     Boolean?  @default(true)
+  profileVisibility     String?   @default("public")
+  showOnlineStatus      Boolean?  @default(true)
+  showProgress          Boolean?  @default(true)
+  created_at            DateTime? @db.Timestamptz(6)
+  updated_at            DateTime? @db.Timestamptz(6)
+  deletedAt             DateTime? @db.Timestamptz(6)
+  user_id               String    @unique(map: "unique_user_settings") @db.Uuid
+  taskReminders         Boolean?  @default(true)
+  taskReminderTime      String?   @default("30")
+  dailyGoalReminders    Boolean?  @default(true)
+  examReminders         Boolean?  @default(true)
+  examReminderDays      BigInt?   @default(3)
+  deadlineReminders     Boolean?  @default(true)
+  progressReports       Boolean?  @default(true)
+  weeklyReport          Boolean?  @default(true)
+  achievementAlerts     Boolean?  @default(true)
+  commentNotifications  Boolean?  @default(true)
+  mentionNotifications  Boolean?  @default(true)
+  pushEnabled           Boolean?  @default(true)
+  emailEnabled          Boolean?  @default(true)
+  smsEnabled            Boolean?  @default(false)
+  quietHoursEnabled     Boolean?  @default(false)
+  quietHoursStart       String?   @default("22:00")
+  quietHoursEnd         String?   @default("07:00")
+  soundEnabled          Boolean?  @default(true)
+  vibrationEnabled      Boolean?  @default(true)
+  deleted_at            DateTime? @db.Timestamptz(6)
+  font_size             String?   @default("medium")
+  reduced_motion        Boolean?  @default(false)
+  high_contrast         Boolean?  @default(false)
+  compact_mode          Boolean?  @default(false)
+  efficiency_mode       Boolean?  @default(false)
+  number_format         String?   @default("english")
+  notifications_enabled Boolean?  @default(true)
+  study_reminders       Boolean?  @default(true)
+  email_notifications   Boolean?  @default(true)
+  push_notifications    Boolean?  @default(true)
+  task_reminders        Boolean?  @default(true)
+  task_reminder_time    String?   @default("30")
+  daily_goal_reminders  Boolean?  @default(true)
+  exam_reminders        Boolean?  @default(true)
+  exam_reminder_days    BigInt?   @default(3)
+  deadline_reminders    Boolean?  @default(true)
+  progress_reports      Boolean?  @default(true)
+  weekly_report         Boolean?  @default(true)
+  achievement_alerts    Boolean?  @default(true)
+  comment_notifications Boolean?  @default(true)
+  mention_notifications Boolean?  @default(true)
+  push_enabled          Boolean?  @default(true)
+  email_enabled         Boolean?  @default(true)
+  sms_enabled           Boolean?  @default(false)
+  quiet_hours_enabled   Boolean?  @default(false)
+  quiet_hours_start     String?   @default("22:00")
+  quiet_hours_end       String?   @default("07:00")
+  sound_enabled         Boolean?  @default(true)
+  vibration_enabled     Boolean?  @default(true)
+  profile_visibility    String?   @default("public")
+  show_online_status    Boolean?  @default(true)
+  show_progress         Boolean?  @default(true)
+  User                  User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_User_settings")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserSubscription {
+  id                     String           @id @db.Uuid
+  user_id                String           @db.Uuid
+  plan_id                String           @db.Uuid
+  status                 String           @default("PENDING")
+  start_date             DateTime         @db.Timestamptz(6)
+  end_date               DateTime         @db.Timestamptz(6)
+  auto_renew             Boolean          @default(true)
+  paymob_subscription_id String?
+  created_at             DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime         @default(now()) @db.Timestamptz(6)
+  SubscriptionPlan       SubscriptionPlan @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_subscription_plan_fk")
+  User                   User             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "user_subscription_user_fk")
+
+  @@index([user_id, status, end_date], map: "idx_user_subscription_active_lookup")
+  @@index([end_date], map: "idx_user_subscription_end_date")
+  @@index([paymob_subscription_id], map: "idx_user_subscription_paymob")
+  @@index([plan_id], map: "idx_user_subscription_plan_id")
+  @@index([status], map: "idx_user_subscription_status")
+  @@index([user_id], map: "idx_user_subscription_user_id")
+  @@index([user_id, status, end_date(sort: Desc)], map: "idx_user_subscription_user_status_end")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserWallet {
+  userId    String   @id
+  balance   Float    @default(0)
+  updatedAt DateTime
+  currency  String   @default("EGP")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserXP {
+  userId      String   @id
+  totalXP     Int      @default(0)
+  level       Int      @default(1)
+  studyXP     Int      @default(0)
+  taskXP      Int      @default(0)
+  examXP      Int      @default(0)
+  challengeXP Int      @default(0)
+  questXP     Int      @default(0)
+  seasonXP    Int      @default(0)
+  updatedAt   DateTime
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model WalletTransaction {
+  id          String                  @id @db.Uuid
+  walletId    String
+  user_id     String                  @db.Uuid
+  amount      Float
+  type        WalletTransactionType
+  status      WalletTransactionStatus @default(COMPLETED)
+  description String?
+  paymentId   String?
+  metadata    String?
+  created_at  DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime
+  deleted_at  DateTime?               @db.Timestamptz(6)
+  User        User                    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_wallet_transactions_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model GroupMembers {
+  A String
+  B String
+
+  @@id([A, B], map: "_GroupMembers_AB_pkey")
+  @@map("_GroupMembers")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SubjectToTeacher {
+  A String
+  B String
+
+  @@id([A, B], map: "_SubjectToTeacher_AB_pkey")
+  @@map("_SubjectToTeacher")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model blocked_ip_attempts {
+  id           String    @id @db.Uuid
+  ip_address   String
+  endpoint     String?
+  method       String?
+  user_agent   String?
+  location     String?
+  reason       String?
+  user_id      String?   @db.Uuid
+  count        Int?      @default(1)
+  attempted_at DateTime? @default(now()) @db.Timestamptz(6)
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model broadcasts {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title         String    @db.VarChar(200)
+  message       String
+  type          String?   @default("info") @db.VarChar(20)
+  channels      Json?     @default("[]")
+  target_count  Int?      @default(0)
+  success_count Int?      @default(0)
+  failure_count Int?      @default(0)
+  status        String?   @default("draft") @db.VarChar(20)
+  scheduled_for DateTime? @db.Timestamptz(6)
+  sent_at       DateTime? @db.Timestamptz(6)
+  created_by    String    @db.Uuid
+  cancelled_by  String?   @db.Uuid
+  cancelled_at  DateTime? @db.Timestamptz(6)
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at    DateTime? @db.Timestamptz(6)
+
+  @@index([deleted_at], map: "idx_broadcasts_deleted_at")
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model deleted_record_archive {
+  id         String   @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  table_name String   @db.VarChar(255)
+  record_id  String
+  user_id    String?
+  data       Json
+  reason     String?  @db.VarChar(500)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@ignore
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ip_whitelist_entries {
+  id           String    @id @db.Uuid
+  ip_address   String
+  cidr         String?
+  description  String?
+  type         String
+  status       String?   @default("active")
+  is_temporary Boolean?  @default(false)
+  expires_at   DateTime? @db.Timestamptz(6)
+  last_used_at DateTime? @db.Timestamptz(6)
+  created_by   String    @db.Uuid
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ip_whitelist_settings {
+  id                   String    @id @db.Uuid
+  is_enabled           Boolean?  @default(false)
+  enforce_for_admins   Boolean?  @default(true)
+  enforce_for_api      Boolean?  @default(false)
+  default_action       String?   @default("allow")
+  allow_internal_ips   Boolean?  @default(true)
+  internal_ip_ranges   String[]
+  log_blocked_attempts Boolean?  @default(true)
+  notify_on_violation  Boolean?  @default(true)
+  notify_email         String?
+  created_at           DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model push_tokens {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  token      String    @unique(map: "idx_push_tokens_token") @db.VarChar(500)
+  platform   String    @db.VarChar(20)
+  provider   String    @db.VarChar(20)
+  is_active  Boolean?  @default(true)
+  last_used  DateTime? @db.Timestamptz(6)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at DateTime? @db.Timestamptz(6)
+
+  @@index([user_id], map: "idx_push_tokens_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model questions {
+  id      String  @id
+  exam_id String
+  text    String
+  type    String?
+  options String?
+  answer  String?
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model schema_migrations {
+  id        String   @id
+  checksum  String
+  appliedAt DateTime @default(now()) @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model security_audit_logs {
+  id         String    @id @db.Uuid
+  event_type String
+  user_id    String?   @db.Uuid
+  ip_address String?
+  user_agent String?
+  details    Json?
+  severity   String?   @default("info")
+  status     String?   @default("unread")
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model two_factor_settings {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String    @unique @db.Uuid
+  method           String?   @db.VarChar(20)
+  secret           String?   @db.VarChar(100)
+  is_enabled       Boolean?  @default(false)
+  is_enforced      Boolean?  @default(false)
+  backup_codes     String[]  @default([])
+  verified_devices String[]  @default([])
+  pending_setup    Boolean?  @default(false)
+  activated_at     DateTime? @db.Timestamptz(6)
+  deactivated_at   DateTime? @db.Timestamptz(6)
+  last_used_at     DateTime? @db.Timestamptz(6)
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_at       DateTime? @db.Timestamptz(6)
+
+  @@index([deleted_at], map: "idx_two_factor_settings_deleted_at")
+  @@index([user_id], map: "idx_two_factor_settings_user_id", where: raw("(deleted_at IS NULL)"))
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Lesson {
+  id                           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                      String    @db.Uuid
+  teacher_id                   String    @db.Uuid
+  title                        String
+  location                     String
+  start_time                   DateTime  @db.Timestamptz(6)
+  end_time                     DateTime  @db.Timestamptz(6)
+  created_at                   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime  @default(now()) @db.Timestamptz(6)
+  deleted_at                   DateTime? @db.Timestamptz(6)
+  User_Lesson_teacher_idToUser User      @relation("Lesson_teacher_idToUser", fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  User_Lesson_user_idToUser    User      @relation("Lesson_user_idToUser", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([end_time], map: "idx_lessons_end")
+  @@index([start_time], map: "idx_lessons_start")
+  @@index([teacher_id], map: "idx_lessons_teacher")
+  @@index([user_id], map: "idx_lessons_user")
+  @@index([user_id, start_time], map: "idx_lessons_user_start")
+}
+
+enum AchievementCategory {
+  STUDY
+  TASKS
+  EXAMS
+  TIME
+  STREAK
+}
+
+enum AddonType {
+  EXAM_PACK
+  AI_CREDITS
+  TEACHER_HOURS
+  OTHER
+}
+
+enum CategoryType {
+  BLOG
+  FORUM
+  COURSE
+}
+
+enum ContestStatus {
+  DRAFT
+  WAITING
+  IN_PROGRESS
+  FINISHED
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum FocusStrategy {
+  POMODORO
+  EIGHTY_TWENTY
+  DEEP_WORK
+  TIME_BLOCKING
+  NO_DISTRACTION
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+enum LessonType {
+  VIDEO
+  ARTICLE
+  QUIZ
+  FILE
+  ASSIGNMENT
+}
+
+enum Level {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum PlanInterval {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  LIFETIME
+  FOREVER
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+  CANCELLED
+  GRACE_PERIOD
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum UserRole {
+  USER
+  STUDENT
+  ADMIN
+  TEACHER
+  MODERATOR
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum WalletTransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WalletTransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  PAYMENT
+  REFUND
+  REFERRAL_REWARD
+  BONUS
+}

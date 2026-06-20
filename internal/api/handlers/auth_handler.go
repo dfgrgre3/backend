@@ -26,6 +26,11 @@ import (
 var authService *services.AuthService
 var tokenService = &services.TokenService{}
 
+const (
+	MaxLoginAttempts = 5
+	LockoutDuration  = 15 * time.Minute
+)
+
 func InitAuthService(repo *repository.UserRepository) {
 	authService = services.NewAuthService(repo)
 }
@@ -43,12 +48,14 @@ func getLoginAttemptsKey(email, ip string) string {
 
 func isIPBlocked(c *gin.Context, email, ip string) bool {
 	if db.Redis == nil {
-		return false
+		log.Printf("[Security Alert] Redis is nil during login check for %s from IP %s. Blocking login attempt to prevent brute-force bypass.", email, ip)
+		return true
 	}
 	key := getLoginAttemptsKey(email, ip)
 	attempts, err := db.Redis.Get(c.Request.Context(), key).Int()
 	if err != nil && err != redis.Nil {
-		return false
+		log.Printf("[Security Warning] Redis query error during login check for %s from IP %s: %v. Blocking login attempt.", email, ip, err)
+		return true
 	}
 	return attempts >= MaxLoginAttempts
 }
@@ -335,26 +342,49 @@ func RequestMagicLink(c *gin.Context) {
 		return
 	}
 
-	_, err := authService.RequestMagicLink(req.Email)
+	ip := c.ClientIP()
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+
+	if isIPBlocked(c, email, ip) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "تم حظر المحاولات مؤقتاً يرجى المحاولة بعد 15 دقيقة."})
+		return
+	}
+
+	_, err := authService.RequestMagicLink(email)
 	if err != nil {
+		recordLoginAttempt(c, email, ip, false)
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": "If an account exists, a link has been sent."})
 		return
 	}
 
-	_ = LogSecurityEvent("", models.SecurityEventMagicLinkRequested, c.ClientIP(), c.Request.UserAgent(), nil, nil)
+	recordLoginAttempt(c, email, ip, true)
+	_ = LogSecurityEvent("", models.SecurityEventMagicLinkRequested, ip, c.Request.UserAgent(), nil, nil)
 
-	response := gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Magic link sent successfully",
-	}
-
-	c.JSON(http.StatusOK, response)
+	})
 }
 
 func VerifyMagicLink(c *gin.Context) {
 	token := c.Query("token")
 	if token == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Token is required"})
+		return
+	}
+
+	ip := c.ClientIP()
+
+	// We need the email to check rate limiting. Try to extract from the token first,
+	// otherwise fetch from Redis where it was stored when the magic link was created.
+	magicKey := fmt.Sprintf("magic_link:%s", token)
+	email := ""
+	if db.Redis != nil {
+		email, _ = db.Redis.Get(c.Request.Context(), magicKey).Result()
+	}
+
+	if email != "" && isIPBlocked(c, email, ip) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "تم حظر المحاولات مؤقتاً يرجى المحاولة بعد 15 دقيقة."})
 		return
 	}
 
@@ -365,9 +395,15 @@ func VerifyMagicLink(c *gin.Context) {
 
 	user, err := authService.VerifyMagicLink(token)
 	if err != nil {
+		if email != "" {
+			recordLoginAttempt(c, email, ip, false)
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
+
+	email = user.Email
+	recordLoginAttempt(c, email, ip, true)
 
 	tokens, err := tokenService.GenerateTokenPair(user.ID, string(user.Role), user.Email)
 	if err != nil {
@@ -380,13 +416,13 @@ func VerifyMagicLink(c *gin.Context) {
 		UserID:       user.ID,
 		RefreshToken: tokens.RefreshToken,
 		UserAgent:    c.Request.UserAgent(),
-		IP:           c.ClientIP(),
+		IP:           ip,
 		ExpiresAt:    time.Now().Add(24 * time.Hour),
 		LastAccessed: time.Now(),
 	}
 	_ = getSessionRepo().Create(session)
 
-	_ = LogSecurityEvent(user.ID, models.SecurityEventMagicLinkLogin, c.ClientIP(), c.Request.UserAgent(), nil, nil)
+	_ = LogSecurityEvent(user.ID, models.SecurityEventMagicLinkLogin, ip, c.Request.UserAgent(), nil, nil)
 
 	setAuthCookie(c, "access_token", tokens.AccessToken, 3600*24)
 	setAuthCookie(c, "refresh_token", tokens.RefreshToken, 3600*24)
@@ -406,20 +442,28 @@ func ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	_, err := authService.RequestPasswordReset(req.Email)
+	ip := c.ClientIP()
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+
+	if isIPBlocked(c, email, ip) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "تم حظر المحاولات مؤقتاً يرجى المحاولة بعد 15 دقيقة."})
+		return
+	}
+
+	_, err := authService.RequestPasswordReset(email)
 	if err != nil {
+		recordLoginAttempt(c, email, ip, false)
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": "If an account exists, a reset link has been sent."})
 		return
 	}
 
-	_ = LogSecurityEvent("", models.SecurityEventPasswordResetReq, c.ClientIP(), c.Request.UserAgent(), nil, nil)
+	recordLoginAttempt(c, email, ip, true)
+	_ = LogSecurityEvent("", models.SecurityEventPasswordResetReq, ip, c.Request.UserAgent(), nil, nil)
 
-	response := gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Password reset link sent",
-	}
-
-	c.JSON(http.StatusOK, response)
+	})
 }
 
 func ResetPassword(c *gin.Context) {
@@ -432,14 +476,37 @@ func ResetPassword(c *gin.Context) {
 		return
 	}
 
+	ip := c.ClientIP()
+
+	resetKey := fmt.Sprintf("password_reset:%s", req.Token)
+	email := ""
+	if db.Redis != nil {
+		email, _ = db.Redis.Get(c.Request.Context(), resetKey).Result()
+	}
+
+	if email != "" && isIPBlocked(c, email, ip) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "تم حظر المحاولات مؤقتاً يرجى المحاولة بعد 15 دقيقة."})
+		return
+	}
+
 	if !services.IsValidToken(req.Token) {
+		if email != "" {
+			recordLoginAttempt(c, email, ip, false)
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired reset token"})
 		return
 	}
 
 	if err := authService.ResetPassword(req.Token, req.NewPassword); err != nil {
+		if email != "" {
+			recordLoginAttempt(c, email, ip, false)
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	if email != "" {
+		recordLoginAttempt(c, email, ip, true)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Password reset successful"})
@@ -583,18 +650,10 @@ func loadRefreshMeta(tokenHash string) (string, string, string, error) {
 }
 
 func RefreshToken(c *gin.Context) {
-	var refreshToken string
-	var err error
-
-	authHeader := c.GetHeader("Authorization")
-	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-		refreshToken = strings.TrimPrefix(authHeader, "Bearer ")
-	} else {
-		refreshToken, err = c.Cookie("refresh_token")
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token missing"})
-			return
-		}
+	refreshToken, err := c.Cookie("refresh_token")
+	if err != nil || refreshToken == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token missing"})
+		return
 	}
 
 	claims, err := tokenService.ValidateRefreshToken(refreshToken)

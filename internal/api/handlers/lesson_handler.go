@@ -13,9 +13,25 @@ import (
 
 // GetLessons returns lessons for a given user
 func GetLessons(c *gin.Context) {
+	authUserID, exists := c.Get("userId")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	authUserIDStr, _ := authUserID.(string)
+
 	userId := c.Query("userId")
 	if userId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "userId is required"})
+		userId = authUserIDStr
+	}
+
+	// Verify ownership or administrative privilege (BOLA/IDOR prevention)
+	role, _ := c.Get("role")
+	roleStr, _ := role.(string)
+	isAdmin := roleStr == "ADMIN" || roleStr == "SUPER_ADMIN" || roleStr == "MODERATOR"
+
+	if userId != authUserIDStr && !isAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You are not authorized to view these lessons"})
 		return
 	}
 

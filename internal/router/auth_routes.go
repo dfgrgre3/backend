@@ -10,39 +10,42 @@ import (
 func SetupAuthRoutes(router *gin.Engine) {
 	auth := router.Group("/api/auth")
 	{
-		// Public auth endpoints
-		auth.POST("/register", handlers.Register)
-		auth.POST("/login", handlers.Login)
-		auth.POST("/verify-2fa", handlers.Verify2FA)
-		auth.POST("/magic-link", handlers.RequestMagicLink)
-		auth.GET("/magic-link/verify", handlers.VerifyMagicLink)
-		auth.POST("/forgot-password", handlers.ForgotPassword)
-		auth.POST("/reset-password", handlers.ResetPassword)
-		auth.GET("/verify-email", handlers.VerifyEmail)
-		auth.POST("/verify-email/resend", handlers.ResendVerification)
-		auth.POST("/refresh", handlers.RefreshToken)
-		auth.POST("/logout", handlers.Logout)
-
-		// Guest user creation (no auth required)
-		auth.GET("/guest", handlers.GetGuestUser)
+		// Local auth sub-group - disabled in production
+		localAuth := auth.Group("")
+		localAuth.Use(middleware.DisableLocalAuthInProduction())
+		{
+			localAuth.POST("/register", middleware.AuthRateLimiter(), handlers.Register)
+			localAuth.POST("/login", middleware.LoginRateLimiter(), handlers.Login)
+			localAuth.POST("/verify-2fa", middleware.LoginRateLimiter(), handlers.Verify2FA)
+			localAuth.POST("/magic-link", middleware.AuthRateLimiter(), handlers.RequestMagicLink)
+			localAuth.GET("/magic-link/verify", middleware.AuthRateLimiter(), handlers.VerifyMagicLink)
+			localAuth.POST("/forgot-password", middleware.AuthRateLimiter(), handlers.ForgotPassword)
+			localAuth.POST("/reset-password", middleware.AuthRateLimiter(), handlers.ResetPassword)
+			localAuth.GET("/verify-email", middleware.AuthRateLimiter(), handlers.VerifyEmail)
+			localAuth.POST("/verify-email/resend", middleware.AuthRateLimiter(), handlers.ResendVerification)
+			localAuth.POST("/refresh", handlers.RefreshToken)
+			localAuth.POST("/logout", handlers.Logout)
+			localAuth.GET("/guest", handlers.GetGuestUser)
+		}
 
 		// Protected auth routes (uses Clerk RS256 JWT tokens via middleware)
-		auth.Use(middleware.Auth())
+		protectedAuth := auth.Group("")
+		protectedAuth.Use(middleware.Auth())
 		{
 			const sessionsPath = "/sessions"
-			auth.GET("/me", handlers.GetProfile)
-			auth.GET(sessionsPath, handlers.GetAuthSessions)
-			auth.DELETE(sessionsPath, handlers.DeleteAuthSession)
-			auth.PATCH(sessionsPath, handlers.UpdateAuthSession)
-			auth.GET("/security-logs", handlers.GetSecurityLogs)
-			auth.GET("/2fa/status", handlers.GetUser2FAStatus)
-			auth.GET("/2fa/setup", handlers.InitiateUser2FASetup)
-			auth.POST("/2fa/enable", handlers.EnableUser2FA)
-			auth.POST("/2fa/disable", handlers.DisableUser2FA)
-			auth.POST("/verify-phone/send", handlers.SendPhoneVerification)
-			auth.POST("/verify-phone/verify", handlers.VerifyPhoneVerification)
+			protectedAuth.GET("/me", handlers.GetProfile)
+			protectedAuth.GET(sessionsPath, handlers.GetAuthSessions)
+			protectedAuth.DELETE(sessionsPath, handlers.DeleteAuthSession)
+			protectedAuth.PATCH(sessionsPath, handlers.UpdateAuthSession)
+			protectedAuth.GET("/security-logs", handlers.GetSecurityLogs)
+			protectedAuth.GET("/2fa/status", handlers.GetUser2FAStatus)
+			protectedAuth.GET("/2fa/setup", handlers.InitiateUser2FASetup)
+			protectedAuth.POST("/2fa/enable", handlers.EnableUser2FA)
+			protectedAuth.POST("/2fa/disable", handlers.DisableUser2FA)
+			protectedAuth.POST("/verify-phone/send", handlers.SendPhoneVerification)
+			protectedAuth.POST("/verify-phone/verify", handlers.VerifyPhoneVerification)
 			// Devices: list all active sessions with device info for the current user
-			auth.GET("/devices", handlers.GetUserDevices)
+			protectedAuth.GET("/devices", handlers.GetUserDevices)
 		}
 	}
 }

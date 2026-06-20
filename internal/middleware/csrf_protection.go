@@ -114,6 +114,8 @@ func setCSRFCookie(c *gin.Context, token string) {
 	// while still ensuring production deployments using HTTPS get Secure cookies.
 	secure := c.Request.TLS != nil
 
+	// Explicitly set SameSite to Lax for cross-site request forgery protection
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(
 		csrfCookieName,
 		token,
@@ -160,16 +162,6 @@ func shouldSkipPath(path string) bool {
 
 // shouldEnforceCSRF determines if CSRF should be enforced based on environment and request type
 func shouldEnforceCSRF(c *gin.Context) bool {
-	env := os.Getenv("NODE_ENV")
-	if env == "" {
-		env = "development"
-	}
-
-	// Only enforce in production
-	if env != "production" {
-		return false
-	}
-
 	// Only enforce if using cookie authentication or likely from a browser
 	_, err := c.Cookie("access_token")
 	if err == nil {
