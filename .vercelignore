@@ -9,7 +9,6 @@
 node_modules
 .git
 .next
-prisma/migrations
 scripts
 backups
 bin
@@ -17,3 +16,38 @@ src
 .agents
 .gocache
 .kilo
+
+
+# الملفات المؤقتة
+*.tmp
+*.temp
+*.cache
+*.pdb
+*.ilk
+*.idb
+*.map
+
+# Go test files (not needed for production build)
+*_test.go
+
+# الوسائط والتحميلات
+public/uploads/
+uploads/
+static/videos/
+static/images/raw/
+tmp/
+
+# Prisma migrations (اختياري)
+prisma/migrations/
+
+# اختبارات
+tests/
+test/
+__tests__/
+*.test.go
+*.spec.go
+
+# إعدادات البيئة (لا ترفع أبدًا)
+.env
+.env.*
+!.env.example
