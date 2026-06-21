@@ -49,7 +49,6 @@ func SetupProtectedRoutes(router *gin.Engine) {
 			userRoutes.GET(pathTasks, handlers.GetTasks)
 			userRoutes.GET("/study-sessions", handlers.GetStudySessions)
 			userRoutes.GET("/reminders", handlers.GetReminders)
-			userRoutes.GET("/resources", handlers.GetResources)
 			userRoutes.POST("/schedule", handlers.UpdateSchedule)
 			userRoutes.POST(pathTasks, handlers.CreateTask)
 			userRoutes.PATCH(pathTasksID, handlers.UpdateTask)

@@ -767,9 +767,20 @@ func RefreshToken(c *gin.Context) {
 }
 
 func Logout(c *gin.Context) {
-	if token, err := c.Cookie("access_token"); err == nil {
+	token := ""
+	if cookieToken, err := c.Cookie("access_token"); err == nil {
+		token = cookieToken
+	} else {
+		authHeader := c.GetHeader("Authorization")
+		if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+			token = strings.TrimSpace(authHeader[len("Bearer "):])
+		}
+	}
+
+	if token != "" {
 		if claims, err := tokenService.ValidateToken(token); err == nil {
 			_ = getSessionRepo().RevokeSessionByJTI(claims.JTI, claims.Subject)
+			tokenService.BlacklistJTI(claims.JTI, 15*time.Minute)
 			services.GetAuditService().LogAsync(claims.Subject, services.AuditEventLogout, "auth", claims.Subject, nil, c.ClientIP(), c.Request.UserAgent())
 		}
 	}
@@ -824,6 +835,7 @@ func DeleteAuthSession(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revoke session"})
 		return
 	}
+	tokenService.BlacklistJTI(sessionID, 15*time.Minute)
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 

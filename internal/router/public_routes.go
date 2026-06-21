@@ -30,6 +30,9 @@ func SetupPublicRoutes(router *gin.Engine) {
 	// Public events route
 	router.GET("/api/events", handlers.GetPublicEvents)
 
+	// Public Resources route
+	router.GET("/api/resources", handlers.GetResources)
+
 	// Public Exam routes (read-only)
 	router.GET("/api/exams", handlers.GetExams)
 	router.GET("/api/exams/results", handlers.GetExamResults)

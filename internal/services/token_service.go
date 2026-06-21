@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
@@ -10,10 +11,12 @@ import (
 	"strings"
 	"sync"
 	"thanawy-backend/internal/config"
+	"thanawy-backend/internal/db"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/patrickmn/go-cache"
 )
 
 type TokenService struct{}
@@ -54,6 +57,8 @@ var (
 	clerkPEMKeyVal string
 	clerkPEMPubKey *rsa.PublicKey
 	clerkPEMMu     sync.RWMutex
+
+	jtiBlacklistCache = cache.New(15*time.Minute, 30*time.Minute)
 )
 
 func getClerkPEMPublicKey(pemPublicKey string) (*rsa.PublicKey, error) {
@@ -321,4 +326,42 @@ func (s *TokenService) ValidateRefreshToken(tokenString string) (*jwt.Registered
 	}
 
 	return nil, jwt.ErrSignatureInvalid
+}
+
+func (s *TokenService) BlacklistJTI(jti string, duration time.Duration) {
+	if jti == "" {
+		return
+	}
+	if duration <= 0 {
+		duration = 15 * time.Minute
+	}
+	jtiBlacklistCache.Set(jti, true, duration)
+
+	if db.Redis != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			blacklistKey := fmt.Sprintf("jti_blacklist:%s", jti)
+			db.Redis.Set(ctx, blacklistKey, "1", duration)
+		}()
+	}
+}
+
+func (s *TokenService) IsJTIBlacklisted(jti string) bool {
+	if jti == "" {
+		return false
+	}
+	if _, found := jtiBlacklistCache.Get(jti); found {
+		return true
+	}
+	if db.Redis != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		isBlacklisted, err := db.Redis.Exists(ctx, fmt.Sprintf("jti_blacklist:%s", jti)).Result()
+		cancel()
+		if err == nil && isBlacklisted > 0 {
+			jtiBlacklistCache.Set(jti, true, 15*time.Minute)
+			return true
+		}
+	}
+	return false
 }

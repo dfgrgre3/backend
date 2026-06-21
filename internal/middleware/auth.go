@@ -156,6 +156,7 @@ var (
 type userAuthContext struct {
 	Role        string
 	Permissions []string
+	Status      string
 }
 
 const rolePermsInvalidateChannel = "cache:invalidate:user_role_perms"
@@ -236,6 +237,12 @@ func authMiddleware(optional bool) gin.HandlerFunc {
 			return
 		}
 
+		if claims.JTI != "" && tokenService.IsJTIBlacklisted(claims.JTI) {
+			log.Printf("[Auth Middleware] Token JTI %s is blacklisted", claims.JTI)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Session has been revoked or logged out"})
+			return
+		}
+
 		clerkID := claims.Subject
 		dbUserID := resolveUserIDFromClerkID(clerkID)
 
@@ -254,7 +261,13 @@ func authMiddleware(optional bool) gin.HandlerFunc {
 		}
 
 		hydrateUserContext(c, dbUserID, claims.Role)
+		if c.IsAborted() {
+			return
+		}
 		processImpersonation(c, dbUserID)
+		if c.IsAborted() {
+			return
+		}
 
 		// Propagate to standard context for gRPC/Connect RPC handlers
 		ctx := c.Request.Context()
@@ -360,8 +373,8 @@ func fetchRedisRolePerms(cacheKey string) (*userAuthContext, bool) {
 		return nil, false
 	}
 
-	parts := strings.SplitN(cachedVal, "|", 2)
-	if len(parts) != 2 {
+	parts := strings.SplitN(cachedVal, "|", 3)
+	if len(parts) < 2 {
 		return nil, false
 	}
 
@@ -370,7 +383,12 @@ func fetchRedisRolePerms(cacheKey string) (*userAuthContext, bool) {
 		permsVal = []string{}
 	}
 
-	return &userAuthContext{Role: parts[0], Permissions: permsVal}, true
+	statusVal := "ACTIVE"
+	if len(parts) == 3 {
+		statusVal = parts[2]
+	}
+
+	return &userAuthContext{Role: parts[0], Permissions: permsVal, Status: statusVal}, true
 }
 
 // storeInLocalCache populates the in-memory cache for the given user.
@@ -384,7 +402,7 @@ func storeInLocalCache(userID string, ctx *userAuthContext) {
 func fetchDatabaseRolePerms(userID, clerkID, cacheKey string) *userAuthContext {
 	var user models.User
 	if err := db.DB.
-		Select("role", "permissions").
+		Select("role", "permissions", "status").
 		Where("id = ?", userID).
 		Take(&user).Error; err != nil {
 
@@ -401,7 +419,7 @@ func fetchDatabaseRolePerms(userID, clerkID, cacheKey string) *userAuthContext {
 			// (e.g. if a goroutine in a different request just created the user).
 			for i := 0; i < 3; i++ {
 				if errRetry := db.DB.
-					Select("role", "permissions").
+					Select("role", "permissions", "status").
 					Where("id = ?", userID).
 					Take(&user).Error; errRetry == nil {
 					break // user found, exit retry loop
@@ -422,6 +440,10 @@ func fetchDatabaseRolePerms(userID, clerkID, cacheKey string) *userAuthContext {
 	if permsVal == nil {
 		permsVal = []string{}
 	}
+	statusVal := string(user.Status)
+	if statusVal == "" {
+		statusVal = "ACTIVE"
+	}
 
 	// Cache in Redis asynchronously
 	if db.Redis != nil {
@@ -429,11 +451,11 @@ func fetchDatabaseRolePerms(userID, clerkID, cacheKey string) *userAuthContext {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			permsStr := strings.Join(permsVal, ",")
-			db.Redis.Set(ctx, cacheKey, roleVal+"|"+permsStr, rolePermsRedisTTL)
+			db.Redis.Set(ctx, cacheKey, roleVal+"|"+permsStr+"|"+statusVal, rolePermsRedisTTL)
 		}()
 	}
 
-	authCtx := &userAuthContext{Role: roleVal, Permissions: permsVal}
+	authCtx := &userAuthContext{Role: roleVal, Permissions: permsVal, Status: statusVal}
 	storeInLocalCache(userID, authCtx)
 	return authCtx
 }
@@ -460,7 +482,7 @@ func buildSingleFlightCallback(userID, clerkID, fallbackRole string) func() (int
 			return dbCtx, nil
 		}
 
-		return &userAuthContext{Role: strings.ToUpper(fallbackRole), Permissions: []string{}}, nil
+		return &userAuthContext{Role: strings.ToUpper(fallbackRole), Permissions: []string{}, Status: "ACTIVE"}, nil
 	}
 }
 
@@ -478,6 +500,11 @@ func hydrateUserContext(c *gin.Context, userID, fallbackRole string) {
 
 	// 1. Try local in-memory cache first to bypass Redis cloud network latency
 	if cached, ok := fetchCachedRolePerms(userID); ok {
+		if cached.Status == string(models.StatusSuspended) || cached.Status == string(models.StatusInactive) {
+			log.Printf("[Auth Middleware] User %s is suspended or inactive (status: %s)", userID, cached.Status)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Account is inactive or suspended"})
+			return
+		}
 		c.Set("role", cached.Role)
 		c.Set("user_role", cached.Role)
 		c.Set("permissions", cached.Permissions)
@@ -493,6 +520,11 @@ func hydrateUserContext(c *gin.Context, userID, fallbackRole string) {
 
 	if err == nil {
 		authCtx := res.(*userAuthContext)
+		if authCtx.Status == string(models.StatusSuspended) || authCtx.Status == string(models.StatusInactive) {
+			log.Printf("[Auth Middleware] User %s is suspended or inactive (status: %s)", userID, authCtx.Status)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Account is inactive or suspended"})
+			return
+		}
 		c.Set("role", authCtx.Role)
 		c.Set("user_role", authCtx.Role)
 		c.Set("permissions", authCtx.Permissions)
@@ -515,6 +547,13 @@ func processImpersonation(c *gin.Context, adminID string) {
 		return
 	}
 
+	// Only enforce impersonation CSRF when actually impersonating (cookie is set).
+	// Normal admin API requests should not be blocked by this check.
+	impersonatedCookie, err := c.Cookie("impersonate_user_id")
+	if err != nil || impersonatedCookie == "" {
+		return
+	}
+
 	csrfToken := c.GetHeader("X-CSRF-Impersonation-Token")
 	if csrfToken == "" {
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Missing impersonation CSRF token"})
@@ -524,11 +563,6 @@ func processImpersonation(c *gin.Context, adminID string) {
 	if !VerifyImpersonationCSRFToken(csrfToken, adminID) {
 		log.Printf("[Security Alert] Admin %s provided invalid impersonation CSRF token", adminID)
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Invalid impersonation CSRF token"})
-		return
-	}
-
-	impersonatedCookie, err := c.Cookie("impersonate_user_id")
-	if err != nil || impersonatedCookie == "" {
 		return
 	}
 

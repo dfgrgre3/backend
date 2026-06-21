@@ -232,7 +232,7 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 	dbUserID := ClerkIDToUUID(userId)
 
 	var existing models.User
-	err = db.DB.Unscoped().Where("clerk_id = ? OR id = ?", userId, dbUserID).First(&existing).Error
+	err = db.DB.Unscoped().Where("clerk_id = ? OR id = ? OR email = ?", userId, dbUserID, primaryEmail).First(&existing).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Create user
@@ -322,15 +322,15 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 		}
 	}
 
-	if err := db.DB.Model(&models.User{}).Where("id = ?", dbUserID).Updates(updates).Error; err != nil {
+	if err := db.DB.Model(&models.User{}).Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
 		return nil, err
 	}
 
 	if InvalidateCacheCallback != nil {
-		InvalidateCacheCallback(dbUserID)
+		InvalidateCacheCallback(existing.ID)
 	}
 
-	log.Printf("[Clerk Provisioning] Dynamic user sync successful: %s (%s)", dbUserID, primaryEmail)
+	log.Printf("[Clerk Provisioning] Dynamic user sync successful: %s (%s)", existing.ID, primaryEmail)
 	return &existing, nil
 }
 
