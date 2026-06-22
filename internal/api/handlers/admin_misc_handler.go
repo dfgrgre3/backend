@@ -16,6 +16,7 @@ import (
 	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
+	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/services"
 	"thanawy-backend/internal/storage"
 
@@ -703,8 +704,7 @@ func GetLibraryCategories(c *gin.Context) {
 }
 
 func DeleteImpersonation(c *gin.Context) {
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("impersonate_user_id", "", -1, "/", "", true, true)
+	middleware.ClearImpersonationCookies(c)
 	api_response.Success(c, gin.H{
 		"message": "تم إنهاء جلسة انتحال الشخصية والعودة لحسابك الأصلي",
 	})

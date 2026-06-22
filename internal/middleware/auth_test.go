@@ -579,6 +579,59 @@ func TestExtractToken_InvalidPrefix(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestExtractToken_AccessTokenCookie(t *testing.T) {
+	router := setupTestRouter()
+	router.GET("/test", func(c *gin.Context) {
+		token := extractToken(c)
+		assert.Equal(t, "cookie-token", token)
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: "cookie-token"})
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestExtractToken_ClerkSessionCookie(t *testing.T) {
+	router := setupTestRouter()
+	router.GET("/test", func(c *gin.Context) {
+		token := extractToken(c)
+		assert.Equal(t, "clerk-session-token", token)
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.AddCookie(&http.Cookie{Name: "__session", Value: "clerk-session-token"})
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestExtractToken_BearerHeaderPrecedence(t *testing.T) {
+	router := setupTestRouter()
+	router.GET("/test", func(c *gin.Context) {
+		token := extractToken(c)
+		assert.Equal(t, "header-token", token)
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "Bearer header-token")
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: "cookie-token"})
+	req.AddCookie(&http.Cookie{Name: "__session", Value: "clerk-session-token"})
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
 func TestAdminRequired_CaseSensitivity(t *testing.T) {
 	router := setupTestRouter()
 	router.Use(func(c *gin.Context) {
@@ -880,5 +933,4 @@ func TestDistributedCacheInvalidation_LocalEviction(t *testing.T) {
 	_, exists = localRolePermsCache.Get(userID)
 	assert.False(t, exists)
 }
-
 

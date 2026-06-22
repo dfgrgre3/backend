@@ -112,9 +112,13 @@ func shouldSkipLogging(path string) bool {
 
 // sanitizeBody removes sensitive fields from logged body
 func (al *AdminAuditLogger) sanitizeBody(body map[string]interface{}) map[string]interface{} {
+	return al.sanitizeMap(body)
+}
+
+func (al *AdminAuditLogger) sanitizeMap(m map[string]interface{}) map[string]interface{} {
 	sanitized := make(map[string]interface{})
 
-	for key, value := range body {
+	for key, value := range m {
 		lowerKey := strings.ToLower(key)
 		isSensitive := false
 
@@ -128,10 +132,30 @@ func (al *AdminAuditLogger) sanitizeBody(body map[string]interface{}) map[string
 		if isSensitive {
 			sanitized[key] = "[REDACTED]"
 		} else {
-			sanitized[key] = value
+			if subMap, ok := value.(map[string]interface{}); ok {
+				sanitized[key] = al.sanitizeMap(subMap)
+			} else if subSlice, ok := value.([]interface{}); ok {
+				sanitized[key] = al.sanitizeSlice(subSlice)
+			} else {
+				sanitized[key] = value
+			}
 		}
 	}
 
+	return sanitized
+}
+
+func (al *AdminAuditLogger) sanitizeSlice(s []interface{}) []interface{} {
+	sanitized := make([]interface{}, len(s))
+	for i, val := range s {
+		if subMap, ok := val.(map[string]interface{}); ok {
+			sanitized[i] = al.sanitizeMap(subMap)
+		} else if subSlice, ok := val.([]interface{}); ok {
+			sanitized[i] = al.sanitizeSlice(subSlice)
+		} else {
+			sanitized[i] = val
+		}
+	}
 	return sanitized
 }
 

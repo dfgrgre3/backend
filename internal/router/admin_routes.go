@@ -100,16 +100,6 @@ func SetupAdminRoutes(router *gin.Engine) {
 		sensitive.POST("/backups/:id/verify", handlers.VerifyBackup)
 		sensitive.GET("/backups/:id/progress", handlers.GetBackupProgress)
 
-		// 2FA Management (for Admins)
-		admin.GET("/security/2fa/status", handlers.GetTwoFactorStatus)
-		admin.POST("/security/2fa/setup", handlers.InitiateTwoFactorSetup)
-		admin.POST("/security/2fa/verify", handlers.VerifyTwoFactor)
-		admin.POST("/security/2fa/disable", handlers.DisableTwoFactor)
-		admin.POST("/security/2fa/backup-codes", handlers.RegenerateBackupCodes)
-		admin.POST("/security/2fa/verify-login", handlers.VerifyTwoFactorLogin)
-		admin.POST("/users/:id/2fa/enforce", handlers.AdminEnforceUserTwoFactor)
-		admin.POST("/users/:id/2fa/reset", handlers.AdminResetUserTwoFactor)
-
 		// Session Management
 		admin.GET("/security/sessions", handlers.GetActiveSessions)
 		admin.GET("/security/sessions/stats", handlers.GetSessionStats)

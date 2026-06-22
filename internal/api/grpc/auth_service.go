@@ -3,7 +3,8 @@ package grpc
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log"
+	"strings"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/models"
@@ -17,7 +18,6 @@ import (
 
 type AuthServiceServer struct {
 	thanawyv1.UnimplementedAuthServiceServer
-	authService  *services.AuthService
 	tokenService *services.TokenService
 	userRepo     *repository.UserRepository
 }
@@ -25,51 +25,17 @@ type AuthServiceServer struct {
 func NewAuthServiceServer() *AuthServiceServer {
 	userRepo := repository.NewUserRepository(db.DB)
 	return &AuthServiceServer{
-		authService:  services.NewAuthService(userRepo),
 		tokenService: &services.TokenService{},
 		userRepo:     userRepo,
 	}
 }
 
 func (s *AuthServiceServer) Login(ctx context.Context, req *thanawyv1.LoginRequest) (*thanawyv1.LoginResponse, error) {
-	user, err := s.authService.Login(req.Email, req.Password, "", "")
-	if err != nil {
-		return nil, err
-	}
-
-	tokenPair, err := s.tokenService.GenerateTokenPair(user.ID, string(user.Role), user.Email)
-	if err != nil {
-		return nil, err
-	}
-
-	return &thanawyv1.LoginResponse{
-		Success: true,
-		Token:   tokenPair.AccessToken,
-		User:    mapUserToProto(user),
-	}, nil
+	return nil, errors.New("legacy authentication is retired. Please use Clerk for authentication")
 }
 
 func (s *AuthServiceServer) Register(ctx context.Context, req *thanawyv1.RegisterRequest) (*thanawyv1.RegisterResponse, error) {
-	input := services.RegisterInput{
-		Email:         req.Email,
-		Username:      req.Username,
-		Password:      req.Password,
-		Role:          models.RoleStudent,
-		Phone:         req.Phone,
-		GradeLevel:    req.GradeLevel,
-		EducationType: req.EducationType,
-		Section:       req.Section,
-	}
-
-	user, err := s.authService.Register(input)
-	if err != nil {
-		return nil, err
-	}
-
-	return &thanawyv1.RegisterResponse{
-		Success: true,
-		User:    mapUserToProto(user),
-	}, nil
+	return nil, errors.New("legacy registration is retired. Please use Clerk for registration")
 }
 
 func (s *AuthServiceServer) GetProfile(ctx context.Context, req *thanawyv1.GetProfileRequest) (*thanawyv1.GetProfileResponse, error) {
@@ -80,27 +46,25 @@ func (s *AuthServiceServer) GetProfile(ctx context.Context, req *thanawyv1.GetPr
 
 	user, err := s.userRepo.FindByID(userID)
 	if err != nil {
-		email, _ := ctx.Value(middleware.EmailContextKey).(string)
-		if email != "" {
-			newUser := &models.User{
-				ID:            userID,
-				Email:         email,
-				EmailVerified: true,
-				Status:        models.StatusActive,
-				Role:          models.RoleStudent,
-				Balance:       0,
-				AiCredits:     0,
-				ExamCredits:   0,
-				TotalXP:       0,
-				Level:         1,
+		// User not found in DB — attempt to provision from Clerk.
+		// The middleware may have set a clerkUserId in context when the Clerk ID
+		// differs from the resolved DB UUID.
+		clerkID, _ := ctx.Value(middleware.ClerkIDContextKey).(string)
+		if clerkID == "" {
+			// If no explicit clerkID, the userID itself may be a Clerk-format ID.
+			if strings.HasPrefix(userID, "user_") {
+				clerkID = userID
 			}
-			if createErr := db.DB.Create(newUser).Error; createErr == nil {
-				user = newUser
-			} else {
-				if user, err = s.userRepo.FindByID(userID); err != nil {
-					return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create or retrieve user profile: %w", createErr))
-				}
+		}
+
+		if clerkID != "" && strings.HasPrefix(clerkID, "user_") {
+			log.Printf("[GetProfile] User %s not found in DB, provisioning from Clerk ID: %s", userID, clerkID)
+			provisioned, provErr := services.ProvisionUserFromClerk(clerkID)
+			if provErr != nil {
+				log.Printf("[GetProfile] Provisioning failed for Clerk ID %s: %v", clerkID, provErr)
+				return nil, connect.NewError(connect.CodeNotFound, errors.New("user not found"))
 			}
+			user = provisioned
 		} else {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("user not found"))
 		}

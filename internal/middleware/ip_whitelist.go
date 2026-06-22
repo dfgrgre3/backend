@@ -83,8 +83,6 @@ func isPublicEndpoint(path string) bool {
 	publicPaths := []string{
 		"/healthz",
 		"/readyz",
-		"/api/auth/login",
-		"/api/auth/register",
 		"/api/public",
 	}
 

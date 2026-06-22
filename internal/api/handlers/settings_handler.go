@@ -75,13 +75,10 @@ func trySettingsL1Cache(c *gin.Context, uid string) bool {
 }
 
 func fetchOrCreateSettingsForGet(c *gin.Context, uid string) (models.UserSettings, bool) {
-	readDB := db.ReadDB()
-	if readDB == nil {
-		readDB = db.DB
-	}
-
+	// Use the write DB directly to avoid double-query in the fallback path.
+	// ReadDB may be nil or slow, and fallback to write DB adds latency.
 	var settings models.UserSettings
-	result := readDB.Where(&models.UserSettings{UserID: uid}).First(&settings)
+	result := db.DB.Where(&models.UserSettings{UserID: uid}).First(&settings)
 
 	if result.Error != nil {
 		if handleSettingsFetchError(c, uid, result) {

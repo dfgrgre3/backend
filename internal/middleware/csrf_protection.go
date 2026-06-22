@@ -141,8 +141,6 @@ func isValidCSRFToken(token string) bool {
 var csrfSkipPaths = []string{
 	"/api/webhooks/",
 	"/api/payments/paymob/callback",
-	"/api/auth/login",
-	"/api/auth/register",
 }
 
 // isSafeMethod checks if the HTTP method is read-only

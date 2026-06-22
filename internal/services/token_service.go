@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/patrickmn/go-cache"
 )
 
@@ -28,11 +27,6 @@ type TokenClaims struct {
 	jwt.RegisteredClaims
 }
 
-type TokenPair struct {
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken"`
-	JTI          string `json:"jti"`
-}
 
 type jwkKey struct {
 	Kty string   `json:"kty"`
@@ -143,58 +137,6 @@ func fetchAndCacheJWKS(jwksURL string) error {
 	return nil
 }
 
-func (s *TokenService) GenerateTokenPair(userId, role, email string) (*TokenPair, error) {
-	cfg := config.Load()
-	jti := uuid.New().String()
-
-	// Access Token (Short-lived: 15 minutes).
-	// Email is included so middleware can hydrate user_email directly from the
-	// token without a DB lookup on every request.
-	accessClaims := TokenClaims{
-		Email: email,
-		Role:  role,
-		JTI:   jti,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   userId,
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			ID:        jti,
-		},
-	}
-	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims).SignedString([]byte(cfg.JWTSecret))
-	if err != nil {
-		return nil, err
-	}
-
-	refreshSecret := cfg.JWTRefreshSecret
-	if refreshSecret == "" {
-		refreshSecret = cfg.JWTSecret
-	}
-
-	// Refresh Token (Long-lived: 30 days).
-	// The refresh token only carries subject + expiry; email/role are re-fetched
-	// from the DB on every token rotation to reflect any permission changes.
-	// Signed with JWT_REFRESH_SECRET to isolate access-token compromise.
-	refreshClaims := jwt.RegisteredClaims{
-		Subject:   userId,
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * 24 * time.Hour)),
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		ID:        jti,
-	}
-	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims).SignedString([]byte(refreshSecret))
-	if err != nil {
-		return nil, err
-	}
-
-	return &TokenPair{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		JTI:          jti,
-	}, nil
-}
-
-// GenerateAccessToken is intentionally removed.
-// Always use GenerateTokenPair so the JTI is tied to a persisted UserSession.
 
 func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 	cfg := config.Load()
@@ -260,8 +202,15 @@ func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 		}
 
 		if alg == "HS256" {
-			if cfg.Environment == "production" {
-				return nil, fmt.Errorf("HS256 signing method is disabled in production")
+			// Security: HS256 is ONLY allowed in explicitly listed dev/test environments.
+			// Using a whitelist (not blacklist) ensures staging/pre-prod are also blocked
+			// if the ENVIRONMENT variable is misconfigured.
+			allowedHS256Envs := map[string]bool{"development": true, "test": true}
+			if !allowedHS256Envs[cfg.Environment] {
+				return nil, fmt.Errorf("HS256 signing method is only permitted in development/test environments (current: %q)", cfg.Environment)
+			}
+			if cfg.JWTSecret == "" {
+				return nil, fmt.Errorf("JWT_SECRET is not configured for HS256 validation")
 			}
 			return []byte(cfg.JWTSecret), nil
 		}
@@ -278,6 +227,15 @@ func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 	if claims, ok := token.Claims.(*TokenClaims); ok && token.Valid {
 		// Validate Issuer (iss) and Audience (aud) claims for RS256 Clerk tokens
 		if token.Method.Alg() == "RS256" {
+			if cfg.Environment == "production" {
+				if cfg.ClerkIssuerURL == "" {
+					return nil, fmt.Errorf("clerk issuer URL is not configured in production")
+				}
+				if cfg.ClerkClientID == "" {
+					return nil, fmt.Errorf("clerk client ID is not configured in production")
+				}
+			}
+
 			if cfg.ClerkIssuerURL != "" && !strings.HasPrefix(claims.Issuer, cfg.ClerkIssuerURL) {
 				return nil, fmt.Errorf("invalid token issuer: expected prefix %s, got %s", cfg.ClerkIssuerURL, claims.Issuer)
 			}
@@ -300,33 +258,6 @@ func (s *TokenService) ValidateToken(tokenString string) (*TokenClaims, error) {
 	return nil, jwt.ErrSignatureInvalid
 }
 
-func (s *TokenService) ValidateRefreshToken(tokenString string) (*jwt.RegisteredClaims, error) {
-	cfg := config.Load()
-	token, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
-		alg, ok := token.Header["alg"].(string)
-		if !ok {
-			return nil, fmt.Errorf("missing signing algorithm")
-		}
-		if alg != "HS256" {
-			return nil, fmt.Errorf("unexpected signing method for refresh token: %v", alg)
-		}
-		refreshSecret := cfg.JWTRefreshSecret
-		if refreshSecret == "" {
-			refreshSecret = cfg.JWTSecret
-		}
-		return []byte(refreshSecret), nil
-	}, jwt.WithLeeway(30*time.Second))
-
-	if err != nil {
-		return nil, err
-	}
-
-	if claims, ok := token.Claims.(*jwt.RegisteredClaims); ok && token.Valid {
-		return claims, nil
-	}
-
-	return nil, jwt.ErrSignatureInvalid
-}
 
 func (s *TokenService) BlacklistJTI(jti string, duration time.Duration) {
 	if jti == "" {

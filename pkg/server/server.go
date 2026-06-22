@@ -16,7 +16,6 @@ import (
 	"thanawy-backend/internal/app"
 	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/db"
-	"thanawy-backend/internal/repository"
 	"thanawy-backend/internal/router"
 	"thanawy-backend/internal/storage"
 
@@ -63,9 +62,6 @@ func initApp() {
 			engine = buildDegradedRouter(err)
 			return
 		}
-
-		// Initialize AuthService with UserRepository dependency
-		handlers.InitAuthService(repository.NewUserRepository(db.DB))
 
 		// Initialize Storage (S3 or Local)
 		if cfg.StorageType == "local" {
@@ -163,11 +159,6 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	}
 	r := gin.New()
 
-	// Login redirect to /api/auth/login (for backward compatibility)
-	r.GET("/login", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/api/auth/login")
-	})
-
 	// Public health check routes (bypass configuration validation and rate limits)
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "UP"})
@@ -246,6 +237,7 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	r.Any("/api"+authPath+"*any", middleware.OptionalAuth(), gin.WrapH(stripAPIPrefix(authHandler)))
 	r.Any("/api"+analyticsPath+"*any", middleware.OptionalAuth(), gin.WrapH(stripAPIPrefix(analyticsHandler)))
 
+	router.SetupWebhookRoutes(r) // Public: Clerk webhooks (verified via Svix HMAC)
 	router.SetupAuthRoutes(r)
 	router.SetupPublicRoutes(r)
 	router.SetupProtectedRoutes(r)

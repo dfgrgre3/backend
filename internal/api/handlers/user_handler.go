@@ -27,10 +27,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 )
-
-
 
 var (
 	userRepo        *repository.UserRepository
@@ -45,8 +42,6 @@ const (
 	errInvalidEmail           = "Invalid email"
 	userIDQuery               = "user_id = ?"
 )
-
-
 
 func getUserRepo() *repository.UserRepository {
 	userRepoOnce.Do(func() {
@@ -73,7 +68,6 @@ func getMockLocation(_ string) *string {
 	loc := "القاهرة، مصر"
 	return &loc
 }
-
 
 // GetProfile returns current user profile
 // @Summary Get user profile
@@ -104,7 +98,13 @@ func GetProfile(c *gin.Context) {
 		if emailStr == "" {
 			emailStr = userIdStr + "@clerk.user"
 		}
-		if createErr := EnsureUserExists(userIdStr, emailStr); createErr != nil {
+		clerkID := userIdStr
+		if clerkIDVal, exists := c.Get("clerkUserId"); exists {
+			if clerkIDStr, ok := clerkIDVal.(string); ok && clerkIDStr != "" {
+				clerkID = clerkIDStr
+			}
+		}
+		if createErr := EnsureUserExists(clerkID, emailStr); createErr != nil {
 			log.Printf("[Auth] Failed to auto-create user %s: %v", userIdStr, createErr)
 			c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
 			return
@@ -314,6 +314,14 @@ func UpdateUser(c *gin.Context) {
 	db.DB.First(&user, idQuery, user.ID)
 	_ = getUserRepo().Update(&user)
 
+	if user.ClerkID != nil && *user.ClerkID != "" {
+		if req.Role != "" || req.Permissions != nil {
+			if err := services.UpdateUserMetadataInClerk(*user.ClerkID, string(user.Role), []string(user.Permissions)); err != nil {
+				log.Printf("[Clerk Sync Error] Failed to update user metadata in Clerk for user %s: %v", user.ID, err)
+			}
+		}
+	}
+
 	middleware.InvalidateRolePermsCache(user.ID)
 	getUserRepo().InvalidateCache(user.ID)
 
@@ -372,13 +380,17 @@ func DeleteUser(c *gin.Context) {
 }
 
 func CreateUser(c *gin.Context) {
+	// Security: password is NOT accepted. Clerk is the exclusive auth provider.
+	// Users authenticate via Clerk and are provisioned via ProvisionUserFromClerk().
+	// Accepting a local password creates a parallel auth path that bypasses Clerk
+	// session management, JTI blacklisting, and MFA enforcement.
 	var input struct {
 		Email    string  `json:"email" binding:"required,email"`
 		Name     *string `json:"name"`
 		Username *string `json:"username"`
 		Role     string  `json:"role"`
 		Phone    *string `json:"phone"`
-		Password string  `json:"password" binding:"required,min=8"`
+		ClerkID  *string `json:"clerkId"` // Optional: trigger full Clerk sync
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
@@ -395,19 +407,26 @@ func CreateUser(c *gin.Context) {
 		role = models.UserRole(input.Role)
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcryptCostFromConfig())
-	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to hash password")
+	// If clerkId provided, delegate to ProvisionUserFromClerk for a full sync
+	if input.ClerkID != nil && *input.ClerkID != "" {
+		user, provErr := services.ProvisionUserFromClerk(*input.ClerkID)
+		if provErr != nil {
+			api_response.Error(c, http.StatusBadRequest, "Failed to provision user from Clerk: "+provErr.Error())
+			return
+		}
+		LogAudit(c, "CREATE", "user", user.ID, gin.H{"source": "clerk_provision", "clerkId": *input.ClerkID})
+		api_response.Created(c, user)
 		return
 	}
 
+	// Manual admin seeding — no password; Clerk handles authentication
 	user := models.User{
-		Email:        input.Email,
-		Name:         input.Name,
-		Username:     input.Username,
-		Role:         role,
-		Phone:        input.Phone,
-		PasswordHash: string(hashedPassword),
+		Email:    input.Email,
+		Name:     input.Name,
+		Username: input.Username,
+		Role:     role,
+		Phone:    input.Phone,
+		// PasswordHash intentionally omitted
 	}
 
 	var existingUser models.User
@@ -425,9 +444,7 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	safeUserForAudit := user
-	safeUserForAudit.PasswordHash = ""
-	LogAudit(c, "CREATE", "user", user.ID, safeUserForAudit)
+	LogAudit(c, "CREATE", "user", user.ID, gin.H{"email": user.Email, "role": user.Role})
 	api_response.Created(c, user)
 }
 
@@ -1044,172 +1061,16 @@ func verifyWebhookSignature(c *gin.Context, body []byte, svixID, svixTimestamp, 
 }
 
 func syncUserFromClerk(clerkData map[string]interface{}) error {
-	userId, ok := clerkData["id"].(string)
-	if !ok {
-		return nil
-	}
-
-	email, _ := clerkData["email_addresses"].([]interface{})
-	var primaryEmail string
-	if len(email) > 0 {
-		if emailObj, ok := email[0].(map[string]interface{}); ok {
-			if emailAddress, ok := emailObj["email_address"].(string); ok {
-				primaryEmail = emailAddress
-			}
-		}
-	}
-
-	if primaryEmail == "" {
-		return nil
-	}
-
-	firstName, _ := clerkData["first_name"].(string)
-	lastName, _ := clerkData["last_name"].(string)
-	name := firstName
-	if lastName != "" {
-		name += " " + lastName
-	}
-
-	dbUserID := services.ClerkIDToUUID(userId)
-
-	// Extract metadata fields from public_metadata or unsafe_metadata
-	role := models.RoleStudent
-	roleExistsInMetadata := false
-	var phone, country, gradeLevel, educationType string
-	var dateOfBirth *time.Time
-	var interestedSubjects []string
-
-	// Extract from public_metadata (trusted server-side metadata)
-	if publicMetadata, ok := clerkData["public_metadata"].(map[string]interface{}); ok {
-		if r, ok := publicMetadata["role"].(string); ok && r != "" {
-			roleVal := models.UserRole(strings.ToUpper(strings.TrimSpace(r)))
-			// Do not allow webhook to sync ADMIN/SUPER_ADMIN roles directly unless verified
-			if roleVal == models.RoleAdmin || roleVal == models.RoleSuperAdmin {
-				log.Printf("[Security Warning] Clerk webhook attempt to sync administrative role %q rejected during syncUserFromClerk. Fallback to STUDENT.", r)
-				role = models.RoleStudent
-				roleExistsInMetadata = true
-			} else if models.IsValidUserRole(roleVal) {
-				role = roleVal
-				roleExistsInMetadata = true
-			}
-		}
-	}
-
-	// Extract from unsafe_metadata (untrusted client-side metadata)
-	var unsafeMetadata map[string]interface{}
-	if um, ok := clerkData["unsafe_metadata"].(map[string]interface{}); ok {
-		unsafeMetadata = um
-		if p, ok := unsafeMetadata["phone"].(string); ok {
-			phone = services.SanitizeClerkString(p)
-		}
-		if c, ok := unsafeMetadata["country"].(string); ok {
-			country = services.SanitizeClerkString(c)
-		}
-		if g, ok := unsafeMetadata["gradeLevel"].(string); ok {
-			gradeLevel = services.SanitizeClerkString(g)
-		}
-		if e, ok := unsafeMetadata["educationType"].(string); ok {
-			educationType = services.SanitizeClerkString(e)
-		}
-		if dob, ok := unsafeMetadata["dateOfBirth"].(string); ok && dob != "" {
-			if parsedDob, err := time.Parse("2006-01-02", services.SanitizeClerkString(dob)); err == nil {
-				dateOfBirth = &parsedDob
-			}
-		}
-		if is, ok := unsafeMetadata["interestedSubjects"].([]interface{}); ok {
-			for _, item := range is {
-				if s, ok := item.(string); ok {
-					interestedSubjects = append(interestedSubjects, services.SanitizeClerkString(s))
-				}
-			}
-		}
-	}
-
-	user := models.User{
-		ID:                 dbUserID,
-		ClerkID:            &userId,
-		Email:              primaryEmail,
-		EmailVerified:      true,
-		Status:             models.StatusActive,
-		Role:               role,
-		Balance:            0,
-		AiCredits:          0,
-		ExamCredits:        0,
-		TotalXP:            0,
-		Level:              1,
-		Phone:              &phone,
-		Country:            &country,
-		GradeLevel:         &gradeLevel,
-		EducationType:      &educationType,
-		DateOfBirth:        dateOfBirth,
-		InterestedSubjects: interestedSubjects,
-	}
-
-	if name != "" {
-		user.Name = &name
-	}
-	if avatarUrl, ok := clerkData["image_url"].(string); ok && avatarUrl != "" {
-		user.Avatar = &avatarUrl
-	}
-
-	var existing models.User
-	err := db.DB.Unscoped().Where("clerk_id = ? OR id = ?", userId, dbUserID).First(&existing).Error
+	dataBytes, err := json.Marshal(clerkData)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// New user creation
-			if err := db.DB.Create(&user).Error; err != nil {
-				log.Printf("[Clerk Webhook] Error creating user: %v", err)
-				return err
-			}
-		} else {
-			return err
-		}
-	} else {
-		// Existing user: update metadata and core profile fields
-		updates := map[string]interface{}{
-			"clerk_id":       userId,
-			"email":          primaryEmail,
-			"email_verified": true,
-		}
-		if roleExistsInMetadata && existing.Role != models.RoleAdmin && existing.Role != models.RoleSuperAdmin {
-			updates["role"] = role
-		}
-		if name != "" {
-			updates["name"] = &name
-		}
-		if user.Avatar != nil {
-			updates["avatar"] = user.Avatar
-		}
-		if phone != "" {
-			updates["phone"] = &phone
-		}
-		if country != "" {
-			updates["country"] = &country
-		}
-		if gradeLevel != "" {
-			updates["grade_level"] = &gradeLevel
-		}
-		if educationType != "" {
-			updates["education_type"] = &educationType
-		}
-		if dateOfBirth != nil {
-			updates["date_of_birth"] = dateOfBirth
-		}
-		if len(interestedSubjects) > 0 {
-			updates["interested_subjects"] = interestedSubjects
-		}
-
-		if err := db.DB.Model(&models.User{}).Where("id = ?", dbUserID).Updates(updates).Error; err != nil {
-			log.Printf("[Clerk Webhook] Error updating user: %v", err)
-			return err
-		}
+		return err
 	}
-
-	middleware.InvalidateRolePermsCache(dbUserID)
-	getUserRepo().InvalidateCache(dbUserID)
-
-	log.Printf("[Clerk Webhook] User synced successfully: %s (%s)", sanitizeLog(dbUserID), sanitizeLog(primaryEmail))
-	return nil
+	var clerkUser services.ClerkUserResponse
+	if err := json.Unmarshal(dataBytes, &clerkUser); err != nil {
+		return err
+	}
+	_, err = services.SyncUserFromClerkResponse(&clerkUser)
+	return err
 }
 
 func EnsureUserExists(userId, email string) error {
@@ -1249,16 +1110,4 @@ func EnsureUserExists(userId, email string) error {
 
 func sanitizeLog(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\n", ""), "\r", "")
-}
-
-func bcryptCostFromConfig() int {
-	cfg := config.Load()
-	cost := cfg.BCryptCost
-	if cost < 12 {
-		return 12
-	}
-	if cost > 14 {
-		return 14
-	}
-	return cost
 }

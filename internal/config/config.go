@@ -151,7 +151,7 @@ func Load() *Config {
 			"All uploads must use cloud storage (S3/Supabase) to ensure data durability.")
 	}
 
-	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SECRET", "")
+	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SIGNING_SECRET", getEnv("CLERK_WEBHOOK_SECRET", ""))
 	c.ClerkPEMPublicKey = getEnv("CLERK_PEM_PUBLIC_KEY", "")
 	c.ClerkSecretKey = getEnv("CLERK_SECRET_KEY", "")
 	c.ClerkJWKSURL = getEnv("CLERK_JWKS_URL", "")
@@ -164,7 +164,7 @@ func Load() *Config {
 			log.Fatal("FATAL: CLERK_SECRET_KEY must be set in production.")
 		}
 		if c.ClerkWebhookSecret == "" {
-			log.Fatal("FATAL: CLERK_WEBHOOK_SECRET must be set in production.")
+			log.Fatal("FATAL: CLERK_WEBHOOK_SIGNING_SECRET or CLERK_WEBHOOK_SECRET must be set in production.")
 		}
 		if c.ClerkPEMPublicKey == "" && c.ClerkJWKSURL == "" {
 			log.Fatal("FATAL: Either CLERK_PEM_PUBLIC_KEY or CLERK_JWKS_URL must be set in production.")
@@ -284,7 +284,7 @@ func LoadSafe() (*Config, error) {
 			"All uploads must use cloud storage (S3/Supabase) to ensure data durability")
 	}
 
-	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SECRET", "")
+	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SIGNING_SECRET", getEnv("CLERK_WEBHOOK_SECRET", ""))
 	c.ClerkPEMPublicKey = getEnv("CLERK_PEM_PUBLIC_KEY", "")
 	c.ClerkSecretKey = getEnv("CLERK_SECRET_KEY", "")
 	c.ClerkJWKSURL = getEnv("CLERK_JWKS_URL", "")
@@ -297,7 +297,7 @@ func LoadSafe() (*Config, error) {
 			return nil, fmt.Errorf("CLERK_SECRET_KEY must be set in production")
 		}
 		if c.ClerkWebhookSecret == "" {
-			return nil, fmt.Errorf("CLERK_WEBHOOK_SECRET must be set in production")
+			return nil, fmt.Errorf("CLERK_WEBHOOK_SIGNING_SECRET or CLERK_WEBHOOK_SECRET must be set in production")
 		}
 		if c.ClerkPEMPublicKey == "" && c.ClerkJWKSURL == "" {
 			return nil, fmt.Errorf("either CLERK_PEM_PUBLIC_KEY or CLERK_JWKS_URL must be set in production")

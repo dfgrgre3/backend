@@ -29,6 +29,7 @@ import (
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/repository"
 	"thanawy-backend/internal/router"
+	"thanawy-backend/internal/services"
 	"thanawy-backend/internal/storage"
 	"thanawy-backend/internal/worker"
 
@@ -88,8 +89,12 @@ func main() {
 		log.Printf("Database configured with %d read replica(s)", len(cfg.DatabaseReadReplicas))
 	}
 
-	// Initialize AuthService with UserRepository dependency (Dependency Injection)
-	handlers.InitAuthService(repository.NewUserRepository(db.DB))
+	// Configure unified cache invalidation callback to clear both permissions and repository caches
+	services.InvalidateCacheCallback = func(userID string) {
+		middleware.InvalidateRolePermsCache(userID)
+		repository.NewUserRepository(db.DB).InvalidateCache(userID)
+	}
+
 
 	// Initialize Storage (Local or S3)
 	initStorage(cfg)
@@ -383,11 +388,6 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 		c.JSON(http.StatusOK, gin.H{"status": "uploaded"})
 	})
 
-	// Login redirect to /api/auth/login (for backward compatibility)
-	r.GET("/login", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/api/auth/login")
-	})
-
 	// Vercel rewrites all paths to /api, so we must respond for both / and /api.
 	rootHandler := func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -431,6 +431,7 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	r.Any("/api"+authPath+"*any", middleware.OptionalAuth(), gin.WrapH(stripAPIPrefix(authHandler)))
 	r.Any("/api"+analyticsPath+"*any", middleware.OptionalAuth(), gin.WrapH(stripAPIPrefix(analyticsHandler)))
 
+	router.SetupWebhookRoutes(r) // Public: Clerk webhooks (verified via Svix HMAC)
 	router.SetupAuthRoutes(r)
 	router.SetupPublicRoutes(r)
 	router.SetupProtectedRoutes(r)

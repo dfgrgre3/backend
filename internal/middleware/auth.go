@@ -111,11 +111,12 @@ func SignImpersonationCSRFToken(adminID string) string {
 
 func VerifyImpersonationCSRFToken(token, currentAdminID string) bool {
 	parts := strings.Split(token, ".")
-	if len(parts) != 3 || parts[0] != "csrf" {
+	if len(parts) != 4 || parts[0] != "csrf" {
 		return false
 	}
 	expiresStr := parts[1]
 	adminID := parts[2]
+	signature := parts[3]
 
 	expiresAt, err := strconv.ParseInt(expiresStr, 10, 64)
 	if err != nil || time.Now().Unix() > expiresAt {
@@ -135,7 +136,13 @@ func VerifyImpersonationCSRFToken(token, currentAdminID string) bool {
 	mac.Write([]byte(payload))
 	expectedSignature := hex.EncodeToString(mac.Sum(nil))
 
-	return hmac.Equal([]byte(parts[2]), []byte(expectedSignature))
+	return hmac.Equal([]byte(signature), []byte(expectedSignature))
+}
+
+func ClearImpersonationCookies(c *gin.Context) {
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("impersonate_user_id", "", -1, "/", "", true, true)
+	c.SetCookie("impersonate_csrf_token", "", -1, "/", "", true, false)
 }
 
 var (
@@ -197,13 +204,13 @@ func StartDistributedCacheInvalidator() {
 	}()
 }
 
-// Context keys for storing user information in request context
 type ContextKey string
 
 const (
-	UserContextKey  ContextKey = "user_id"
-	RoleContextKey  ContextKey = "user_role"
-	EmailContextKey ContextKey = "user_email"
+	UserContextKey    ContextKey = "user_id"
+	RoleContextKey    ContextKey = "user_role"
+	EmailContextKey   ContextKey = "user_email"
+	ClerkIDContextKey ContextKey = "clerk_id"
 )
 
 func getConfig() *config.Config {
@@ -249,9 +256,7 @@ func authMiddleware(optional bool) gin.HandlerFunc {
 		// Set both "userId" and "user_id" keys to avoid breaking existing handlers.
 		c.Set("userId", dbUserID)
 		c.Set("user_id", dbUserID)
-		if clerkID != dbUserID {
-			c.Set("clerkUserId", clerkID)
-		}
+		c.Set("clerkUserId", clerkID)
 		c.Set("jti", claims.JTI)
 		if claims.ExpiresAt != nil {
 			c.Set("accessTokenExpiresAt", claims.ExpiresAt.Time.UnixMilli())
@@ -263,6 +268,11 @@ func authMiddleware(optional bool) gin.HandlerFunc {
 		hydrateUserContext(c, dbUserID, claims.Role)
 		if c.IsAborted() {
 			return
+		}
+		if resolvedUserID := resolveUserIDFromClerkID(clerkID); resolvedUserID != "" && resolvedUserID != dbUserID {
+			dbUserID = resolvedUserID
+			c.Set("userId", dbUserID)
+			c.Set("user_id", dbUserID)
 		}
 		processImpersonation(c, dbUserID)
 		if c.IsAborted() {
@@ -278,6 +288,9 @@ func authMiddleware(optional bool) gin.HandlerFunc {
 		if claims.Email != "" {
 			ctx = context.WithValue(ctx, EmailContextKey, claims.Email)
 		}
+		if clerkID != "" {
+			ctx = context.WithValue(ctx, ClerkIDContextKey, clerkID)
+		}
 		c.Request = c.Request.WithContext(ctx)
 
 		c.Next()
@@ -292,7 +305,7 @@ func OptionalAuth() gin.HandlerFunc {
 	return authMiddleware(true)
 }
 
-// Helper to extract JWT token from Authorization header or access_token cookie or query parameter
+// Helper to extract JWT token from Authorization header or auth cookies.
 func extractToken(c *gin.Context) string {
 	authHeader := c.GetHeader("Authorization")
 	if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
@@ -302,11 +315,15 @@ func extractToken(c *gin.Context) string {
 		}
 	}
 
-	// Try cookie as fallback for SSR support (Next.js server-side rendering).
-	// In production, Clerk JWT Bearer headers are the primary auth mechanism,
-	// but cookies may be needed for SSR requests from the same origin.
-	if cookieToken, err := c.Cookie("access_token"); err == nil {
-		return strings.TrimSpace(cookieToken)
+	// Try cookies as fallback for SSR/API proxy support.
+	// Clerk stores the active session JWT in "__session"; keep access_token first
+	// for backwards compatibility with older clients.
+	for _, cookieName := range []string{"access_token", "__session"} {
+		if cookieToken, err := c.Cookie(cookieName); err == nil {
+			if token := strings.TrimSpace(cookieToken); token != "" {
+				return token
+			}
+		}
 	}
 
 	return ""
@@ -402,24 +419,29 @@ func storeInLocalCache(userID string, ctx *userAuthContext) {
 func fetchDatabaseRolePerms(userID, clerkID, cacheKey string) *userAuthContext {
 	var user models.User
 	if err := db.DB.
-		Select("role", "permissions", "status").
+		Select("id", "role", "permissions", "status").
 		Where("id = ?", userID).
 		Take(&user).Error; err != nil {
 
 		if clerkID != "" && strings.HasPrefix(clerkID, "user_") {
 			// ProvisionUserFromClerk uses singleflight.Group internally,
 			// so concurrent requests for the same clerkID share a single HTTP call.
-			_, errProvision := services.ProvisionUserFromClerk(clerkID)
+			provisionedUser, errProvision := services.ProvisionUserFromClerk(clerkID)
 			if errProvision != nil {
 				log.Printf("[Auth Middleware] Provisioning failed for Clerk ID %s: %v", clerkID, errProvision)
 				return nil
+			}
+			if provisionedUser != nil && provisionedUser.ID != "" && provisionedUser.ID != userID {
+				userID = provisionedUser.ID
+				cacheKey = fmt.Sprintf("user_role_perms:%s", userID)
+				clerkToDBIDCache.Set(clerkID, userID, cache.DefaultExpiration)
 			}
 
 			// Retry up to 3 times with a short delay to handle any eventual-consistency delay
 			// (e.g. if a goroutine in a different request just created the user).
 			for i := 0; i < 3; i++ {
 				if errRetry := db.DB.
-					Select("role", "permissions", "status").
+					Select("id", "role", "permissions", "status").
 					Where("id = ?", userID).
 					Take(&user).Error; errRetry == nil {
 					break // user found, exit retry loop
@@ -556,12 +578,16 @@ func processImpersonation(c *gin.Context, adminID string) {
 
 	csrfToken := c.GetHeader("X-CSRF-Impersonation-Token")
 	if csrfToken == "" {
+		// Clear cookies to tear down invalid state and allow recovery
+		ClearImpersonationCookies(c)
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Missing impersonation CSRF token"})
 		return
 	}
 
 	if !VerifyImpersonationCSRFToken(csrfToken, adminID) {
 		log.Printf("[Security Alert] Admin %s provided invalid impersonation CSRF token", adminID)
+		// Clear cookies to tear down invalid state and allow recovery
+		ClearImpersonationCookies(c)
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Invalid impersonation CSRF token"})
 		return
 	}
@@ -569,6 +595,8 @@ func processImpersonation(c *gin.Context, adminID string) {
 	impersonatedID, ok := VerifyImpersonationToken(impersonatedCookie, adminID)
 	if !ok {
 		log.Printf("Security Warning: Admin %s attempted to impersonate with an invalid or tampered token: %s", adminID, impersonatedCookie)
+		// Clear cookies to tear down invalid state and allow recovery
+		ClearImpersonationCookies(c)
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Invalid or tampered impersonation token"})
 		return
 	}
@@ -594,10 +622,11 @@ func processImpersonation(c *gin.Context, adminID string) {
 		// Prevent privilege escalation: An ADMIN/SUPER_ADMIN cannot impersonate another user of equal or higher rank
 		roleHierarchy := map[string]int{
 			"STUDENT":     1,
-			"TEACHER":     2,
-			"MODERATOR":   3,
-			"ADMIN":       4,
-			"SUPER_ADMIN": 5,
+			"PREMIUM":     2, // Premium sits between Student and Teacher
+			"TEACHER":     3,
+			"MODERATOR":   4,
+			"ADMIN":       5,
+			"SUPER_ADMIN": 6,
 		}
 
 		currRank, validParent := roleHierarchy[currentRoleStr]
@@ -772,10 +801,9 @@ func isOriginAllowed(origin string, isDev bool, allowedOrigins []string) bool {
 		}
 	}
 
-	// Allow Vercel preview deployments (e.g. https://*.vercel.app)
-	if strings.HasPrefix(origin, "https://") && strings.HasSuffix(origin, ".vercel.app") {
-		return true
-	}
+	// Security: Do NOT use a wildcard for *.vercel.app — any project on Vercel
+	// could then make authenticated requests to this API.
+	// Add specific Vercel preview URLs to the allowedOrigins slice above instead.
 
 	return false
 }

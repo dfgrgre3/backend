@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,24 +56,36 @@ func ClerkIDToUUID(clerkID string) string {
 	return uuid.NewSHA1(uuid.NameSpaceDNS, []byte(clerkID)).String()
 }
 
-type clerkEmailAddress struct {
+type ClerkEmailAddress struct {
 	EmailAddress string `json:"email_address"`
 }
 
-type clerkUserResponse struct {
+type ClerkUserResponse struct {
 	ID             string              `json:"id"`
 	FirstName      *string             `json:"first_name"`
 	LastName       *string             `json:"last_name"`
 	Username       *string             `json:"username"`
 	ImageURL       *string             `json:"image_url"`
-	EmailAddresses []clerkEmailAddress `json:"email_addresses"`
+	EmailAddresses []ClerkEmailAddress `json:"email_addresses"`
 	PublicMetadata map[string]any      `json:"public_metadata"`
 	UnsafeMetadata map[string]any      `json:"unsafe_metadata"`
 }
 
-func FetchUserFromClerk(userId string) (*clerkUserResponse, error) {
-	cfg := config.Load()
-	if cfg.ClerkSecretKey == "" {
+func getClerkConfig() *config.Config {
+	if config.GlobalConfig != nil {
+		return config.GlobalConfig
+	}
+	cfg, err := config.LoadSafe()
+	if err == nil && cfg != nil {
+		config.GlobalConfig = cfg
+		return cfg
+	}
+	return config.Load()
+}
+
+func FetchUserFromClerk(userId string) (*ClerkUserResponse, error) {
+	cfg := getClerkConfig()
+	if cfg == nil || cfg.ClerkSecretKey == "" {
 		return nil, errors.New("CLERK_SECRET_KEY is not configured")
 	}
 
@@ -100,7 +113,7 @@ func FetchUserFromClerk(userId string) (*clerkUserResponse, error) {
 		return nil, fmt.Errorf("clerk api returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	var clerkUser clerkUserResponse
+	var clerkUser ClerkUserResponse
 	if err := json.NewDecoder(resp.Body).Decode(&clerkUser); err != nil {
 		return nil, err
 	}
@@ -171,14 +184,17 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 	if err != nil {
 		return nil, err
 	}
+	return SyncUserFromClerkResponse(clerkUser)
+}
 
+func SyncUserFromClerkResponse(clerkUser *ClerkUserResponse) (*models.User, error) {
 	var primaryEmail string
 	if len(clerkUser.EmailAddresses) > 0 {
 		primaryEmail = clerkUser.EmailAddresses[0].EmailAddress
 	}
 
 	if primaryEmail == "" {
-		return nil, fmt.Errorf("user %s has no email addresses in Clerk", userId)
+		return nil, fmt.Errorf("user %s has no email addresses in Clerk", clerkUser.ID)
 	}
 
 	var name string
@@ -194,8 +210,10 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 	}
 
 	role := models.RoleStudent
+	roleExistsInMetadata := false
 	if r, ok := clerkUser.PublicMetadata["role"].(string); ok && r != "" {
 		role = parseAndValidateClerkRole(r)
+		roleExistsInMetadata = true
 	}
 
 	var phone, country, gradeLevel, educationType string
@@ -229,16 +247,16 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 		}
 	}
 
-	dbUserID := ClerkIDToUUID(userId)
+	dbUserID := ClerkIDToUUID(clerkUser.ID)
 
 	var existing models.User
-	err = db.DB.Unscoped().Where("clerk_id = ? OR id = ? OR email = ?", userId, dbUserID, primaryEmail).First(&existing).Error
+	err := db.DB.Unscoped().Where("clerk_id = ? OR id = ? OR email = ?", clerkUser.ID, dbUserID, primaryEmail).First(&existing).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Create user
 			newUser := models.User{
 				ID:                 dbUserID,
-				ClerkID:            &userId,
+				ClerkID:            &clerkUser.ID,
 				Email:              primaryEmail,
 				EmailVerified:      true,
 				Status:             models.StatusActive,
@@ -279,9 +297,12 @@ func provisionUserFromClerkInternal(userId string) (*models.User, error) {
 
 	// Update existing user email & metadata (never override role after initial provisioning)
 	updates := map[string]any{
-		"clerk_id":       userId,
+		"clerk_id":       clerkUser.ID,
 		"email":          primaryEmail,
 		"email_verified": true,
+	}
+	if roleExistsInMetadata && existing.Role != models.RoleAdmin && existing.Role != models.RoleSuperAdmin {
+		updates["role"] = role
 	}
 	if name != "" {
 		updates["name"] = &name
@@ -398,3 +419,137 @@ func RevokeClerkUserSessions(email string) error {
 
 	return nil
 }
+
+// UpdateUserMetadataInClerk updates the public metadata (role and permissions) of a user in Clerk.
+func UpdateUserMetadataInClerk(clerkID string, role string, permissions []string) error {
+	if clerkID == "" || !strings.HasPrefix(clerkID, "user_") {
+		// Not a Clerk user (could be local seed user), skip silently
+		return nil
+	}
+
+	cfg := getClerkConfig()
+	if cfg == nil || cfg.ClerkSecretKey == "" {
+		return errors.New("CLERK_SECRET_KEY is not configured")
+	}
+
+	url := fmt.Sprintf("https://api.clerk.com/v1/users/%s/metadata", clerkID)
+
+	payload := map[string]interface{}{
+		"public_metadata": map[string]interface{}{
+			"role":        strings.ToUpper(role),
+			"permissions": permissions,
+		},
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.ClerkSecretKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyResp, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("clerk metadata api returned status %d: %s", resp.StatusCode, string(bodyResp))
+	}
+
+	return nil
+}
+
+type ClerkSessionActivity struct {
+	IPAddress      string `json:"ip_address"`
+	UserAgent      string `json:"user_agent"`
+	DeviceType     string `json:"device_type"`
+	BrowserName    string `json:"browser_name"`
+	BrowserVersion string `json:"browser_version"`
+	City           string `json:"city"`
+	Country        string `json:"country"`
+}
+
+type ClerkSession struct {
+	ID             string                `json:"id"`
+	Status         string                `json:"status"`
+	UserID         string                `json:"user_id"`
+	CreatedAt      int64                 `json:"created_at"`
+	UpdatedAt      int64                 `json:"updated_at"`
+	ExpireAt       int64                 `json:"expire_at"`
+	LastActiveAt   int64                 `json:"last_active_at"`
+	LatestActivity *ClerkSessionActivity `json:"latest_activity"`
+}
+
+func FetchUserSessionsFromClerk(clerkUserID string) ([]ClerkSession, error) {
+	cfg := getClerkConfig()
+	if cfg == nil || cfg.ClerkSecretKey == "" {
+		return nil, errors.New("CLERK_SECRET_KEY is not configured")
+	}
+
+	url := fmt.Sprintf("https://api.clerk.com/v1/sessions?user_id=%s&limit=20&status=active", url.QueryEscape(clerkUserID))
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.ClerkSecretKey)
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("clerk api returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var sessions []ClerkSession
+	if err := json.NewDecoder(resp.Body).Decode(&sessions); err != nil {
+		return nil, err
+	}
+
+	return sessions, nil
+}
+
+func RevokeClerkSession(sessionID string) error {
+	cfg := getClerkConfig()
+	if cfg == nil || cfg.ClerkSecretKey == "" {
+		return errors.New("CLERK_SECRET_KEY is not configured")
+	}
+
+	url := fmt.Sprintf("https://api.clerk.com/v1/sessions/%s/revoke", url.QueryEscape(sessionID))
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.ClerkSecretKey)
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("clerk api returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
+}
+

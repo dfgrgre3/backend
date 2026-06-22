@@ -8,6 +8,7 @@ import (
 	"thanawy-backend/internal/cqrs/queries"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
+	"thanawy-backend/internal/services"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -63,6 +64,8 @@ func GetUserProgress(c *gin.Context) {
 		}
 		userID = ctxID.(string)
 	}
+
+	userID = services.ClerkIDToUUID(userID)
 
 	progress, err := gamificationQuery.GetUserProgress(userID)
 	if err != nil {
@@ -189,6 +192,8 @@ func GetUserAchievements(c *gin.Context) {
 		}
 		userID = ctxID.(string)
 	}
+
+	userID = services.ClerkIDToUUID(userID)
 
 	achievements, err := gamificationQuery.GetUserAchievements(userID)
 	if err != nil {
