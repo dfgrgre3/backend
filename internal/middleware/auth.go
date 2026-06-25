@@ -316,13 +316,10 @@ func extractToken(c *gin.Context) string {
 	}
 
 	// Try cookies as fallback for SSR/API proxy support.
-	// Clerk stores the active session JWT in "__session"; keep access_token first
-	// for backwards compatibility with older clients.
-	for _, cookieName := range []string{"access_token", "__session"} {
-		if cookieToken, err := c.Cookie(cookieName); err == nil {
-			if token := strings.TrimSpace(cookieToken); token != "" {
-				return token
-			}
+	// Clerk stores the active session JWT in "__session".
+	if cookieToken, err := c.Cookie("__session"); err == nil {
+		if token := strings.TrimSpace(cookieToken); token != "" {
+			return token
 		}
 	}
 

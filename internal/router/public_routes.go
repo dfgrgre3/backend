@@ -74,8 +74,6 @@ func SetupPublicRoutes(router *gin.Engine) {
 	// Paymob Webhook (POST only — GET is a CSRF vector)
 	router.POST("/api/payments/paymob/callback", handlers.PaymobWebhook)
 
-	// Clerk Webhook
-	router.POST("/api/webhooks/clerk", handlers.ClerkWebhook)
 
 	// WebSocket (require auth & rate limiting)
 	router.GET("/api/ws", middleware.Auth(), middleware.WebSocketRateLimiter(), handlers.WSHandler)
