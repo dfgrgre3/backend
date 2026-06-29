@@ -12,6 +12,8 @@ const (
 	RoleStudent    Role = "STUDENT"
 	RoleModerator  Role = "MODERATOR"
 	RoleSuperAdmin Role = "SUPER_ADMIN"
+	RoleParent     Role = "PARENT"
+	RoleSupport    Role = "SUPPORT"
 )
 
 type Status string

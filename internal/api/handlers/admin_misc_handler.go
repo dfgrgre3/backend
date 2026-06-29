@@ -732,7 +732,6 @@ func GetAdminDashboard(c *gin.Context) {
 		totalSubjects      int64
 		totalExams         int64
 		completedTasks     int64
-		totalStudySessions int64
 		newUsersToday      int64
 		newUsersThisWeek   int64
 		studyMinutes       int64
@@ -748,45 +747,57 @@ func GetAdminDashboard(c *gin.Context) {
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	weekAgo := now.AddDate(0, 0, -7)
 
-	var wg sync.WaitGroup
-	wg.Add(14)
+	type dashboardStats struct {
+		TotalUsers         int64 `gorm:"column:total_users"`
+		NewUsersToday      int64 `gorm:"column:new_users_today"`
+		NewUsersThisWeek   int64 `gorm:"column:new_users_this_week"`
+		TotalSubjects      int64 `gorm:"column:total_subjects"`
+		TotalExams         int64 `gorm:"column:total_exams"`
+		CompletedTasks     int64 `gorm:"column:completed_tasks"`
+		TotalStudySessions int64 `gorm:"column:total_study_sessions"`
+		StudyMinutes       int64 `gorm:"column:study_minutes"`
+		ExamsTaken         int64 `gorm:"column:exams_taken"`
+		TotalResources     int64 `gorm:"column:total_resources"`
+		ActiveChallenges   int64 `gorm:"column:active_challenges"`
+		AchievementsEarned int64 `gorm:"column:achievements_earned"`
+	}
 
-	go func() {
-		defer wg.Done()
-		db.DB.Model(&models.User{}).Count(&totalUsers)
-	}()
-	go func() {
-		defer wg.Done()
-		db.DB.Model(&models.User{}).Where(createdAtGte, todayStart).Count(&newUsersToday)
-	}()
-	go func() {
-		defer wg.Done()
-		db.DB.Model(&models.User{}).Where(createdAtGte, weekAgo).Count(&newUsersThisWeek)
-	}()
-	go func() {
-		defer wg.Done()
-		db.DB.Model(&models.Subject{}).Count(&totalSubjects)
-	}()
-	go func() {
-		defer wg.Done()
-		db.DB.Model(&models.Exam{}).Count(&totalExams)
-	}()
-	go func() {
-		defer wg.Done()
-		db.DB.Model(&models.Task{}).Where(statusQuery, models.TaskCompleted).Count(&completedTasks)
-	}()
-	go func() {
-		defer wg.Done()
-		db.DB.Model(&models.StudySession{}).Count(&totalStudySessions)
-	}()
-	go func() {
-		defer wg.Done()
-		db.DB.Model(&models.StudySession{}).Select(coalesceSumDuration).Scan(&studyMinutes)
-	}()
-	go func() {
-		defer wg.Done()
-		db.DB.Model(&models.ExamResult{}).Count(&examsTaken)
-	}()
+	var stats dashboardStats
+	queryMetrics := `
+		SELECT
+			(SELECT COUNT(*) FROM "User" WHERE deleted_at IS NULL) as total_users,
+			(SELECT COUNT(*) FROM "User" WHERE created_at >= ? AND deleted_at IS NULL) as new_users_today,
+			(SELECT COUNT(*) FROM "User" WHERE created_at >= ? AND deleted_at IS NULL) as new_users_this_week,
+			(SELECT COUNT(*) FROM "Subject" WHERE deleted_at IS NULL) as total_subjects,
+			(SELECT COUNT(*) FROM "Exam" WHERE deleted_at IS NULL) as total_exams,
+			(SELECT COUNT(*) FROM "Task" WHERE status = 'COMPLETED' AND deleted_at IS NULL) as completed_tasks,
+			(SELECT COUNT(*) FROM "StudySession" WHERE deleted_at IS NULL) as total_study_sessions,
+			(SELECT COALESCE(SUM(duration_min), 0) FROM "StudySession" WHERE deleted_at IS NULL) as study_minutes,
+			(SELECT COUNT(*) FROM "ExamResult" WHERE deleted_at IS NULL) as exams_taken,
+			(SELECT COUNT(*) FROM "SubTopic" WHERE type != 'QUIZ' AND deleted_at IS NULL) as total_resources,
+			(SELECT COUNT(*) FROM "Challenge" WHERE is_active = true AND deleted_at IS NULL) as active_challenges,
+			(SELECT COUNT(*) FROM "UserAchievement" WHERE deleted_at IS NULL) as achievements_earned
+	`
+	if err := db.DB.Raw(queryMetrics, todayStart, weekAgo).Scan(&stats).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to load dashboard metrics")
+		return
+	}
+
+	totalUsers = stats.TotalUsers
+	newUsersToday = stats.NewUsersToday
+	newUsersThisWeek = stats.NewUsersThisWeek
+	totalSubjects = stats.TotalSubjects
+	totalExams = stats.TotalExams
+	completedTasks = stats.CompletedTasks
+	studyMinutes = stats.StudyMinutes
+	examsTaken = stats.ExamsTaken
+	totalResources = stats.TotalResources
+	activeChallenges = stats.ActiveChallenges
+	achievementsEarned = stats.AchievementsEarned
+
+	// Fetch lists in parallel
+	var wg sync.WaitGroup
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		db.DB.Order(createdAtDescSort).Limit(10).Find(&recentTasks)
@@ -795,19 +806,6 @@ func GetAdminDashboard(c *gin.Context) {
 		defer wg.Done()
 		db.DB.Order(createdAtDescSort).Limit(5).Find(&upcomingExams)
 	}()
-	go func() {
-		defer wg.Done()
-		db.DB.Model(&models.SubTopic{}).Where("type != ?", models.SubTopicQuiz).Count(&totalResources)
-	}()
-	go func() {
-		defer wg.Done()
-		db.DB.Model(&models.Challenge{}).Where(isActiveQuery, true).Count(&activeChallenges)
-	}()
-	go func() {
-		defer wg.Done()
-		db.DB.Model(&models.UserAchievement{}).Count(&achievementsEarned)
-	}()
-
 	wg.Wait()
 
 	// Batch fetch users for recent tasks to avoid N+1 queries

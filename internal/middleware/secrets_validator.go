@@ -18,7 +18,10 @@ func DefaultSecretsValidatorConfig() SecretsValidatorConfig {
 	return SecretsValidatorConfig{
 		RequiredVars: []string{
 			"DATABASE_URL",
-			"JWT_SECRET",
+			"S3_ENDPOINT",
+			"S3_ACCESS_KEY",
+			"S3_SECRET_KEY",
+			"S3_BUCKET",
 		},
 		SkipInDev: true,
 	}

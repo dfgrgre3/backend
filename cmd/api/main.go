@@ -11,14 +11,12 @@ package main
 
 import (
 	"context"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -27,15 +25,15 @@ import (
 	"thanawy-backend/internal/app"
 	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/db"
-	"thanawy-backend/internal/repository"
 	"thanawy-backend/internal/router"
 	"thanawy-backend/internal/services"
 	"thanawy-backend/internal/storage"
 	"thanawy-backend/internal/worker"
+	"thanawy-backend/pkg/telemetry"
 
-	"github.com/gin-gonic/gin"
 	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -55,7 +53,6 @@ import (
 
 func main() {
 	// Load environment variables
-	_ = godotenv.Load(".env.local")
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using system environment variables")
 	}
@@ -89,13 +86,6 @@ func main() {
 		log.Printf("Database configured with %d read replica(s)", len(cfg.DatabaseReadReplicas))
 	}
 
-	// Configure unified cache invalidation callback to clear both permissions and repository caches
-	services.InvalidateCacheCallback = func(userID string) {
-		middleware.InvalidateRolePermsCache(userID)
-		repository.NewUserRepository(db.DB).InvalidateCache(userID)
-	}
-
-
 	// Initialize Storage (Local or S3)
 	initStorage(cfg)
 
@@ -116,11 +106,18 @@ func main() {
 
 	// Initialize Services for gRPC/Connect
 	courseSvc := &internalgrpc.CourseServiceServer{}
-	authSvc := internalgrpc.NewAuthServiceServer()
 	analyticsSvc := &internalgrpc.AnalyticsServiceServer{}
 
+	// Initialize OpenTelemetry tracer
+	tp, err := telemetry.InitTracer("tolo-backend")
+	if err != nil {
+		log.Printf("[Telemetry] WARNING: Failed to initialize tracer: %v", err)
+	} else {
+		defer telemetry.Shutdown(tp)
+	}
+
 	// Setup Router
-	r := setupRouter(cfg, hexHandlers, courseSvc, authSvc, analyticsSvc)
+	r := setupRouter(cfg, hexHandlers, courseSvc, analyticsSvc)
 
 	runAPI := getEnvBool("RUN_API", true)
 	runWorkers := getEnvBool("RUN_WORKERS", true)
@@ -131,25 +128,37 @@ func main() {
 
 	if runAPI {
 		// Start gRPC Server
-		grpcServer = startGRPCServer(courseSvc, authSvc, analyticsSvc)
+		grpcServer = startGRPCServer(courseSvc, analyticsSvc)
 	}
 
-	if runWorkers && db.Redis != nil {
-		// Start Background Worker and Periodic Scheduler
+	if runWorkers {
+		// Start Database-backed Mail Queue Worker
 		go func() {
-			log.Println("Starting background worker...")
-			worker.StartWorker()
+			log.Println("Starting background mail queue worker...")
+			services.GetMailQueueWorker().Start()
 		}()
 
-		// Start Analytics Batch Worker (separate from Asynq — uses Redis Stream)
+		// Start Automated Database Backup Scheduler
 		go func() {
-			log.Println("Starting analytics batch worker (Redis Stream consumer)...")
-			worker.StartAnalyticsBatchWorker()
+			log.Println("Starting automated database backup scheduler...")
+			services.GetBackupCronWorker().Start()
 		}()
-	}
 
-	if runWorkers && db.Redis == nil {
-		log.Println("Redis is not connected; background workers are disabled for this process")
+		if db.Redis != nil {
+			// Start Background Worker and Periodic Scheduler
+			go func() {
+				log.Println("Starting background worker...")
+				worker.StartWorker()
+			}()
+
+			// Start Analytics Batch Worker (separate from Asynq — uses Redis Stream)
+			go func() {
+				log.Println("Starting analytics batch worker (Redis Stream consumer)...")
+				worker.StartAnalyticsBatchWorker()
+			}()
+		} else {
+			log.Println("Redis is not connected; background Redis workers are disabled for this process")
+		}
 	}
 
 	if runScheduler && db.Redis != nil {
@@ -229,6 +238,14 @@ func main() {
 		grpcServer.GracefulStop()
 	}
 
+	// Stop background workers
+	if runWorkers {
+		log.Println("Stopping background mail queue worker...")
+		services.GetMailQueueWorker().Stop()
+		log.Println("Stopping automated backup scheduler...")
+		services.GetBackupCronWorker().Stop()
+	}
+
 	// Close database connections gracefully
 	if err := db.Close(); err != nil {
 		log.Printf("Error closing database connection pool: %v", err)
@@ -264,39 +281,30 @@ func connectDatabaseWithRetry(cfg *config.Config) (*gorm.DB, error) {
 }
 
 func initStorage(cfg *config.Config) {
-	if cfg.StorageType == "local" {
-		storageSvc, err := storage.NewLocalStorage(cfg.LocalStorage.BaseDir, cfg.LocalStorage.PublicURL)
-		if err != nil {
-			log.Fatalf("Failed to initialize local storage: %v", err)
-		}
-		storage.GlobalStorage = storageSvc
-		log.Printf("Storage initialized with Local provider (baseDir: %s, publicURL: %s)", cfg.LocalStorage.BaseDir, cfg.LocalStorage.PublicURL)
-		return
+	if cfg.StorageType != "s3" {
+		log.Fatalf("Unsupported storage provider %q. Cloud storage (s3) is required.", cfg.StorageType)
+	}
+	if cfg.S3.Endpoint == "" {
+		log.Fatal("S3_ENDPOINT is required for cloud storage")
 	}
 
-	if cfg.StorageType == "s3" && cfg.S3.Endpoint != "" {
-		storageSvc, err := storage.NewS3Storage(
-			cfg.S3.Endpoint,
-			cfg.S3.AccessKey,
-			cfg.S3.SecretKey,
-			cfg.S3.Bucket,
-			cfg.S3.Region,
-			cfg.S3.UseSSL,
-			cfg.S3.PublicURL,
-		)
-		if err != nil {
-			log.Printf("Failed to initialize S3 storage: %v", err)
-			return
-		}
-		storage.GlobalStorage = storageSvc
-		log.Println("Storage initialized with S3 provider (Cloudflare R2)")
-		return
+	storageSvc, err := storage.NewS3Storage(
+		cfg.S3.Endpoint,
+		cfg.S3.AccessKey,
+		cfg.S3.SecretKey,
+		cfg.S3.Bucket,
+		cfg.S3.Region,
+		cfg.S3.UseSSL,
+		cfg.S3.PublicURL,
+	)
+	if err != nil {
+		log.Fatalf("Failed to initialize S3 storage: %v", err)
 	}
-
-	log.Println("No storage provider initialized")
+	storage.GlobalStorage = storageSvc
+	log.Println("Storage initialized with S3 provider (Cloudflare R2)")
 }
 
-func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *internalgrpc.CourseServiceServer, authSvc *internalgrpc.AuthServiceServer, analyticsSvc *internalgrpc.AnalyticsServiceServer) *gin.Engine {
+func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *internalgrpc.CourseServiceServer, analyticsSvc *internalgrpc.AnalyticsServiceServer) *gin.Engine {
 	if os.Getenv("GIN_MODE") == "release" || cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -330,6 +338,7 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	r.Use(middleware.CORS())
 	r.Use(middleware.ValidateSecrets(middleware.DefaultSecretsValidatorConfig()))
 	r.Use(middleware.PerformanceMonitor())
+	r.Use(telemetry.TraceMiddleware())
 
 	rateLimitWindow, err := time.ParseDuration(cfg.RateLimitWindow)
 	if err != nil {
@@ -340,52 +349,11 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 	r.Use(middleware.CSRFMiddleware())
 	r.Use(middleware.DBConsistencyMiddleware(db.DB))
 
-	// Serve uploaded files statically
-	r.Static("/uploads", cfg.LocalStorage.BaseDir)
-
-	// Support raw PUT uploads for local dev simulation of direct S3 upload
-	r.PUT("/uploads/:filename", func(c *gin.Context) {
-		if cfg.StorageType != "local" {
-			c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Method not allowed"})
-			return
-		}
-		filename := c.Param("filename")
-		baseUploadDir, err := filepath.Abs(cfg.LocalStorage.BaseDir)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Configuration state tracking error"})
-			return
-		}
-
-		// Enforce strict name isolation parameters to avoid absolute path traversal injections
-		baseName := filepath.Base(filename)
-		if baseName == "." || baseName == "/" || baseName == ".." {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Sanitization constraints rejected the provided name payload"})
-			return
-		}
-
-		targetPath := filepath.Join(baseUploadDir, baseName)
-		// Double-verify that the resolved path remains nested within the base directory
-		if !strings.HasPrefix(targetPath, baseUploadDir) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Escalation sequence detected and blocked"})
-			return
-		}
-
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		dst, err := os.Create(targetPath)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		defer dst.Close()
-		_, err = io.Copy(dst, c.Request.Body)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"status": "uploaded"})
+	// Local file serving is disabled; media must be served from cloud storage/CDN.
+	r.GET("/uploads/*path", func(c *gin.Context) {
+		c.JSON(http.StatusGone, gin.H{
+			"error": "Local file serving is disabled. All media is served from cloud storage.",
+		})
 	})
 
 	// Vercel rewrites all paths to /api, so we must respond for both / and /api.
@@ -419,20 +387,15 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers, courseSvc *inter
 
 	// Register Connect-RPC Handlers
 	coursePath, courseHandler := thanawyv1connect.NewCourseServiceHandler(&internalgrpc.CourseConnectHandler{Svc: courseSvc})
-	authPath, authHandler := thanawyv1connect.NewAuthServiceHandler(&internalgrpc.AuthConnectHandler{Svc: authSvc})
 	analyticsPath, analyticsHandler := thanawyv1connect.NewAnalyticsServiceHandler(&internalgrpc.AnalyticsConnectHandler{Svc: analyticsSvc})
 
 	r.Any(coursePath+"*any", middleware.OptionalAuth(), gin.WrapH(courseHandler))
-	r.Any(authPath+"*any", middleware.OptionalAuth(), gin.WrapH(authHandler))
 	r.Any(analyticsPath+"*any", middleware.OptionalAuth(), gin.WrapH(analyticsHandler))
 
 	// Register /api prefixed Connect-RPC Handlers for Vercel routing support
 	r.Any("/api"+coursePath+"*any", middleware.OptionalAuth(), gin.WrapH(stripAPIPrefix(courseHandler)))
-	r.Any("/api"+authPath+"*any", middleware.OptionalAuth(), gin.WrapH(stripAPIPrefix(authHandler)))
 	r.Any("/api"+analyticsPath+"*any", middleware.OptionalAuth(), gin.WrapH(stripAPIPrefix(analyticsHandler)))
 
-	router.SetupWebhookRoutes(r) // Public: Clerk webhooks (verified via Svix HMAC)
-	router.SetupAuthRoutes(r)
 	router.SetupPublicRoutes(r)
 	router.SetupProtectedRoutes(r)
 	router.SetupAdminRoutes(r)
@@ -461,7 +424,7 @@ func stripAPIPrefix(h http.Handler) http.Handler {
 	})
 }
 
-func startGRPCServer(courseSvc *internalgrpc.CourseServiceServer, authSvc *internalgrpc.AuthServiceServer, analyticsSvc *internalgrpc.AnalyticsServiceServer) *grpc.Server {
+func startGRPCServer(courseSvc *internalgrpc.CourseServiceServer, analyticsSvc *internalgrpc.AnalyticsServiceServer) *grpc.Server {
 	grpcPort := os.Getenv("GRPC_PORT")
 	if grpcPort == "" {
 		grpcPort = "50051"
@@ -473,7 +436,6 @@ func startGRPCServer(courseSvc *internalgrpc.CourseServiceServer, authSvc *inter
 	}
 	grpcServer := grpc.NewServer()
 	thanawyv1.RegisterCourseServiceServer(grpcServer, courseSvc)
-	thanawyv1.RegisterAuthServiceServer(grpcServer, authSvc)
 	thanawyv1.RegisterAnalyticsServiceServer(grpcServer, analyticsSvc)
 
 	reflection.Register(grpcServer)

@@ -2,13 +2,9 @@ package handlers
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -20,7 +16,6 @@ import (
 	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/repository"
-	"thanawy-backend/internal/services"
 
 	"gorm.io/gorm"
 
@@ -96,15 +91,9 @@ func GetProfile(c *gin.Context) {
 		emailVal, _ := c.Get("user_email")
 		emailStr, _ := emailVal.(string)
 		if emailStr == "" {
-			emailStr = userIdStr + "@clerk.user"
+			emailStr = userIdStr + "@external-auth.user"
 		}
-		clerkID := userIdStr
-		if clerkIDVal, exists := c.Get("clerkUserId"); exists {
-			if clerkIDStr, ok := clerkIDVal.(string); ok && clerkIDStr != "" {
-				clerkID = clerkIDStr
-			}
-		}
-		if createErr := EnsureUserExists(clerkID, emailStr); createErr != nil {
+		if createErr := EnsureUserExists(userIdStr, emailStr); createErr != nil {
 			log.Printf("[Auth] Failed to auto-create user %s: %v", userIdStr, createErr)
 			c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
 			return
@@ -314,12 +303,8 @@ func UpdateUser(c *gin.Context) {
 	db.DB.First(&user, idQuery, user.ID)
 	_ = getUserRepo().Update(&user)
 
-	if user.ClerkID != nil && *user.ClerkID != "" {
-		if req.Role != "" || req.Permissions != nil {
-			if err := services.UpdateUserMetadataInClerk(*user.ClerkID, string(user.Role), []string(user.Permissions)); err != nil {
-				log.Printf("[Clerk Sync Error] Failed to update user metadata in Clerk for user %s: %v", user.ID, err)
-			}
-		}
+	if req.Role != "" || req.Permissions != nil {
+		// Only admins can change roles
 	}
 
 	middleware.InvalidateRolePermsCache(user.ID)
@@ -380,9 +365,8 @@ func DeleteUser(c *gin.Context) {
 }
 
 func CreateUser(c *gin.Context) {
-	// Security: password is NOT accepted. Clerk is the exclusive auth provider.
-	// Users authenticate via Clerk and are provisioned via ProvisionUserFromClerk().
-	// Accepting a local password creates a parallel auth path that bypasses Clerk
+	// Security: password is NOT accepted. External auth provider is used.
+	// Accepting a local password creates a parallel auth path that bypasses
 	// session management, JTI blacklisting, and MFA enforcement.
 	var input struct {
 		Email    string  `json:"email" binding:"required,email"`
@@ -390,7 +374,6 @@ func CreateUser(c *gin.Context) {
 		Username *string `json:"username"`
 		Role     string  `json:"role"`
 		Phone    *string `json:"phone"`
-		ClerkID  *string `json:"clerkId"` // Optional: trigger full Clerk sync
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
@@ -407,26 +390,13 @@ func CreateUser(c *gin.Context) {
 		role = models.UserRole(input.Role)
 	}
 
-	// If clerkId provided, delegate to ProvisionUserFromClerk for a full sync
-	if input.ClerkID != nil && *input.ClerkID != "" {
-		user, provErr := services.ProvisionUserFromClerk(*input.ClerkID)
-		if provErr != nil {
-			api_response.Error(c, http.StatusBadRequest, "Failed to provision user from Clerk: "+provErr.Error())
-			return
-		}
-		LogAudit(c, "CREATE", "user", user.ID, gin.H{"source": "clerk_provision", "clerkId": *input.ClerkID})
-		api_response.Created(c, user)
-		return
-	}
-
-	// Manual admin seeding — no password; Clerk handles authentication
+	// Local provisioning
 	user := models.User{
 		Email:    input.Email,
 		Name:     input.Name,
 		Username: input.Username,
 		Role:     role,
 		Phone:    input.Phone,
-		// PasswordHash intentionally omitted
 	}
 
 	var existingUser models.User
@@ -939,152 +909,16 @@ func defaultPermissions(role models.UserRole, existing []string) []string {
 	return models.GetDefaultPermissions(role)
 }
 
-func ClerkWebhook(c *gin.Context) {
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
-		return
-	}
-
-	if err := verifyWebhookHeaders(c, body); err != nil {
-		return
-	}
-
-	event, err := parseClerkEvent(body)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	log.Printf("[Clerk Webhook] Received event: %s", sanitizeLog(event.Type))
-	dispatchClerkEvent(event)
-
-	c.JSON(http.StatusOK, gin.H{"success": true})
-}
-
-type clerkEvent struct {
-	Type string                 `json:"type"`
-	Data map[string]interface{} `json:"data"`
-}
-
-func parseClerkEvent(body []byte) (clerkEvent, error) {
-	var event clerkEvent
-	if err := json.Unmarshal(body, &event); err != nil {
-		return event, fmt.Errorf("Invalid JSON payload")
-	}
-	return event, nil
-}
-
-func dispatchClerkEvent(event clerkEvent) {
-	switch event.Type {
-	case "user.created", "user.updated":
-		if err := syncUserFromClerk(event.Data); err != nil {
-			log.Printf("[Clerk Webhook] Error syncing user: %v", err)
-		}
-	case "user.deleted":
-		if userId, ok := event.Data["id"].(string); ok {
-			dbUserID := services.ClerkIDToUUID(userId)
-			if err := db.DB.Where(idQuery, dbUserID).Delete(&models.User{}).Error; err != nil {
-				log.Printf("[Clerk Webhook] Error deleting user: %v", err)
-			} else {
-				middleware.InvalidateRolePermsCache(dbUserID)
-				getUserRepo().InvalidateCache(dbUserID)
-			}
-		}
-	default:
-		log.Printf("[Clerk Webhook] Unhandled event type: %s", sanitizeLog(event.Type))
-	}
-}
-
-func verifyWebhookHeaders(c *gin.Context, body []byte) error {
-	svixID := c.GetHeader("svix-id")
-	svixTimestamp := c.GetHeader("svix-timestamp")
-	svixSignature := c.GetHeader("svix-signature")
-
-	if svixID == "" || svixTimestamp == "" || svixSignature == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing Svix webhook headers"})
-		return fmt.Errorf("missing headers")
-	}
-
-	if err := verifyWebhookTimestamp(svixTimestamp); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return err
-	}
-
-	return verifyWebhookSignature(c, body, svixID, svixTimestamp, svixSignature)
-}
-
-func verifyWebhookTimestamp(svixTimestamp string) error {
-	ts, err := strconv.ParseInt(svixTimestamp, 10, 64)
-	if err != nil {
-		return fmt.Errorf("Invalid svix-timestamp")
-	}
-	if time.Now().Unix()-ts > 180 {
-		return fmt.Errorf("Webhook timestamp too old")
-	}
-	return nil
-}
-
-func verifyWebhookSignature(c *gin.Context, body []byte, svixID, svixTimestamp, svixSignature string) error {
-	secret := config.Load().ClerkWebhookSecret
-	if secret == "" {
-		env := config.Load().Environment
-		if env == "development" || env == "test" || env == "" {
-			log.Println("[Clerk Webhook] WARNING: CLERK_WEBHOOK_SECRET not set, skipping verification (dev only)")
-			return nil
-		}
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Webhook verification not configured"})
-		return fmt.Errorf("CLERK_WEBHOOK_SECRET not set in non-dev environment: %s", env)
-	}
-
-	signedContent := svixID + "." + svixTimestamp + "." + string(body)
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(signedContent))
-	expected := mac.Sum(nil)
-
-	for _, sig := range strings.Split(svixSignature, " ") {
-		parts := strings.SplitN(sig, ",", 2)
-		if len(parts) != 2 || parts[0] != "v1" {
-			continue
-		}
-		got, err := base64.StdEncoding.DecodeString(parts[1])
-		if err != nil {
-			continue
-		}
-		if hmac.Equal(expected, got) {
-			return nil
-		}
-	}
-
-	c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid webhook signature"})
-	return fmt.Errorf("invalid signature")
-}
-
-func syncUserFromClerk(clerkData map[string]interface{}) error {
-	dataBytes, err := json.Marshal(clerkData)
-	if err != nil {
-		return err
-	}
-	var clerkUser services.ClerkUserResponse
-	if err := json.Unmarshal(dataBytes, &clerkUser); err != nil {
-		return err
-	}
-	_, err = services.SyncUserFromClerkResponse(&clerkUser)
-	return err
-}
-
 func EnsureUserExists(userId, email string) error {
-	dbUserID := services.ClerkIDToUUID(userId)
 	var user models.User
-	err := db.DB.Where("clerk_id = ? OR id = ?", userId, dbUserID).First(&user).Error
+	err := db.DB.Where("id = ?", userId).First(&user).Error
 
 	if err == nil {
 		return nil
 	}
 
 	newUser := models.User{
-		ID:            dbUserID,
-		ClerkID:       &userId,
+		ID:            userId,
 		Email:         email,
 		EmailVerified: false,
 		Status:        models.StatusActive,
@@ -1104,7 +938,7 @@ func EnsureUserExists(userId, email string) error {
 		return err
 	}
 
-	log.Printf("[Auth] Auto-created user: %s (%s)", sanitizeLog(dbUserID), sanitizeLog(email))
+	log.Printf("[Auth] Auto-created user: %s (%s)", sanitizeLog(userId), sanitizeLog(email))
 	return nil
 }
 

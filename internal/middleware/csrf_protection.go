@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -114,14 +115,17 @@ func setCSRFCookie(c *gin.Context, token string) {
 	// while still ensuring production deployments using HTTPS get Secure cookies.
 	secure := c.Request.TLS != nil
 
-	// Explicitly set SameSite to Lax for cross-site request forgery protection
+	// Explicitly set SameSite to Lax for cross-site request forgery protection.
+	// Honor a configured COOKIE_DOMAIN so the cookie is correctly scoped in
+	// subdomain deployments (e.g. api.example.com vs app.example.com).
 	c.SetSameSite(http.SameSiteLaxMode)
+	cookieDomain := os.Getenv("COOKIE_DOMAIN")
 	c.SetCookie(
 		csrfCookieName,
 		token,
 		int(24*time.Hour.Seconds()), // 24 hours
 		"/",
-		"",
+		cookieDomain,
 		secure, // Secure in production
 		false,  // NOSONAR: NOT HttpOnly - allows JS to read for Double Submit Cookie pattern
 	)
@@ -137,10 +141,23 @@ func isValidCSRFToken(token string) bool {
 	return true
 }
 
-// csrfSkipPaths are paths that bypass CSRF protection
+// csrfSkipPaths are paths that bypass CSRF protection.
+// These are auth handshake endpoints where the caller cannot yet possess a
+// valid CSRF token (e.g. they just opened the app, or they are sending a
+// request that establishes their identity).
+// Webhooks and external callbacks use their own signing-secret authentication
+// (Paymob HMAC, etc.) and never carry browser cookies/headers.
 var csrfSkipPaths = []string{
 	"/api/webhooks/",
 	"/api/payments/paymob/callback",
+	"/api/auth/login",
+	"/api/auth/register",
+	"/api/auth/refresh",
+	"/api/auth/logout",
+	"/api/auth/2fa/",
+	"/api/auth/mfa/",
+	"/api/auth/change-password",
+	"/api/auth/sessions",
 }
 
 // isSafeMethod checks if the HTTP method is read-only
@@ -170,6 +187,41 @@ func shouldEnforceCSRF(c *gin.Context) bool {
 	return strings.Contains(accept, "text/html") || strings.Contains(accept, "application/xhtml+xml")
 }
 
+// validateOrigin checks if the origin or referer header matches the host or CORS origins.
+func validateOrigin(c *gin.Context) bool {
+	origin := c.GetHeader("Origin")
+	if origin == "" {
+		origin = c.GetHeader("Referer")
+	}
+	if origin == "" {
+		return true // Fallback for client requests without headers
+	}
+
+	parsedOrigin, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+
+	host := c.Request.Host
+	originHost := parsedOrigin.Host
+
+	if originHost == host {
+		return true
+	}
+
+	corsOrigins := os.Getenv("CORS_ORIGINS")
+	for _, o := range strings.Split(corsOrigins, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			if parsed, err := url.Parse(o); err == nil && parsed.Host == originHost {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // CSRFMiddleware returns a configured CSRF protection middleware
 func CSRFMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -188,6 +240,13 @@ func CSRFMiddleware() gin.HandlerFunc {
 
 		// Apply CSRF protection for state-changing requests in production
 		if shouldEnforceCSRF(c) {
+			if !validateOrigin(c) {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+					"error": "CSRF origin validation failed",
+				})
+				return
+			}
+
 			if !validateCSRFToken(c) {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 					"error": "CSRF token validation failed",

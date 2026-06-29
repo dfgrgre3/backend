@@ -201,7 +201,7 @@ func (s *Service) publishEvent(ctx context.Context, event UserEvent) {
 
 func isValidRole(role Role) bool {
 	switch role {
-	case RoleAdmin, RoleSuperAdmin, RoleTeacher, RoleStudent, RoleModerator:
+	case RoleAdmin, RoleSuperAdmin, RoleTeacher, RoleStudent, RoleModerator, RoleParent, RoleSupport:
 		return true
 	default:
 		return false

@@ -70,23 +70,23 @@ type LiveEvent struct {
 }
 
 type Book struct {
-	ID          string          `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	Title       string          `gorm:"not null;column:title" json:"title"`
-	Author      string          `gorm:"column:author" json:"author"`
-	Description string          `gorm:"column:description" json:"description"`
-	CoverUrl    string          `gorm:"column:cover_url" json:"coverUrl"`
-	DownloadUrl string          `gorm:"column:download_url" json:"downloadUrl"`
-	SubjectID   *string         `gorm:"index;type:uuid;column:subject_id;constraint:OnDelete:SET NULL" json:"subjectId"`
-	Subject     *Subject        `gorm:"foreignKey:SubjectID" json:"subject,omitempty"`
-	Price       float64         `gorm:"default:0;column:price" json:"price"`
-	IsFree      bool            `gorm:"default:true;column:is_free" json:"isFree"`
-	Rating      float64         `gorm:"default:0;column:rating" json:"rating"`
-	Views       int             `gorm:"default:0;column:views" json:"views"`
-	Downloads   int             `gorm:"default:0;column:downloads" json:"downloads"`
-	Tags        PGStringArray   `gorm:"type:text[];column:tags" json:"tags"`
-	CreatedAt   time.Time       `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt   time.Time       `gorm:"column:updated_at" json:"updatedAt"`
-	DeletedAt   gorm.DeletedAt  `gorm:"index;column:deleted_at" json:"-"`
+	ID          string         `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	Title       string         `gorm:"not null;column:title" json:"title"`
+	Author      string         `gorm:"column:author" json:"author"`
+	Description string         `gorm:"column:description" json:"description"`
+	CoverUrl    string         `gorm:"column:cover_url" json:"coverUrl"`
+	DownloadUrl string         `gorm:"column:download_url" json:"downloadUrl"`
+	SubjectID   *string        `gorm:"index;type:uuid;column:subject_id;constraint:OnDelete:SET NULL" json:"subjectId"`
+	Subject     *Subject       `gorm:"foreignKey:SubjectID" json:"subject,omitempty"`
+	Price       float64        `gorm:"default:0;column:price" json:"price"`
+	IsFree      bool           `gorm:"default:true;column:is_free" json:"isFree"`
+	Rating      float64        `gorm:"default:0;column:rating" json:"rating"`
+	Views       int            `gorm:"default:0;column:views" json:"views"`
+	Downloads   int            `gorm:"default:0;column:downloads" json:"downloads"`
+	Tags        PGStringArray  `gorm:"type:text[];column:tags" json:"tags"`
+	CreatedAt   time.Time      `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt   time.Time      `gorm:"column:updated_at" json:"updatedAt"`
+	DeletedAt   gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
 }
 
 // Event represents platform events (workshops, webinars, competitions, etc.)

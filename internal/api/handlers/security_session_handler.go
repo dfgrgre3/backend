@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
-	"thanawy-backend/internal/services"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,15 +23,15 @@ func GetActiveSessions(c *gin.Context) {
 	userID, _ := c.Get("userId")
 	isAdmin := c.GetBool("is_admin")
 
-	query := db.DB.Model(&models.UserSession{}).Where(statusQuery, "active")
+	query := db.DB.Model(&models.UserSession{}).Where("is_active = ?", true)
 
 	// Regular users can only see their own sessions
 	if !isAdmin {
-		query = query.Where(userIDQuery, userID)
+		query = query.Where("user_id = ?", userID)
 	}
 
 	var sessions []models.UserSession
-	if err := query.Order("last_active_at DESC").Find(&sessions).Error; err != nil {
+	if err := query.Order("last_accessed DESC").Find(&sessions).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sessions"})
 		return
 	}
@@ -57,19 +55,17 @@ func GetActiveSessions(c *gin.Context) {
 // @Router /api/admin/security/sessions/{id}/revoke [post]
 func RevokeSession(c *gin.Context) {
 	sessionID := c.Param("id")
-	adminID, _ := c.Get("userId")
 
 	var session models.UserSession
-	if err := db.DB.First(&session, idQuery, sessionID).Error; err != nil {
+	if err := db.DB.First(&session, "id = ?", sessionID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
 		return
 	}
 
+	session.IsActive = false
 	session.Status = "revoked"
 	now := time.Now()
 	session.RevokedAt = &now
-	adminIDStr := adminID.(string)
-	session.RevokedBy = &adminIDStr
 
 	if err := db.DB.Save(&session).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revoke session"})
@@ -94,14 +90,14 @@ func RevokeSession(c *gin.Context) {
 // @Router /api/admin/security/sessions/revoke-others [post]
 func RevokeOtherSessions(c *gin.Context) {
 	userID, _ := c.Get("userId")
-	currentSessionID := c.GetString("session_id")
+	currentSessionID := c.GetString("jti")
 
 	result := db.DB.Model(&models.UserSession{}).
-		Where("user_id = ? AND id != ? AND status = ?", userID, currentSessionID, "active").
+		Where("user_id = ? AND id != ? AND is_active = ?", userID, currentSessionID, true).
 		Updates(map[string]interface{}{
+			"is_active":  false,
 			"status":     "revoked",
 			"revoked_at": time.Now(),
-			"revoked_by": userID,
 		})
 
 	middleware.LogCriticalOperation(c, "sessions_revoked_others", map[string]interface{}{
@@ -127,27 +123,14 @@ func RevokeOtherSessions(c *gin.Context) {
 // @Router /api/admin/security/sessions/user/{userId}/revoke-all [post]
 func RevokeUserSessions(c *gin.Context) {
 	userID := c.Param("userId")
-	adminID, _ := c.Get("userId")
 
 	result := db.DB.Model(&models.UserSession{}).
-		Where("user_id = ? AND status = ?", userID, "active").
+		Where("user_id = ? AND is_active = ?", userID, true).
 		Updates(map[string]interface{}{
+			"is_active":  false,
 			"status":     "revoked",
 			"revoked_at": time.Now(),
-			"revoked_by": adminID,
 		})
-
-	// [إصلاح أمني]: مزامنة إلغاء الجلسات الفوري مع Clerk لمنع المستخدم المطرود من الاستمرار بالوصول
-	var user models.User
-	if err := db.DB.Select("email").First(&user, "id = ?", userID).Error; err == nil && user.Email != "" {
-		go func(email string) {
-			if err := services.RevokeClerkUserSessions(email); err != nil {
-				log.Printf("[Clerk Sync] Failed to revoke Clerk sessions for %s: %v", email, err)
-			} else {
-				log.Printf("[Clerk Sync] Successfully revoked all Clerk sessions for %s", email)
-			}
-		}(user.Email)
-	}
 
 	middleware.LogCriticalOperation(c, "user_sessions_revoked", map[string]interface{}{
 		"target_user":   userID,
@@ -177,9 +160,9 @@ func GetSessionStats(c *gin.Context) {
 		UniqueDevices int64 `json:"uniqueDevices"`
 	}
 
-	db.DB.Model(&models.UserSession{}).Where(statusQuery, "active").Count(&stats.TotalActive)
-	db.DB.Model(&models.UserSession{}).Where(statusQuery, "expired").Count(&stats.TotalExpired)
-	db.DB.Model(&models.UserSession{}).Where(statusQuery, "active").Select("COUNT(DISTINCT device_id)").Scan(&stats.UniqueDevices)
+	db.DB.Model(&models.UserSession{}).Where("is_active = ?", true).Count(&stats.TotalActive)
+	db.DB.Model(&models.UserSession{}).Where("is_active = ?", false).Count(&stats.TotalExpired)
+	db.DB.Model(&models.UserSession{}).Where("is_active = ?", true).Select("COUNT(DISTINCT user_agent)").Scan(&stats.UniqueDevices)
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": stats,

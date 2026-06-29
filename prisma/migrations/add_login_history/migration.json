@@ -1,0 +1,25 @@
+{
+  "version": "7.8.0",
+  "steps": [
+    {
+      "tag": "CreateTable",
+      "table": "login_history",
+      "columns": [
+        { "name": "id", "type": "UUID", "default": "gen_random_uuid()", "primaryKey": true },
+        { "name": "user_id", "type": "UUID", "isRequired": true },
+        { "name": "ip", "type": "VARCHAR(45)", "isRequired": false },
+        { "name": "user_agent", "type": "TEXT", "isRequired": false },
+        { "name": "status", "type": "VARCHAR(20)", "isRequired": true },
+        { "name": "reason", "type": "VARCHAR(255)", "isRequired": false },
+        { "name": "country", "type": "VARCHAR(100)", "isRequired": false },
+        { "name": "created_at", "type": "TIMESTAMPTZ(6)", "default": "now()", "isRequired": false }
+      ]
+    },
+    {
+      "tag": "CreateIndex",
+      "table": "login_history",
+      "columns": ["user_id", "created_at"],
+      "name": "idx_login_history_user_created"
+    }
+  ]
+}

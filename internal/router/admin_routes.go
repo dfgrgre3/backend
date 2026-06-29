@@ -48,12 +48,13 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/ai", handlers.AdminAIPost)
 
 		// ---------------------------------------------------------------
-		// Sensitive operations: ADMIN and SUPER_ADMIN only
+		// Sensitive operations: ADMIN and SUPER_ADMIN only.
+		// Created as a sub-group of `admin` so it inherits Auth() +
+		// AdminOrModerator() + StrictRBAC() automatically; we then layer
+		// AdminRequired() on top to ALSO block MODERATOR.
 		// ---------------------------------------------------------------
-		sensitive := router.Group("/api/admin")
-		sensitive.Use(middleware.Auth())
-		sensitive.Use(middleware.AdminRequired()) // blocks MODERATOR
-		sensitive.Use(middleware.StrictRBAC())
+		sensitive := admin.Group("")
+		sensitive.Use(middleware.AdminRequired()) // additional check: blocks MODERATOR
 
 		// Impersonation (admin-only)
 		sensitive.POST("/reset-circuit-breaker", handlers.AdminResetCircuitBreaker)

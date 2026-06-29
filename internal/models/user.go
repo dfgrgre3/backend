@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,12 +13,15 @@ import (
 
 type UserRole string
 
+// Role constants are now primarily defined in permissions.go
 const (
 	RoleStudent    UserRole = "STUDENT"
 	RoleTeacher    UserRole = "TEACHER"
 	RoleModerator  UserRole = "MODERATOR"
 	RoleAdmin      UserRole = "ADMIN"
 	RoleSuperAdmin UserRole = "SUPER_ADMIN"
+	RoleParent     UserRole = "PARENT"
+	RoleSupport    UserRole = "SUPPORT"
 )
 
 type UserStatus string
@@ -32,7 +34,6 @@ const (
 
 type User struct {
 	ID           string         `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	ClerkID      *string        `gorm:"uniqueIndex;column:clerk_id" json:"clerkId"`
 	Email        string         `gorm:"uniqueIndex;not null" json:"email"`
 	Name         *string        `gorm:"index" json:"name"`
 	Username     *string        `gorm:"uniqueIndex" json:"username"`
@@ -54,7 +55,7 @@ type User struct {
 	Section       *string `gorm:"column:section" json:"section"`
 	Bio           *string `gorm:"column:bio" json:"bio"`
 
-	// Add missing fields found in DB
+	// Profile extended
 	WakeUpTime                *string    `gorm:"column:wake_up_time" json:"wakeUpTime"`
 	SleepTime                 *string    `gorm:"column:sleep_time" json:"sleepTime"`
 	FocusStrategy             string     `gorm:"default:'POMODORO';column:focus_strategy" json:"focusStrategy"`
@@ -90,14 +91,14 @@ type User struct {
 	TotalXP int `gorm:"default:0;index" json:"totalXP"`
 	Level   int `gorm:"default:1;index" json:"level"`
 
-	// Gamification (stats - synced periodically or on events)
+	// Gamification (stats)
 	CurrentStreak  int `gorm:"default:0" json:"currentStreak"`
 	LongestStreak  int `gorm:"default:0" json:"longestStreak"`
-	TotalStudyTime int `gorm:"default:0" json:"totalStudyTime"` // in minutes
+	TotalStudyTime int `gorm:"default:0" json:"totalStudyTime"`
 	TasksCompleted int `gorm:"default:0" json:"tasksCompleted"`
 	ExamsPassed    int `gorm:"default:0" json:"examsPassed"`
 
-	// Multi-layer XP system
+	// Multi-layer XP
 	StudyXP     int `gorm:"default:0" json:"studyXP"`
 	TaskXP      int `gorm:"default:0" json:"taskXP"`
 	ExamXP      int `gorm:"default:0" json:"examXP"`
@@ -112,7 +113,7 @@ type User struct {
 	Balance     float64 `gorm:"default:0" json:"balance"`
 	AiCredits   int     `gorm:"default:0" json:"aiCredits"`
 	ExamCredits int     `gorm:"default:0" json:"examCredits"`
-	Version     int     `gorm:"default:1" json:"-"` // Optimistic locking for balances
+	Version     int     `gorm:"default:1" json:"-"`
 
 	// Subscriptions
 	ActiveSubscriptionID  *string    `gorm:"index;type:uuid;column:active_subscription_id" json:"activeSubscriptionId"`
@@ -122,6 +123,7 @@ type User struct {
 	LastLogin            *time.Time `gorm:"index" json:"lastLogin"`
 	TwoFactorEnabled     bool       `gorm:"default:false" json:"twoFactorEnabled"`
 	TwoFactorSecret      *string    `json:"-"`
+	BackupCodes          string     `gorm:"column:backup_codes" json:"-"`
 	ResetPasswordToken   *string    `gorm:"index" json:"-"`
 	ResetPasswordExpires *time.Time `json:"-"`
 	MagicLinkToken       *string    `gorm:"index" json:"-"`
@@ -144,19 +146,6 @@ type User struct {
 	WalletTransactions []WalletTransaction `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 }
 
-func permissionGrantMatches(grant, required string) bool {
-	if grant == required || grant == PermAdminBypass {
-		return true
-	}
-	if grant == "*:manage" {
-		return strings.HasSuffix(required, ":manage")
-	}
-	if len(grant) > 2 && strings.HasSuffix(grant, ":*") {
-		mod := grant[:len(grant)-2]
-		return strings.HasPrefix(required, mod+":")
-	}
-	return false
-}
 
 func (u *User) HasPermission(permission string) bool {
 	effective := u.GetEffectivePermissions()
@@ -178,7 +167,7 @@ func (u *User) GetEffectivePermissions() []string {
 		return perms
 	}
 
-	// Add default permissions based on role if not already present
+	// Add default permissions based on role
 	defaults := GetDefaultPermissions(u.Role)
 	for _, dp := range defaults {
 		if !slices.Contains(perms, dp) {
@@ -191,42 +180,10 @@ func (u *User) GetEffectivePermissions() []string {
 
 func IsValidUserRole(role UserRole) bool {
 	switch role {
-	case RoleStudent, RoleTeacher, RoleModerator, RoleAdmin, RoleSuperAdmin:
+	case RoleStudent, RoleParent, RoleTeacher, RoleSupport, RoleModerator, RoleAdmin, RoleSuperAdmin:
 		return true
 	}
 	return false
-}
-
-func GetDefaultPermissions(role UserRole) []string {
-	switch role {
-	case RoleAdmin, RoleSuperAdmin:
-		return []string{PermAdminBypass}
-	case RoleModerator:
-		return []string{
-			PermDashboardView, PermAnalyticsView, PermReportsView,
-			PermUsersView, PermStudentsView, PermTeachersView,
-			PermSubjectsView, PermExamsView, PermBlogView,
-			PermForumView, PermForumModerate, PermCommentsView, PermCommentsModerate,
-			PermEventsView, PermAnnouncementsView, PermAuditLogsView,
-			PermLiveMonitorView, PermMarketingView,
-		}
-	case RoleTeacher:
-		return []string{
-			PermDashboardView, PermAnalyticsView,
-			PermStudentsView, PermSubjectsView, PermOwnSubjectsManage,
-			PermBooksView, PermOwnBooksManage, PermResourcesView, PermOwnResourcesManage,
-			PermExamsView, PermOwnExamsManage, PermChallengesView, PermOwnChallengesManage,
-		}
-	case RoleStudent:
-		return []string{
-			PermDashboardView, PermAnalyticsView,
-			PermStudentsView, PermSubjectsView,
-			PermBooksView, PermResourcesView,
-			PermExamsView, PermChallengesView,
-		}
-	default:
-		return []string{}
-	}
 }
 
 // GetName returns the user's name or a default value if not set
@@ -247,6 +204,10 @@ func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
 	}
 	return
 }
+
+// ─────────────────────────────────────────────
+//  JSONStringArray Type
+// ─────────────────────────────────────────────
 
 type JSONStringArray []string
 

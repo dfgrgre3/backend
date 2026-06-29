@@ -37,7 +37,13 @@ func StartScheduler() {
 		return
 	}
 
-	log.Println("[Scheduler] Periodic CQRS view refresh scheduled every 5 minutes")
+	// Purge expired sessions every 1 hour
+	if _, err := scheduler.Register("@every 1h", asynq.NewTask(TypeSessionCleanup, []byte("{}"))); err != nil {
+		log.Printf("Failed to register Session cleanup task: %v", err)
+		return
+	}
+
+	log.Println("[Scheduler] Periodic CQRS view refresh (5m) and Session cleanup (1h) scheduled")
 	if err := scheduler.Start(); err != nil {
 		log.Printf("Failed to start scheduler: %v", err)
 	}

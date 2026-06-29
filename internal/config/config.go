@@ -10,19 +10,21 @@ import (
 	"github.com/google/uuid"
 )
 
-var GlobalConfig *Config
-
 type Config struct {
 	DatabaseURL          string
 	DatabaseWriteURL     string
 	DatabaseReadReplicas []string
-	JWTSecret          string
-	JWTRefreshSecret   string
-	Environment        string
-	BCryptCost         int
+	Environment          string
+	BCryptCost           int
+
+	// JWT Token validation configuration
+	JWTSecretKey string
+	JWTIssuerURL string
+	JWTJWKSURL   string
+	JWTClientID  string
 
 	// Storage Configuration
-	StorageType string // "s3" (Cloudflare R2 / AWS S3 / MinIO) or "local"
+	StorageType string // "s3" (Cloudflare R2 / AWS S3 / MinIO)
 	S3          struct {
 		Endpoint  string
 		AccessKey string
@@ -32,17 +34,7 @@ type Config struct {
 		UseSSL    bool
 		PublicURL string
 	}
-	LocalStorage struct {
-		BaseDir   string
-		PublicURL string
-	}
-	ClerkWebhookSecret string
-	ClerkPEMPublicKey  string
-	ClerkSecretKey     string
-	ClerkJWKSURL       string
-	ClerkIssuerURL     string
-	ClerkClientID      string
-	InternalIPRanges   []string
+	InternalIPRanges    []string
 	ImpersonationSecret string
 
 	// HTTP Server Timeouts
@@ -73,50 +65,24 @@ type Config struct {
 	AppVersion string
 }
 
+var GlobalConfig *Config
+
 func Load() *Config {
 	dbURL := getEnv("DATABASE_URL", "")
-	jwtSecret := getEnv("JWT_SECRET", "")
-	jwtRefreshSecret := getEnv("JWT_REFRESH_SECRET", "")
 	environment := getEnv("NODE_ENV", "development")
-
-	if environment == "production" {
-		if jwtSecret == "" || jwtSecret == "default_secret" || jwtSecret == "dev_only_secret_change_in_production" {
-			log.Fatal("FATAL: JWT_SECRET MUST be set to a secure, unique value in production environments.")
-		}
-		if len(jwtSecret) < 32 {
-			log.Fatal("FATAL: JWT_SECRET must be at least 32 characters long for production security.")
-		}
-		if jwtRefreshSecret == "" {
-			log.Fatal("FATAL: JWT_REFRESH_SECRET must be set to a secure, unique value in production environments.")
-		}
-		if len(jwtRefreshSecret) < 32 {
-			log.Fatal("FATAL: JWT_REFRESH_SECRET must be at least 32 characters long for production security.")
-		}
-	} else {
-		if jwtSecret == "" {
-			log.Println("WARNING: JWT_SECRET is not set. Using insecure default for development only.")
-			jwtSecret = "dev_only_secret_change_in_production_" + generateRandomString(16)
-		}
-		if jwtRefreshSecret == "" {
-			log.Println("WARNING: JWT_REFRESH_SECRET is not set. Using fallback to JWT_SECRET for development only.")
-			jwtRefreshSecret = jwtSecret + "_refresh"
-		}
-	}
 
 	c := &Config{
 		DatabaseURL:          dbURL,
 		DatabaseWriteURL:     getEnv("DATABASE_WRITE_DSN", ""),
 		DatabaseReadReplicas: parseReplicas(getEnv("DATABASE_REPLICAS", "")),
-		JWTSecret:            jwtSecret,
-		JWTRefreshSecret:     jwtRefreshSecret,
 		Environment:          environment,
 		BCryptCost:           getEnvInt("BCRYPT_COST", 12),
 		StorageType:          getEnv("STORAGE_TYPE", "s3"),
+		JWTSecretKey:         getEnv("JWT_SECRET_KEY", getEnv("JWT_SECRET", "")),
+		JWTIssuerURL:         getEnv("JWT_ISSUER_URL", ""),
+		JWTJWKSURL:           getEnv("JWT_JWKS_URL", ""),
+		JWTClientID:          getEnv("JWT_CLIENT_ID", ""),
 	}
-
-	// Local Storage Config
-	c.LocalStorage.BaseDir = getEnv("LOCAL_STORAGE_BASE_DIR", "uploads")
-	c.LocalStorage.PublicURL = getEnv("LOCAL_STORAGE_PUBLIC_URL", "http://localhost:8082/uploads")
 
 	// S3 Storage Config
 	c.S3.Endpoint = getEnv("S3_ENDPOINT", "")
@@ -127,49 +93,20 @@ func Load() *Config {
 	c.S3.UseSSL = getEnv("S3_USE_SSL", "true") == "true"
 	c.S3.PublicURL = getEnv("S3_PUBLIC_URL", "")
 
-	// Check if S3 credentials are placeholders or empty, and fallback to local
+	// Check if S3 credentials are placeholders or empty.
 	isS3Placeholder := c.S3.AccessKey == "" ||
 		strings.Contains(strings.ToLower(c.S3.AccessKey), "placeholder") ||
 		strings.Contains(strings.ToLower(c.S3.AccessKey), "your-")
 
 	if c.StorageType == "s3" && isS3Placeholder {
-		if environment == "production" {
-			// CRITICAL: Refuse to start in production without valid cloud storage.
-			// LocalStorage on a container/pod is ephemeral — all uploads would be lost
-			// on every container restart, redeployment, or autoscaling event.
-			log.Fatal("FATAL: S3_ACCESS_KEY is not set or is a placeholder in production. " +
-				"LocalStorage is NOT allowed in production (stateless cloud architecture). " +
-				"Set S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET env vars.")
-		}
-		log.Println("WARNING: S3 credentials are placeholders or empty. Falling back to local storage (dev only).")
-		c.StorageType = "local"
+		log.Fatal("FATAL: Cloud storage is required. Set S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET env vars.")
 	}
 
-	// Extra safety: explicitly block local storage in production even if STORAGE_TYPE is set directly.
-	if c.StorageType == "local" && environment == "production" {
-		log.Fatal("FATAL: STORAGE_TYPE=local is not allowed in production. " +
-			"All uploads must use cloud storage (S3/Supabase) to ensure data durability.")
+	if c.StorageType == "local" {
+		log.Fatal("FATAL: STORAGE_TYPE=local is not allowed. Use cloud storage only.")
 	}
 
-	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SIGNING_SECRET", getEnv("CLERK_WEBHOOK_SECRET", ""))
-	c.ClerkPEMPublicKey = getEnv("CLERK_PEM_PUBLIC_KEY", "")
-	c.ClerkSecretKey = getEnv("CLERK_SECRET_KEY", "")
-	c.ClerkJWKSURL = getEnv("CLERK_JWKS_URL", "")
-	c.ClerkIssuerURL = getEnv("CLERK_ISSUER_URL", "")
-	c.ClerkClientID = getEnv("CLERK_CLIENT_ID", "")
 	c.ImpersonationSecret = getEnv("IMPERSONATION_SECRET", "")
-
-	if environment == "production" {
-		if c.ClerkSecretKey == "" {
-			log.Fatal("FATAL: CLERK_SECRET_KEY must be set in production.")
-		}
-		if c.ClerkWebhookSecret == "" {
-			log.Fatal("FATAL: CLERK_WEBHOOK_SIGNING_SECRET or CLERK_WEBHOOK_SECRET must be set in production.")
-		}
-		if c.ClerkPEMPublicKey == "" && c.ClerkJWKSURL == "" {
-			log.Fatal("FATAL: Either CLERK_PEM_PUBLIC_KEY or CLERK_JWKS_URL must be set in production.")
-		}
-	}
 
 	// Stability & Production configurations
 	c.HTTPReadTimeout = getEnv("HTTP_READ_TIMEOUT", "10s")
@@ -192,7 +129,14 @@ func Load() *Config {
 	c.RateLimitRequests = getEnvInt("RATE_LIMIT_REQUESTS", 200)
 	c.RateLimitWindow = getEnv("RATE_LIMIT_WINDOW", "1m")
 
-	c.CookieSecure = getEnv("COOKIE_SECURE", "false") == "true"
+	// Cookie Security: default to secure in production to prevent
+	// session/CSRF cookies from being transmitted over plain HTTP.
+	// Explicit COOKIE_SECURE=false can be set for local HTTP development.
+	cookieSecureDefault := "false"
+	if environment == "production" {
+		cookieSecureDefault = "true"
+	}
+	c.CookieSecure = getEnv("COOKIE_SECURE", cookieSecureDefault) == "true"
 	c.CookieSameSite = getEnv("COOKIE_SAME_SITE", "lax")
 	c.CookieDomain = getEnv("COOKIE_DOMAIN", "")
 
@@ -219,41 +163,31 @@ func Load() *Config {
 		c.InternalIPRanges = defaultRanges
 	}
 
+	GlobalConfig = c
 	return c
 }
 
 // LoadSafe returns a Config without calling log.Fatal.
-// Instead, it returns the configuration and an error if JWT_SECRET is invalid.
-// This is used by the Vercel serverless handler to avoid crashing on cold start.
 func LoadSafe() (*Config, error) {
 	dbURL := getEnv("DATABASE_URL", "")
-	jwtSecret := getEnv("JWT_SECRET", "")
 	environment := getEnv("NODE_ENV", "development")
-
-	if environment == "production" {
-		if jwtSecret == "" || jwtSecret == "default_secret" || jwtSecret == "dev_only_secret_change_in_production" {
-			return nil, fmt.Errorf("JWT_SECRET must be set to a secure, unique value in production environments")
-		}
-		if len(jwtSecret) < 32 {
-			return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters long for production security")
-		}
-	} else if jwtSecret == "" {
-		log.Println("WARNING: JWT_SECRET is not set. Using insecure default for development only.")
-		jwtSecret = "dev_only_secret_change_in_production_" + generateRandomString(16)
-	}
 
 	c := &Config{
 		DatabaseURL:          dbURL,
 		DatabaseWriteURL:     getEnv("DATABASE_WRITE_DSN", ""),
 		DatabaseReadReplicas: parseReplicas(getEnv("DATABASE_REPLICAS", "")),
-		JWTSecret:            jwtSecret,
 		Environment:          environment,
+		BCryptCost:           getEnvInt("BCRYPT_COST", 12),
 		StorageType:          getEnv("STORAGE_TYPE", "s3"),
+		JWTSecretKey:         getEnv("JWT_SECRET_KEY", getEnv("JWT_SECRET", "")),
+		JWTIssuerURL:         getEnv("JWT_ISSUER_URL", ""),
+		JWTJWKSURL:           getEnv("JWT_JWKS_URL", ""),
+		JWTClientID:          getEnv("JWT_CLIENT_ID", ""),
 	}
 
-	// Local Storage Config
-	c.LocalStorage.BaseDir = getEnv("LOCAL_STORAGE_BASE_DIR", "uploads")
-	c.LocalStorage.PublicURL = getEnv("LOCAL_STORAGE_PUBLIC_URL", "http://localhost:8082/uploads")
+	if c.JWTSecretKey != "" && c.JWTIssuerURL == "" {
+		return nil, fmt.Errorf("JWT_ISSUER_URL is required when JWT_SECRET_KEY is set")
+	}
 
 	c.S3.Endpoint = getEnv("S3_ENDPOINT", "")
 	c.S3.AccessKey = getEnv("S3_ACCESS_KEY", "")
@@ -263,46 +197,20 @@ func LoadSafe() (*Config, error) {
 	c.S3.UseSSL = getEnv("S3_USE_SSL", "true") == "true"
 	c.S3.PublicURL = getEnv("S3_PUBLIC_URL", "")
 
-	// Check if S3 credentials are placeholders or empty, and fallback to local
+	// Check if S3 credentials are placeholders or empty.
 	isS3Placeholder := c.S3.AccessKey == "" ||
 		strings.Contains(strings.ToLower(c.S3.AccessKey), "placeholder") ||
 		strings.Contains(strings.ToLower(c.S3.AccessKey), "your-")
 
 	if c.StorageType == "s3" && isS3Placeholder {
-		if environment == "production" {
-			return nil, fmt.Errorf("FATAL: S3_ACCESS_KEY is not set or is a placeholder in production. " +
-				"LocalStorage is NOT allowed in production (stateless cloud architecture). " +
-				"Set S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET env vars")
-		}
-		log.Println("WARNING: S3 credentials are placeholders or empty. Falling back to local storage (dev only).")
-		c.StorageType = "local"
+		return nil, fmt.Errorf("cloud storage is required: set S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET env vars")
 	}
 
-	// Extra safety: explicitly block local storage in production even if STORAGE_TYPE is set directly.
-	if c.StorageType == "local" && environment == "production" {
-		return nil, fmt.Errorf("FATAL: STORAGE_TYPE=local is not allowed in production. " +
-			"All uploads must use cloud storage (S3/Supabase) to ensure data durability")
+	if c.StorageType == "local" {
+		return nil, fmt.Errorf("STORAGE_TYPE=local is not allowed; use cloud storage only")
 	}
 
-	c.ClerkWebhookSecret = getEnv("CLERK_WEBHOOK_SIGNING_SECRET", getEnv("CLERK_WEBHOOK_SECRET", ""))
-	c.ClerkPEMPublicKey = getEnv("CLERK_PEM_PUBLIC_KEY", "")
-	c.ClerkSecretKey = getEnv("CLERK_SECRET_KEY", "")
-	c.ClerkJWKSURL = getEnv("CLERK_JWKS_URL", "")
-	c.ClerkIssuerURL = getEnv("CLERK_ISSUER_URL", "")
-	c.ClerkClientID = getEnv("CLERK_CLIENT_ID", "")
 	c.ImpersonationSecret = getEnv("IMPERSONATION_SECRET", "")
-
-	if environment == "production" {
-		if c.ClerkSecretKey == "" {
-			return nil, fmt.Errorf("CLERK_SECRET_KEY must be set in production")
-		}
-		if c.ClerkWebhookSecret == "" {
-			return nil, fmt.Errorf("CLERK_WEBHOOK_SIGNING_SECRET or CLERK_WEBHOOK_SECRET must be set in production")
-		}
-		if c.ClerkPEMPublicKey == "" && c.ClerkJWKSURL == "" {
-			return nil, fmt.Errorf("either CLERK_PEM_PUBLIC_KEY or CLERK_JWKS_URL must be set in production")
-		}
-	}
 
 	// Stability & Production configurations
 	c.HTTPReadTimeout = getEnv("HTTP_READ_TIMEOUT", "10s")
@@ -325,7 +233,14 @@ func LoadSafe() (*Config, error) {
 	c.RateLimitRequests = getEnvInt("RATE_LIMIT_REQUESTS", 200)
 	c.RateLimitWindow = getEnv("RATE_LIMIT_WINDOW", "1m")
 
-	c.CookieSecure = getEnv("COOKIE_SECURE", "false") == "true"
+	// Cookie Security: default to secure in production to prevent
+	// session/CSRF cookies from being transmitted over plain HTTP.
+	// Explicit COOKIE_SECURE=false can be set for local HTTP development.
+	cookieSecureDefault := "false"
+	if environment == "production" {
+		cookieSecureDefault = "true"
+	}
+	c.CookieSecure = getEnv("COOKIE_SECURE", cookieSecureDefault) == "true"
 	c.CookieSameSite = getEnv("COOKIE_SAME_SITE", "lax")
 	c.CookieDomain = getEnv("COOKIE_DOMAIN", "")
 

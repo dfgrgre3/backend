@@ -43,4 +43,4 @@ EXPOSE 8082
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:8082/health || exit 1
 
-CMD ["./main"]
+CMD ["sh", "-c", "./migrate && ./main"]

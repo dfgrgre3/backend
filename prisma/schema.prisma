@@ -650,7 +650,6 @@ model ForumTopic {
   @@index([is_pinned(sort: Desc), created_at(sort: Desc), id, title, author_id, category_id, views, is_locked], map: "idx_forum_topic_pinned_created_active", where: raw("(deleted_at IS NULL)"))
 }
 
-
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Invoice {
   id             String        @id @db.Uuid
@@ -1388,26 +1387,26 @@ model SubjectReview {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model SubscriptionPlan {
-  id                String              @id @db.Uuid
-  name              String
-  name_ar           String?
-  description       String?
-  descriptionAr     String?
-  price             Decimal             @db.Decimal
-  currency          String              @default("EGP")
-  interval          PlanInterval        @default(MONTHLY)
-  features          String[]            @default([])
-  featuresAr        String[]            @default([])
-  is_active         Boolean             @default(true)
-  level             Int                 @default(0)
-  memberLimit       Int                 @default(1)
-  created_at        DateTime            @default(now())
-  updated_at        DateTime
-  aiMessageLimit    Int?
-  examLimit         Int?
-  extraExamPrice    Float?              @default(0)
-  deleted_at        DateTime?           @db.Timestamptz(6)
-  UserSubscription  UserSubscription[]
+  id               String             @id @db.Uuid
+  name             String
+  name_ar          String?
+  description      String?
+  descriptionAr    String?
+  price            Decimal            @db.Decimal
+  currency         String             @default("EGP")
+  interval         PlanInterval       @default(MONTHLY)
+  features         String[]           @default([])
+  featuresAr       String[]           @default([])
+  is_active        Boolean            @default(true)
+  level            Int                @default(0)
+  memberLimit      Int                @default(1)
+  created_at       DateTime           @default(now())
+  updated_at       DateTime
+  aiMessageLimit   Int?
+  examLimit        Int?
+  extraExamPrice   Float?             @default(0)
+  deleted_at       DateTime?          @db.Timestamptz(6)
+  UserSubscription UserSubscription[]
 
   @@index([is_active], map: "idx_subscription_plan_is_active")
 }
@@ -1678,8 +1677,8 @@ model User {
   subscriptionExpiresAt          DateTime?             @map("subscription_expires_at") @db.Timestamptz(6)
   twoFactorEnabled               Boolean?              @default(false) @map("two_factor_enabled")
   twoFactorSecret                String?               @map("two_factor_secret")
+  backup_codes                   String?               @map("backup_codes")
   archiveReason                  String?               @map("archive_reason")
-  clerkId                        String?               @unique(map: "idx_user_clerk_id") @map("clerk_id") @db.VarChar(255)
   OfflineLesson_User             OfflineLesson[]       @relation("UserOfflineLessons")
   OfflineLesson_Teacher          OfflineLesson[]       @relation("TeacherOfflineLessons")
   BlogPost                       BlogPost[]
@@ -1759,6 +1758,19 @@ model User {
   TwoFactorSetting               TwoFactorSetting?
   SecurityAuditLog               SecurityAuditLog[]
   teacher                        Teacher?
+
+  UserRoleMapping    UserRoleMapping[]
+  AuthSession        AuthSession[]
+  OAuthAccount       OAuthAccount[]
+  VerificationCode   VerificationCode[]
+  LoginHistory       LoginHistory[]
+  Profile            Profile?
+  PasswordResetToken PasswordResetToken[]
+  TwoFactorSecret    TwoFactorSecret?
+  UserPermission     UserPermission[]
+  BackupCode         BackupCode[]
+  SecurityEvent      SecurityEvent[]
+  TrustedDevice      TrustedDevice[]
 
   @@index([id], map: "idx_user_pkey_id")
 }
@@ -1859,6 +1871,9 @@ model UserSession {
   user_id            String    @db.Uuid
   refresh_token      String    @unique(map: "idx_usersession_refresh_token")
   user_agent         String?
+  browser            String?
+  os                 String?
+  country            String?
   ip                 String
   location           String?
   device_type        String?
@@ -1871,8 +1886,12 @@ model UserSession {
   created_at         DateTime? @default(now()) @db.Timestamptz(6)
   updated_at         DateTime? @default(now()) @db.Timestamptz(6)
   deleted_at         DateTime? @db.Timestamptz(6)
-  refresh_token_hash String?   @unique(map: "idx_user_session_refresh_hash", where: raw("(refresh_token_hash IS NOT NULL)"))
-  User               User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_User_Sessions")
+  refresh_token_hash  String?               @unique(map: "idx_user_session_refresh_hash", where: raw("(refresh_token_hash IS NOT NULL)"))
+  fingerprint_hash   String?   @db.VarChar(64)
+  remember_me        Boolean?  @default(false)
+  absolute_expires_at DateTime? @db.Timestamptz(6)
+  User                User                  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_User_Sessions")
+  RefreshTokenArchive RefreshTokenArchive[]
 
   @@index([id, refresh_token_hash, is_active], map: "idx_user_session_id_hash_active")
   @@index([user_id, is_active, last_accessed(sort: Desc)], map: "idx_user_session_user_active_recent", where: raw("(deleted_at IS NULL)"))
@@ -2506,6 +2525,9 @@ enum UserRole {
   ADMIN
   TEACHER
   MODERATOR
+  SUPER_ADMIN
+  PARENT
+  SUPPORT
 }
 
 enum UserStatus {
@@ -2528,4 +2550,310 @@ enum WalletTransactionType {
   REFUND
   REFERRAL_REWARD
   BONUS
+}
+
+// ==========================================
+// NEW AUTHENTICATION & AUTHORIZATION SCHEMA
+// ==========================================
+
+model Role {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique @db.VarChar(50)
+  description String?  @db.Text
+  level       Int      @default(1)
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  RolePermission  RolePermission[]
+  UserRoleMapping UserRoleMapping[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique @db.VarChar(100)
+  module      String   @db.VarChar(50)
+  action      String   @db.VarChar(50)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  RolePermission RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  Role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  Permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRoleMapping {
+  userId     String   @map("user_id") @db.Uuid
+  roleId     String   @map("role_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  assignedBy String?  @map("assigned_by") @db.Uuid
+
+  User User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model AuthSession {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  refreshToken String    @unique @map("refresh_token") @db.VarChar(512)
+  device       String?   @db.VarChar(255)
+  browser      String?   @db.VarChar(255)
+  os           String?   @db.VarChar(255)
+  ip           String?   @db.VarChar(45)
+  country      String?   @db.VarChar(100)
+  isActive     Boolean   @default(true) @map("is_active")
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(6)
+  lastActivity DateTime  @default(now()) @map("last_activity") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  User User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@map("auth_sessions")
+}
+
+model OAuthAccount {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  provider       String    @db.VarChar(50)
+  providerUserId String    @map("provider_user_id") @db.VarChar(255)
+  accessToken    String?   @map("access_token") @db.Text
+  refreshToken   String?   @map("refresh_token") @db.Text
+  expiresAt      DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  email          String?   @db.VarChar(255)
+  avatar_url     String?   @db.VarChar(512)
+  name           String?   @db.VarChar(150)
+  raw_attributes Json?
+
+  User User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@map("oauth_accounts")
+}
+
+model VerificationCode {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  code      String   @db.VarChar(100)
+  type      String   @db.VarChar(50)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  isUsed    Boolean  @default(false) @map("is_used")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  max_attempts      Int?      @default(5)
+  attempt_count     Int?      @default(0)
+  last_attempted_at DateTime? @db.Timestamptz(6)
+
+  User User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, isUsed])
+  @@map("verification_codes")
+}
+
+model LoginHistory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  ip        String?  @db.VarChar(45)
+  userAgent String?  @map("user_agent") @db.Text
+  status    String   @db.VarChar(20)
+  reason    String?  @db.VarChar(255)
+  country   String?  @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  device_fingerprint String?   @db.VarChar(64)
+  suspicious         Boolean?  @default(false)
+  mfa_used           Boolean?  @default(false)
+  city               String?   @db.VarChar(100)
+  region             String?   @db.VarChar(100)
+  isp                String?   @db.VarChar(100)
+
+  User User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("login_history")
+}
+
+model Profile {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String    @unique @map("user_id") @db.Uuid
+  name        String    @db.VarChar(150)
+  avatarUrl   String?   @map("avatar_url") @db.VarChar(512)
+  dateOfBirth DateTime? @map("date_of_birth") @db.Date
+  gender      String?   @db.VarChar(20)
+  bio         String?   @db.Text
+  school      String?   @db.VarChar(150)
+  section     String?   @db.VarChar(50)
+  language    String?   @default("ar") @db.VarChar(10)
+  timezone    String?   @default("Africa/Cairo") @db.VarChar(50)
+  two_factor_method String? @default("none") @db.VarChar(20)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  User User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash") @db.VarChar(64)
+  isUsed    Boolean  @default(false) @map("is_used")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  User User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash, isUsed])
+  @@map("password_reset_tokens")
+}
+
+model RefreshTokenArchive {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId String   @map("session_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash") @db.VarChar(64)
+  isUsed    Boolean  @default(false) @map("is_used")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  UserSession UserSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("refresh_tokens")
+}
+
+model StudentParent {
+  student_id String   @db.Uuid
+  parent_id  String   @db.Uuid
+  created_at DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([student_id, parent_id])
+  @@map("student_parents")
+}
+
+model TwoFactorSecret {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String    @unique @db.Uuid
+  secret        String
+  method        String    @default("app") @db.VarChar(20)
+  phone_number  String?   @db.VarChar(20)
+  is_enabled    Boolean   @default(false)
+  enabled_at    DateTime? @db.Timestamptz(6)
+  last_verified DateTime? @db.Timestamptz(6)
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime  @default(now()) @db.Timestamptz(6)
+
+  User User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("two_factor_secrets")
+}
+
+model UserPermission {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String   @db.Uuid
+  permission_id String   @db.Uuid
+  grant_type    String   @default("ALLOW") @db.VarChar(10)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  User User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, permission_id])
+  @@map("user_permissions")
+}
+
+model BackupCode {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  code_hash  String    @db.VarChar(64)
+  is_used    Boolean   @default(false)
+  used_at    DateTime? @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+
+  User User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, code_hash])
+  @@map("backup_codes")
+}
+
+model SecurityEvent {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String?   @db.Uuid
+  event_type       String    @db.VarChar(50)
+  severity         String    @default("info") @db.VarChar(20)
+  ip_address       String?   @db.VarChar(45)
+  user_agent       String?
+  fingerprint_hash String?   @db.VarChar(64)
+  location         Json?
+  metadata         Json?     @default("{}")
+  resolved         Boolean   @default(false)
+  resolved_by      String?   @db.Uuid
+  resolved_at      DateTime? @db.Timestamptz(6)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+
+  User User? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@map("security_events")
+}
+
+model BlockedToken {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jti        String   @unique @db.VarChar(64)
+  user_id    String?  @db.Uuid
+  reason     String   @db.VarChar(50)
+  expires_at DateTime @db.Timestamptz(6)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("blocked_tokens")
+}
+
+model BlacklistedIP {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ipAddress   String    @map("ip_address") @db.VarChar(45)
+  reason      String?   @db.VarChar(255)
+  blockedBy   String?   @map("blocked_by") @db.Uuid
+  blockedAt   DateTime  @default(now()) @map("blocked_at") @db.Timestamptz(6)
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  isPermanent Boolean   @default(false) @map("is_permanent")
+
+  @@index([ipAddress])
+  @@index([expiresAt])
+  @@map("blacklisted_ips")
+}
+
+model TrustedDevice {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  deviceName      String?  @map("device_name") @db.VarChar(255)
+  deviceType      String?  @map("device_type") @db.VarChar(50)
+  fingerprintHash String   @map("fingerprint_hash") @db.VarChar(64)
+  userAgent       String?  @map("user_agent") @db.Text
+  ipAddress       String?  @map("ip_address") @db.VarChar(45)
+  trustedAt       DateTime @default(now()) @map("trusted_at") @db.Timestamptz(6)
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz(6)
+  lastUsedAt      DateTime @default(now()) @map("last_used_at") @db.Timestamptz(6)
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  User User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fingerprintHash])
+  @@map("trusted_devices")
 }

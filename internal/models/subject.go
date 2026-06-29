@@ -48,10 +48,10 @@ type Subject struct {
 	CoursePrerequisites PGStringArray `gorm:"type:text[];column:course_prerequisites" json:"coursePrerequisites"`
 	TargetAudience      PGStringArray `gorm:"type:text[];column:target_audience" json:"targetAudience"`
 	WhatYouLearn        PGStringArray `gorm:"type:text[];column:what_you_learn" json:"whatYouLearn"`
-	CompletionRate      float64     `gorm:"default:0;column:completion_rate" json:"completionRate"`
-	VideoCount          int         `gorm:"default:0;column:video_count" json:"videoCount"`
-	Type                string      `gorm:"default:'COURSE';column:type" json:"type"`
-	LastContentUpdate   *time.Time  `gorm:"column:last_content_update" json:"lastContentUpdate"`
+	CompletionRate      float64       `gorm:"default:0;column:completion_rate" json:"completionRate"`
+	VideoCount          int           `gorm:"default:0;column:video_count" json:"videoCount"`
+	Type                string        `gorm:"default:'COURSE';column:type" json:"type"`
+	LastContentUpdate   *time.Time    `gorm:"column:last_content_update" json:"lastContentUpdate"`
 
 	CreatedAt time.Time      `gorm:"index;column:created_at" json:"createdAt"`
 	UpdatedAt time.Time      `gorm:"column:updated_at" json:"updatedAt"`

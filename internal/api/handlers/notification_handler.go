@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -147,6 +148,11 @@ func warmNotificationsCache(redisKey, l1Key string, useL1 bool, notifications []
 	// L2: Redis with 30-second TTL (Asynchronous)
 	if db.Redis != nil {
 		go func(key string, val []byte) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[Recovered] panic in warmNotificationsCache Redis write: %v", r)
+				}
+			}()
 			writeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			db.Redis.Set(writeCtx, key, val, 30*time.Second)

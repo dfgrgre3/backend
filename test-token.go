@@ -28,6 +28,6 @@ func main() {
 			ID:        jti,
 		},
 	}
-	token, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(cfg.JWTSecret))
+	token, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(cfg.JWTSecretKey))
 	fmt.Println(token)
 }

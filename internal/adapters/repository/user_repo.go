@@ -221,8 +221,8 @@ func hashPassword(password string) (string, error) {
 	if cost < 12 {
 		cost = 12
 	}
-	if cost > bcrypt.MaxCost {
-		cost = bcrypt.MaxCost
+	if cost > 14 {
+		cost = 14
 	}
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), cost)
 	return string(bytes), err

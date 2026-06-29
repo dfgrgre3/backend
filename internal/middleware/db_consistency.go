@@ -126,7 +126,16 @@ func dbConsistencyWriteKey(userID string) string {
 }
 
 func forceSourceDB(c *gin.Context, gormDB *gorm.DB) {
-	c.Set("db", gormDB.Session(&gorm.Session{}).Clauses(dbresolver.Write))
+	if gormDB != nil {
+		c.Set("db", gormDB.Clauses(dbresolver.Write))
+	} else {
+		// Use db.WriteDB() which already has the dbresolver plugin registered properly
+		// instead of creating a new session that may not have plugins initialized
+		writeSession := db.WriteDB()
+		if writeSession != nil {
+			c.Set("db", writeSession)
+		}
+	}
 }
 
 func isWriteMethod(method string) bool {

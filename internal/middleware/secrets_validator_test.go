@@ -34,10 +34,17 @@ func unsetTestEnv(t *testing.T, key string) {
 	})
 }
 
+func setAllValidRequiredVars(t *testing.T) {
+	setTestEnv(t, "DATABASE_URL", "postgresql://user:pass@localhost:5432/test")
+	setTestEnv(t, "S3_ENDPOINT", "s3_endpoint_actual_secret_value_here_and_long_enough")
+	setTestEnv(t, "S3_ACCESS_KEY", "s3_access_key_actual_secret_value_here_and_long_enough")
+	setTestEnv(t, "S3_SECRET_KEY", "s3_secret_key_actual_secret_value_here_and_long_enough")
+	setTestEnv(t, "S3_BUCKET", "s3_bucket_actual_secret_value_here_and_long_enough")
+}
+
 func TestValidateSecrets_MissingVars(t *testing.T) {
+	setAllValidRequiredVars(t)
 	unsetTestEnv(t, "DATABASE_URL")
-	unsetTestEnv(t, "JWT_SECRET")
-	unsetTestEnv(t, "CLERK_WEBHOOK_SECRET")
 	setTestEnv(t, "NODE_ENV", "production")
 
 	router := setupTestRouter()
@@ -55,9 +62,8 @@ func TestValidateSecrets_MissingVars(t *testing.T) {
 }
 
 func TestValidateSecrets_PlaceholderValues(t *testing.T) {
-	setTestEnv(t, "DATABASE_URL", "postgresql://localhost:5432/test")
-	setTestEnv(t, "JWT_SECRET", "your-jwt-secret-here")
-	setTestEnv(t, "CLERK_WEBHOOK_SECRET", "whsec_test")
+	setAllValidRequiredVars(t)
+	setTestEnv(t, "DATABASE_URL", "your-database-url-here")
 	setTestEnv(t, "NODE_ENV", "production")
 
 	router := setupTestRouter()
@@ -75,9 +81,7 @@ func TestValidateSecrets_PlaceholderValues(t *testing.T) {
 }
 
 func TestValidateSecrets_ValidSecrets(t *testing.T) {
-	setTestEnv(t, "DATABASE_URL", "postgresql://user:pass@localhost:5432/test")
-	setTestEnv(t, "JWT_SECRET", "a-very-long-and-random-secret-key-12345")
-	setTestEnv(t, "CLERK_WEBHOOK_SECRET", "whsec_actual_secret_value_here")
+	setAllValidRequiredVars(t)
 	setTestEnv(t, "NODE_ENV", "production")
 
 	router := setupTestRouter()
@@ -97,8 +101,6 @@ func TestValidateSecrets_ValidSecrets(t *testing.T) {
 func TestValidateSecrets_SkipInDev(t *testing.T) {
 	setTestEnv(t, "NODE_ENV", "development")
 	unsetTestEnv(t, "DATABASE_URL")
-	unsetTestEnv(t, "JWT_SECRET")
-	unsetTestEnv(t, "CLERK_WEBHOOK_SECRET")
 
 	router := setupTestRouter()
 	router.Use(ValidateSecrets(DefaultSecretsValidatorConfig()))
@@ -131,7 +133,6 @@ func TestIsPlaceholderValue(t *testing.T) {
 		{"short JWT_SECRET", "JWT_SECRET", "short", true},
 		{"valid JWT_SECRET", "JWT_SECRET", "a-very-long-and-random-secret-key-12345", false},
 		{"valid DATABASE_URL", "DATABASE_URL", "postgresql://user:pass@host:5432/db", false},
-		{"valid webhook", "CLERK_WEBHOOK_SECRET", "whsec_actual_secret_123", false},
 	}
 
 	for _, tt := range tests {
@@ -145,9 +146,6 @@ func TestIsPlaceholderValue(t *testing.T) {
 func TestValidateSecrets_CustomVars(t *testing.T) {
 	setTestEnv(t, "CUSTOM_SECRET", "CHANGE_ME")
 	setTestEnv(t, "NODE_ENV", "production")
-	unsetTestEnv(t, "DATABASE_URL")
-	unsetTestEnv(t, "JWT_SECRET")
-	unsetTestEnv(t, "CLERK_WEBHOOK_SECRET")
 
 	cfg := SecretsValidatorConfig{
 		RequiredVars: []string{"CUSTOM_SECRET"},
@@ -169,9 +167,8 @@ func TestValidateSecrets_CustomVars(t *testing.T) {
 }
 
 func TestValidateSecrets_AllPlaceholders(t *testing.T) {
+	setAllValidRequiredVars(t)
 	setTestEnv(t, "DATABASE_URL", "your-database-url")
-	setTestEnv(t, "JWT_SECRET", "your-jwt-secret")
-	setTestEnv(t, "CLERK_WEBHOOK_SECRET", "your-webhook-secret")
 	setTestEnv(t, "NODE_ENV", "production")
 
 	router := setupTestRouter()
@@ -189,9 +186,9 @@ func TestValidateSecrets_AllPlaceholders(t *testing.T) {
 }
 
 func TestValidateSecrets_MixedMissingAndPlaceholders(t *testing.T) {
+	setAllValidRequiredVars(t)
 	setTestEnv(t, "DATABASE_URL", "postgresql://user:pass@localhost:5432/test")
-	setTestEnv(t, "JWT_SECRET", "CHANGE_ME")
-	unsetTestEnv(t, "CLERK_WEBHOOK_SECRET")
+	unsetTestEnv(t, "S3_ENDPOINT")
 	setTestEnv(t, "NODE_ENV", "production")
 
 	router := setupTestRouter()
@@ -209,6 +206,7 @@ func TestValidateSecrets_MixedMissingAndPlaceholders(t *testing.T) {
 }
 
 func TestValidateSecrets_ProductionMode(t *testing.T) {
+	setAllValidRequiredVars(t)
 	setTestEnv(t, "NODE_ENV", "production")
 	unsetTestEnv(t, "DATABASE_URL")
 

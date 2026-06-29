@@ -238,14 +238,37 @@ func GetSubject(c *gin.Context) {
 		return
 	}
 
+	// Check enrollment if userId is provided in query or context
+	userID := c.Query("userId")
+	if userID == "" {
+		if uid, exists := c.Get("userId"); exists {
+			if s, ok := uid.(string); ok {
+				userID = s
+			}
+		}
+	}
+
+	var enrollment *models.Enrollment
+	if userID != "" {
+		var e models.Enrollment
+		if err := database.Where("user_id = ? AND subject_id = ?", userID, subject.ID).First(&e).Error; err == nil {
+			enrollment = &e
+		}
+	}
+
 	// Wrap for frontend
-	api_response.Success(c, gin.H{
+	response := gin.H{
 		"subject": subject,
 		"data": gin.H{
 			"subject": subject,
 			"course":  subject,
 		},
-	})
+	}
+	if enrollment != nil {
+		response["enrollment"] = enrollment
+	}
+
+	api_response.Success(c, response)
 }
 
 func GetCourseLessons(c *gin.Context) {

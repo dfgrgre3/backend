@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	api_response "thanawy-backend/internal/api/response"
+	"thanawy-backend/internal/cache"
+	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/models"
@@ -23,24 +25,14 @@ import (
 // Keeps a small in-memory snapshot so that short-burst repeated requests
 // (e.g. React StrictMode double-render, rapid page navigations) never hit
 // the remote Redis or the database at all.
-type l1Entry struct {
-	data      []byte
-	expiresAt time.Time
-}
-
 var (
-	activitiesL1    sync.Map           // key: string → *l1Entry
+	activitiesL1    = cache.NewLRUCache(1000)
 	activitiesL1TTL = 20 * time.Second // same tenant sees fresh data within 20 s
 )
 
 // ─── in-process L1 cache for unread notifications count ──────────
-type unreadCountL1Entry struct {
-	count     int64
-	expiresAt time.Time
-}
-
 var (
-	unreadCountL1    sync.Map
+	unreadCountL1    = cache.NewLRUCache(1000)
 	unreadCountL1TTL = 20 * time.Second
 )
 
@@ -64,11 +56,8 @@ func GetUnreadNotificationsCount(c *gin.Context) {
 // Returns (count, true) if cache was hit, (0, false) otherwise.
 func tryUnreadNotificationsCaches(c *gin.Context, userId interface{}) (int64, bool) {
 	l1Key := fmt.Sprintf("unc:%s", userId)
-	if raw, ok := unreadCountL1.Load(l1Key); ok {
-		entry := raw.(*unreadCountL1Entry)
-		if time.Now().Before(entry.expiresAt) {
-			return entry.count, true
-		}
+	if val, ok := unreadCountL1.Get(l1Key); ok {
+		return val.(int64), true
 	}
 
 	if db.Redis != nil {
@@ -78,7 +67,7 @@ func tryUnreadNotificationsCaches(c *gin.Context, userId interface{}) (int64, bo
 		cancel()
 		if err == nil {
 			count := int64(cachedVal)
-			unreadCountL1.Store(l1Key, &unreadCountL1Entry{count: count, expiresAt: time.Now().Add(unreadCountL1TTL)})
+			unreadCountL1.Set(l1Key, count, unreadCountL1TTL)
 			return count, true
 		}
 	}
@@ -102,13 +91,18 @@ func fetchAndCacheUnreadCount(c *gin.Context, userId string) int64 {
 	// Populate both caches
 	if db.Redis != nil {
 		go func(userId string, count int64) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[Recovered] panic in unread notifications Redis write: %v", r)
+				}
+			}()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			db.Redis.Set(ctx, fmt.Sprintf("unread_notif_count:%s", userId), count, time.Minute)
 		}(userId, count)
 	}
 	l1Key := fmt.Sprintf("unc:%s", userId)
-	unreadCountL1.Store(l1Key, &unreadCountL1Entry{count: count, expiresAt: time.Now().Add(unreadCountL1TTL)})
+	unreadCountL1.Set(l1Key, count, unreadCountL1TTL)
 
 	return count
 }
@@ -170,14 +164,11 @@ func GetRecentActivities(c *gin.Context) {
 }
 
 func tryActivitiesL1Cache(c *gin.Context, l1Key string) bool {
-	if raw, ok := activitiesL1.Load(l1Key); ok {
-		entry := raw.(*l1Entry)
-		if time.Now().Before(entry.expiresAt) {
-			var notifications []models.Notification
-			if json.Unmarshal(entry.data, &notifications) == nil {
-				api_response.Success(c, gin.H{"activities": buildActivitiesResponse(notifications)})
-				return true
-			}
+	if val, ok := activitiesL1.Get(l1Key); ok {
+		var notifications []models.Notification
+		if json.Unmarshal(val.([]byte), &notifications) == nil {
+			api_response.Success(c, gin.H{"activities": buildActivitiesResponse(notifications)})
+			return true
 		}
 	}
 	return false
@@ -195,7 +186,7 @@ func tryActivitiesRedisCache(c *gin.Context, redisKey string, params recentActiv
 		return false
 	}
 	if params.useL1 {
-		activitiesL1.Store(params.l1Key, &l1Entry{data: []byte(cachedVal), expiresAt: time.Now().Add(activitiesL1TTL)})
+		activitiesL1.Set(params.l1Key, []byte(cachedVal), activitiesL1TTL)
 	}
 	api_response.Success(c, gin.H{"activities": buildActivitiesResponse(notifications)})
 	return true
@@ -230,13 +221,18 @@ func warmActivitiesCache(redisKey string, params recentActivitiesParams, notific
 	}
 	if db.Redis != nil {
 		go func(redisKey string, cachedData []byte) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[Recovered] panic in recent activities Redis write: %v", r)
+				}
+			}()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			db.Redis.Set(ctx, redisKey, cachedData, 60*time.Second)
 		}(redisKey, cachedData)
 	}
 	if params.useL1 {
-		activitiesL1.Store(params.l1Key, &l1Entry{data: cachedData, expiresAt: time.Now().Add(activitiesL1TTL)})
+		activitiesL1.Set(params.l1Key, cachedData, activitiesL1TTL)
 	}
 }
 
@@ -357,9 +353,10 @@ func ImpersonateUser(c *gin.Context) {
 	// Secure=true — only sent over HTTPS
 	// SameSite=Strict — prevents CSRF attacks (never sent for cross-site requests)
 	// CSRF cookie is NOT HttpOnly so the frontend can read and send it as a header
+	cfg := config.Load()
 	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("impersonate_user_id", signedToken, 3600, "/", "", true, true)
-	c.SetCookie("impersonate_csrf_token", csrfToken, 3600, "/", "", true, false)
+	c.SetCookie("impersonate_user_id", signedToken, 3600, "/", cfg.CookieDomain, true, true)
+	c.SetCookie("impersonate_csrf_token", csrfToken, 3600, "/", cfg.CookieDomain, true, false)
 
 	// Force an immediate audit log entry for security tracking
 	services.GetAuditService().LogAsync(

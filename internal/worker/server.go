@@ -63,6 +63,9 @@ func StartWorker() {
 	cqrsRefreshHandler := &CQRSRefreshHandler{}
 	mux.HandleFunc(TypeRefreshMaterializedViews, cqrsRefreshHandler.ProcessTask)
 
+	sessionCleanupHandler := &SessionCleanupHandler{}
+	mux.HandleFunc(TypeSessionCleanup, sessionCleanupHandler.ProcessTask)
+
 	// Heavy AI exam generation. Runs in the worker pool, NOT in the Gin
 	// request thread, so a single teacher generating 50 questions cannot
 	// block every other user.

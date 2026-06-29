@@ -25,7 +25,7 @@ func main() {
 	defer db.Close()
 
 	rows, err := db.Query(`
-		SELECT id, email, role, status, clerk_id
+		SELECT id, email, role, status
 		FROM "User" 
 		WHERE role = 'ADMIN' OR email = 'admin@thanawy.com'
 	`)
@@ -37,14 +37,9 @@ func main() {
 	fmt.Println("Admin/Matching Users:")
 	for rows.Next() {
 		var id, email, role, status string
-		var clerkID sql.NullString
-		if err := rows.Scan(&id, &email, &role, &status, &clerkID); err != nil {
+		if err := rows.Scan(&id, &email, &role, &status); err != nil {
 			log.Fatal(err)
 		}
-		cIdStr := "NULL"
-		if clerkID.Valid {
-			cIdStr = clerkID.String
-		}
-		fmt.Printf("- ID: %s | Email: %s | Role: %s | Status: %s | ClerkID: %s\n", id, email, role, status, cIdStr)
+		fmt.Printf("- ID: %s | Email: %s | Role: %s | Status: %s\n", id, email, role, status)
 	}
 }
