@@ -952,6 +952,16 @@ func TestAdminGetBooks_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestBookListOrder_UsesLegacyTimestampWhenNeeded(t *testing.T) {
+	testDB := setupTestDB(t)
+	db.DB = testDB
+
+	assert.Equal(t, "created_at DESC", bookListOrder())
+
+	require.NoError(t, testDB.Migrator().DropColumn(&models.Book{}, "created_at"))
+	assert.Equal(t, `"createdAt" DESC`, bookListOrder())
+}
+
 func TestAdminUpdateBook_Success(t *testing.T) {
 	testDB := setupTestDB(t)
 	db.DB = testDB

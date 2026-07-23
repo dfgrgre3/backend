@@ -55,6 +55,12 @@ type User struct {
 	Section       *string `gorm:"column:section" json:"section"`
 	Bio           *string `gorm:"column:bio" json:"bio"`
 
+	InstructorStatus      string         `gorm:"column:instructor_status;default:'PENDING';index" json:"instructorStatus"`
+	InstructorSpecialties JSONStringArray `gorm:"type:jsonb;column:instructor_specialties" json:"instructorSpecialties"`
+	InstructorLanguages   JSONStringArray `gorm:"type:jsonb;column:instructor_languages" json:"instructorLanguages"`
+	CommissionRate        float64        `gorm:"column:commission_rate;default:0" json:"commissionRate"`
+	ExperienceYears       *string        `gorm:"column:experience_years" json:"experienceYears"`
+
 	// Profile extended
 	WakeUpTime                *string    `gorm:"column:wake_up_time" json:"wakeUpTime"`
 	SleepTime                 *string    `gorm:"column:sleep_time" json:"sleepTime"`
@@ -73,12 +79,11 @@ type User struct {
 	PasswordChangedAt         *time.Time `gorm:"column:password_changed_at" json:"-"`
 	PasswordExpiresAt         *time.Time `gorm:"column:password_expires_at" json:"-"`
 	DateOfBirth               *time.Time `gorm:"column:date_of_birth" json:"dateOfBirth"`
-	AlternativePhone          *string    `gorm:"column:alternative_phone" json:"alternativePhone"`
-	InterestedSubjects        []string   `gorm:"type:text[];column:interested_subjects" json:"interestedSubjects"`
-	StudyGoal                 *string    `gorm:"column:study_goal" json:"studyGoal"`
-	SubjectsTaught            []string   `gorm:"type:text[];column:subjects_taught" json:"subjectsTaught"`
-	ClassesTaught             []string   `gorm:"type:text[];column:classes_taught" json:"classesTaught"`
-	ExperienceYears           *string    `gorm:"column:experience_years" json:"experienceYears"`
+	AlternativePhone          *string       `gorm:"column:alternative_phone" json:"alternativePhone"`
+	InterestedSubjects        PGStringArray `gorm:"type:text[];column:interested_subjects" json:"interestedSubjects"`
+	StudyGoal                 *string       `gorm:"column:study_goal" json:"studyGoal"`
+	SubjectsTaught            PGStringArray `gorm:"type:text[];column:subjects_taught" json:"subjectsTaught"`
+	ClassesTaught             PGStringArray `gorm:"type:text[];column:classes_taught" json:"classesTaught"`
 	ReferralCode              *string    `gorm:"column:referral_code" json:"referralCode"`
 	AdditionalAiCredits       int        `gorm:"default:0;column:additional_ai_credits" json:"additionalAiCredits"`
 	AdditionalExamCredits     int        `gorm:"default:0;column:additional_exam_credits" json:"additionalExamCredits"`

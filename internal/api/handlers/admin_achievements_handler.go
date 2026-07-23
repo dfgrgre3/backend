@@ -4,15 +4,18 @@ import (
 	"net/http"
 
 	api_response "thanawy-backend/internal/api/response"
-	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
+	"thanawy-backend/internal/repository"
+	"thanawy-backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
 
+var achievementService = services.NewAchievementService(repository.NewAchievementRepository())
+
 func AdminGetAchievements(c *gin.Context) {
-	var achievements []models.Achievement
-	if err := db.DB.Order("created_at DESC").Find(&achievements).Error; err != nil {
+	achievements, err := achievementService.GetAllAchievements(c.Request.Context())
+	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch achievements")
 		return
 	}
@@ -26,7 +29,7 @@ func AdminCreateAchievement(c *gin.Context) {
 		return
 	}
 
-	if err := SafeCreate(db.DB, &achievement); err != nil {
+	if err := achievementService.CreateAchievement(c.Request.Context(), &achievement); err != nil {
 		if IsDuplicateKeyError(err) {
 			api_response.Error(c, http.StatusConflict, "Achievement already exists")
 			return
@@ -42,51 +45,51 @@ func AdminCreateAchievement(c *gin.Context) {
 func AdminUpdateAchievement(c *gin.Context) {
 	id := c.Param("id")
 	var achievement models.Achievement
-	if err := db.DB.Where(queryID, id).First(&achievement).Error; err != nil {
-		api_response.Error(c, http.StatusNotFound, "Achievement not found")
-		return
-	}
-
-	var input struct {
-		Name        *string `json:"name"`
-		Description *string `json:"description"`
-		Icon        *string `json:"icon"`
-		Points      *int    `json:"points"`
-	}
-
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindJSON(&achievement); err != nil {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	updates := map[string]interface{}{}
-	if input.Name != nil {
-		updates["title"] = *input.Name
+	if achievement.Key != "" {
+		updates["key"] = achievement.Key
 	}
-	if input.Description != nil {
-		updates["description"] = *input.Description
+	if achievement.Title != "" {
+		updates["title"] = achievement.Title
 	}
-	if input.Icon != nil {
-		updates["icon"] = *input.Icon
+	if achievement.Description != "" {
+		updates["description"] = achievement.Description
 	}
-	if input.Points != nil {
-		updates["xp_reward"] = *input.Points
+	if achievement.Icon != "" {
+		updates["icon"] = achievement.Icon
+	}
+	if achievement.Rarity != "" {
+		updates["rarity"] = achievement.Rarity
+	}
+	if achievement.XpReward > 0 {
+		updates["xp_reward"] = achievement.XpReward
+	}
+	updates["is_secret"] = achievement.IsSecret
+	if achievement.Category != "" {
+		updates["category"] = achievement.Category
+	}
+	if achievement.Difficulty != "" {
+		updates["difficulty"] = achievement.Difficulty
 	}
 
-	if len(updates) > 0 {
-		if err := db.DB.Model(&models.Achievement{}).Where(queryID, id).Updates(updates).Error; err != nil {
-			api_response.Error(c, http.StatusInternalServerError, "Failed to update achievement")
-			return
-		}
+	updatedAchievement, err := achievementService.UpdateAchievement(c.Request.Context(), id, updates)
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to update achievement")
+		return
 	}
 
 	LogAudit(c, "UPDATE", "achievement", id, updates)
-	api_response.Success(c, achievement)
+	api_response.Success(c, updatedAchievement)
 }
 
 func AdminDeleteAchievement(c *gin.Context) {
 	id := c.Param("id")
-	if err := db.DB.Where(queryID, id).Delete(&models.Achievement{}).Error; err != nil {
+	if err := achievementService.DeleteAchievement(c.Request.Context(), id); err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to delete achievement")
 		return
 	}

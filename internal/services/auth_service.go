@@ -565,14 +565,16 @@ func (s *authService) RevokeAllSessions(ctx context.Context, userID string) erro
 }
 
 func (s *authService) logFailedLogin(ctx context.Context, userID, ip, userAgent, reason string, lockoutErr *error) {
+	if userID == "" {
+		return
+	}
+
 	history := &models.LoginHistory{
+		UserID:    userID,
 		IP:        &ip,
 		UserAgent: &userAgent,
 		Status:    "FAILED",
 		Reason:    &reason,
-	}
-	if userID != "" {
-		history.UserID = userID
 	}
 	s.authRepo.LogLoginHistory(ctx, history)
 }

@@ -281,6 +281,21 @@ func connectDatabaseWithRetry(cfg *config.Config) (*gorm.DB, error) {
 }
 
 func initStorage(cfg *config.Config) {
+	if cfg.StorageType == "local" {
+		baseDir := os.Getenv("STORAGE_PATH")
+		if baseDir == "" {
+			baseDir = "./uploads"
+		}
+		publicURL := os.Getenv("STORAGE_PUBLIC_URL")
+		storageSvc, err := storage.NewLocalStorage(baseDir, publicURL)
+		if err != nil {
+			log.Fatalf("Failed to initialize local storage: %v", err)
+		}
+		storage.GlobalStorage = storageSvc
+		log.Printf("Storage initialized with local provider at %s", baseDir)
+		return
+	}
+
 	if cfg.StorageType != "s3" {
 		log.Fatalf("Unsupported storage provider %q. Cloud storage (s3) is required.", cfg.StorageType)
 	}

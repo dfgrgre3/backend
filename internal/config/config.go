@@ -102,8 +102,8 @@ func Load() *Config {
 		log.Fatal("FATAL: Cloud storage is required. Set S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET env vars.")
 	}
 
-	if c.StorageType == "local" {
-		log.Fatal("FATAL: STORAGE_TYPE=local is not allowed. Use cloud storage only.")
+	if c.StorageType != "s3" && c.StorageType != "local" {
+		log.Fatalf("FATAL: Unsupported storage type %q. Use 's3' or 'local'.", c.StorageType)
 	}
 
 	c.ImpersonationSecret = getEnv("IMPERSONATION_SECRET", "")
@@ -206,8 +206,8 @@ func LoadSafe() (*Config, error) {
 		return nil, fmt.Errorf("cloud storage is required: set S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET env vars")
 	}
 
-	if c.StorageType == "local" {
-		return nil, fmt.Errorf("STORAGE_TYPE=local is not allowed; use cloud storage only")
+	if c.StorageType != "s3" && c.StorageType != "local" {
+		return nil, fmt.Errorf("unsupported storage type %q: use 's3' or 'local'", c.StorageType)
 	}
 
 	c.ImpersonationSecret = getEnv("IMPERSONATION_SECRET", "")

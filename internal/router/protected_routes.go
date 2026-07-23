@@ -112,6 +112,12 @@ func SetupProtectedRoutes(router *gin.Engine) {
 			userRoutes.POST("/courses/:id/checkout", handlers.CourseCheckout)
 			userRoutes.GET("/courses/:id/curriculum", handlers.GetSubjectCurriculum)
 			userRoutes.POST("/courses/lessons/:id/progress", handlers.UpdateLessonProgress)
+			userRoutes.POST("/courses/lessons/:id/view", handlers.TrackLessonView) // Track view stats
+
+			// Phase 2: Advanced lesson access (drip, protection, eligibility)
+			userRoutes.GET("/courses/:id/lessons/:lessonId", handlers.ProtectedLessonContent)
+			userRoutes.GET("/courses/:id/lessons/:lessonId/eligibility", handlers.GetLessonEligibility)
+			userRoutes.GET("/courses/:id/lessons/access", handlers.GetCourseLessonsWithAccess)
 
 			// Lesson Notes & Reviews
 			userRoutes.GET("/courses/lessons/:id/notes", handlers.GetLessonNotes)

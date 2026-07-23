@@ -53,6 +53,38 @@ type Subject struct {
 	Type                string        `gorm:"default:'COURSE';column:type" json:"type"`
 	LastContentUpdate   *time.Time    `gorm:"column:last_content_update" json:"lastContentUpdate"`
 
+	// Lifecycle and enhanced fields (migration 0064 + 0109)
+	Status           CourseStatus `gorm:"default:'DRAFT';index;column:status" json:"status"`
+	MaxStudents      *int         `gorm:"column:max_students" json:"maxStudents"`
+	Version          string       `gorm:"default:'1.0.0';column:version" json:"version"`
+	IsTrending       bool         `gorm:"default:false;column:is_trending" json:"isTrending"`
+	IsNew            bool         `gorm:"default:false;column:is_new" json:"isNew"`
+	NewUntil         *time.Time   `gorm:"column:new_until" json:"newUntil"`
+	ShortDescription *string      `gorm:"column:short_description" json:"shortDescription"`
+	LongDescription  *string      `gorm:"type:text;column:long_description" json:"longDescription"`
+	HasCertificate   bool         `gorm:"default:false;column:has_certificate" json:"hasCertificate"`
+	AvailableFrom    *time.Time   `gorm:"column:available_from" json:"availableFrom"`
+	AvailableUntil   *time.Time   `gorm:"column:available_until" json:"availableUntil"`
+	Tags             []CourseTag  `gorm:"many2many:SubjectTag;" json:"tags,omitempty"`
+
+	// Workflow metadata (Phase 1: 0109)
+	SubmittedForReviewAt *time.Time `gorm:"column:submitted_for_review_at" json:"submittedForReviewAt,omitempty"`
+	ReviewedAt           *time.Time `gorm:"column:reviewed_at" json:"reviewedAt,omitempty"`
+	ReviewedBy           *string    `gorm:"type:uuid;column:reviewed_by" json:"reviewedBy,omitempty"`
+	RejectionReason      *string    `gorm:"column:rejection_reason" json:"rejectionReason,omitempty"`
+	PublishedAt          *time.Time `gorm:"column:published_at" json:"publishedAt,omitempty"`
+	ArchivedAt           *time.Time `gorm:"column:archived_at" json:"archivedAt,omitempty"`
+	ArchivedBy           *string    `gorm:"type:uuid;column:archived_by" json:"archivedBy,omitempty"`
+
+	// Operational & enrollment (Phase 1)
+	EnrollmentType     EnrollmentType `gorm:"default:'OPEN';column:enrollment_type" json:"enrollmentType"`
+	SecondaryLanguages PGStringArray  `gorm:"type:text[];column:secondary_languages" json:"secondaryLanguages"`
+
+	// Certificate config (Phase 1)
+	CertificateTemplate             *string `gorm:"column:certificate_template" json:"certificateTemplate,omitempty"`
+	CertificateIssueAfterCompletion bool    `gorm:"default:true;column:certificate_issue_after_completion" json:"certificateIssueAfterCompletion"`
+	CertificateMinCompletionPct     int     `gorm:"default:100;column:certificate_min_completion_pct" json:"certificateMinCompletionPct"`
+
 	CreatedAt time.Time      `gorm:"index;column:created_at" json:"createdAt"`
 	UpdatedAt time.Time      `gorm:"column:updated_at" json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
@@ -83,6 +115,10 @@ const (
 	SubTopicQuiz       SubTopicType = "QUIZ"
 	SubTopicArticle    SubTopicType = "ARTICLE"
 	SubTopicAssignment SubTopicType = "ASSIGNMENT"
+	SubTopicAudio      SubTopicType = "AUDIO"
+	SubTopicLink       SubTopicType = "LINK"
+	SubTopicLive       SubTopicType = "LIVE"
+	SubTopicDocument   SubTopicType = "DOCUMENT"
 )
 
 type SubTopic struct {
@@ -100,6 +136,28 @@ type SubTopic struct {
 	CreatedAt       time.Time      `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt       time.Time      `gorm:"column:updated_at" json:"updatedAt"`
 	DeletedAt       gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
+
+	// Relations
+	Topic *Topic `gorm:"foreignKey:TopicID" json:"topic,omitempty"`
+
+	// Phase 1: Advanced lesson fields (migration 0109)
+	AudioUrl             *string    `gorm:"column:audio_url" json:"audioUrl,omitempty"`
+	AudioDurationSeconds int        `gorm:"default:0;column:audio_duration_seconds" json:"audioDurationSeconds"`
+	ExternalLinkUrl      *string    `gorm:"column:external_link_url" json:"externalLinkUrl,omitempty"`
+	ExternalLinkTitle    *string    `gorm:"column:external_link_title" json:"externalLinkTitle,omitempty"`
+	IsDripEnabled        bool       `gorm:"default:false;column:is_drip_enabled" json:"isDripEnabled"`
+	DripReleaseDate      *time.Time `gorm:"column:drip_release_date" json:"dripReleaseDate,omitempty"`
+	IsContentProtected   bool       `gorm:"default:false;column:is_content_protected" json:"isContentProtected"`
+	SubtitleUrls         []byte     `gorm:"type:jsonb;column:subtitle_urls" json:"-"`
+	VideoChaptersData    []byte     `gorm:"type:jsonb;column:video_chapters" json:"-"`
+	// Denormalized stats
+	ViewCount           int `gorm:"default:0;column:view_count" json:"viewCount"`
+	CompletionCount     int `gorm:"default:0;column:completion_count" json:"completionCount"`
+	AvgWatchTimeSeconds int `gorm:"default:0;column:avg_watch_time_seconds" json:"avgWatchTimeSeconds"`
+
+	// Non-DB mapped fields
+	Subtitles []LessonSubtitle `gorm:"-" json:"subtitles,omitempty"`
+	Chapters  []VideoChapter   `gorm:"-" json:"chapters,omitempty"`
 
 	// Relations
 	Attachments []LessonAttachment `gorm:"foreignKey:SubTopicID;constraint:OnDelete:CASCADE" json:"attachments,omitempty"`

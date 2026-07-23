@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,13 +30,10 @@ var (
 	userRepoOnce    sync.Once
 	sessionRepo     *repository.SessionRepository
 	sessionRepoOnce sync.Once
-)
 
-const (
-	errFailedToGenerateTokens = "Failed to generate tokens"
-	refreshTokenPath          = "/"
+	errFailedToGenerateTokens = os.Getenv("ERRFAILEDTOGENERATETOKENS")
+	refreshTokenPath          = os.Getenv("REFRESHTOKENPATH")
 	errInvalidEmail           = "Invalid email"
-	userIDQuery               = "user_id = ?"
 )
 
 func getUserRepo() *repository.UserRepository {
@@ -590,6 +588,166 @@ func GetUserProfile(c *gin.Context) {
 		"bio":           user.Bio,
 		"country":       user.Country,
 		"recoveryCodes": recoveryCodesJSON,
+	})
+}
+
+func GetUserEnrollments(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		api_response.Error(c, http.StatusBadRequest, "user id is required")
+		return
+	}
+
+	limit := 50
+	if q := c.Query("limit"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil && v > 0 {
+			limit = v
+		}
+	}
+
+	var total int64
+	db.DB.Model(&models.Enrollment{}).Where("user_id = ?", userID).Count(&total)
+
+	var enrollments []models.Enrollment
+	if err := db.DB.Preload("Subject").Where("user_id = ?", userID).
+		Order("enrolled_at DESC").
+		Limit(limit).
+		Find(&enrollments).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch enrollments")
+		return
+	}
+
+	totalProgress := 0.0
+	items := make([]gin.H, 0, len(enrollments))
+	for _, e := range enrollments {
+		subjectName := ""
+		subjectSlug := ""
+		price := 0.0
+		if e.Subject.ID != "" {
+			subjectName = e.Subject.Name
+			subjectSlug = stringOrEmpty(e.Subject.Slug)
+			price = e.Subject.Price
+		}
+		items = append(items, gin.H{
+			"id":                e.ID,
+			"courseId":          e.SubjectID,
+			"courseName":        subjectName,
+			"courseSlug":        subjectSlug,
+			"price":             price,
+			"progress":          e.Progress,
+			"status":            func() string {
+				if e.Progress >= 100.0 {
+					return "COMPLETED"
+				}
+				return "ACTIVE"
+			}(),
+			"enrolledAt":        e.EnrolledAt,
+		})
+		totalProgress += e.Progress
+	}
+
+	avgProgress := 0.0
+	if len(enrollments) > 0 {
+		avgProgress = totalProgress / float64(len(enrollments))
+	}
+
+	api_response.Success(c, gin.H{
+		"userId":      userID,
+		"total":       total,
+		"avgProgress": avgProgress,
+		"enrollments": items,
+	})
+}
+
+func AdminEnrollUser(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		api_response.Error(c, http.StatusBadRequest, "user id is required")
+		return
+	}
+
+	var req struct {
+		CourseID string `json:"courseId" binding:"required"`
+		IsFree   bool   `json:"isFree"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var user models.User
+	if err := db.DB.First(&user, idQuery, userID).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
+		return
+	}
+
+	var subject models.Subject
+	if err := applyIDOrSlugQuery(db.DB, req.CourseID).First(&subject).Error; err != nil {
+		handleSubjectError(c, req.CourseID, err, "verifying course for manual enrollment")
+		return
+	}
+
+	if isAlreadyEnrolled(userID, subject.ID) {
+		api_response.Success(c, gin.H{"success": true, "alreadyEnrolled": true, "message": "User is already enrolled"})
+		return
+	}
+
+	if !req.IsFree && subject.Price > 0 && !hasPaidForSubject(userID, subject.ID) {
+		api_response.Error(c, http.StatusBadRequest, "User has not paid for this course. Use isFree=true to bypass payment.")
+		return
+	}
+
+	if err := executeEnrollmentTransaction(userID, subject.ID); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to enroll: "+err.Error())
+		return
+	}
+
+	api_response.Success(c, gin.H{"success": true, "message": "User enrolled successfully"})
+}
+
+func GetUserVideoEngagement(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		api_response.Error(c, http.StatusBadRequest, "user id is required")
+		return
+	}
+
+	limit := 100
+	if q := c.Query("limit"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil && v > 0 {
+			limit = v
+		}
+	}
+
+	var progressRecords []models.LessonProgress
+	if err := db.DB.Where("user_id = ?", userID).
+		Order("updated_at DESC").
+		Limit(limit).
+		Find(&progressRecords).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch video engagement")
+		return
+	}
+
+	videos := make([]gin.H, 0, len(progressRecords))
+	totalWatchSeconds := 0
+	for _, p := range progressRecords {
+		totalWatchSeconds += p.TimeSpentSeconds
+		videos = append(videos, gin.H{
+			"lessonId":           p.LessonID,
+			"timeSpentSeconds":   p.TimeSpentSeconds,
+			"timeSpentMinutes":   p.TimeSpentSeconds / 60,
+			"completed":          p.Completed,
+			"status":             string(p.Status),
+			"lastWatchedPosition": p.LastWatchedPosition,
+		})
+	}
+
+	api_response.Success(c, gin.H{
+		"userId":            userID,
+		"totalVideos":       len(videos),
+		"totalWatchSeconds": totalWatchSeconds,
+		"totalWatchMinutes": totalWatchSeconds / 60,
+		"videos":            videos,
 	})
 }
 

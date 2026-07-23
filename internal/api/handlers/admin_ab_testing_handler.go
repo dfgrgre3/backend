@@ -4,19 +4,25 @@ import (
 	"net/http"
 
 	api_response "thanawy-backend/internal/api/response"
-	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
+	"thanawy-backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
 
+var abTestingService = services.NewABTestingService()
+
+// queryID is defined in common.go: queryID = "id = ?"
+
 func AdminGetABTests(c *gin.Context) {
-	var tests []models.ABExperiment
-	if err := db.DB.Order("created_at DESC").Find(&tests).Error; err != nil {
+	experiments, err := abTestingService.ListExperiments(c.Request.Context())
+	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch AB tests")
 		return
 	}
-	api_response.Success(c, tests)
+	api_response.Success(c, gin.H{
+		"experiments": experiments,
+	})
 }
 
 func AdminCreateABTest(c *gin.Context) {
@@ -26,22 +32,21 @@ func AdminCreateABTest(c *gin.Context) {
 		return
 	}
 
-	if err := SafeCreate(db.DB, &item); err != nil {
-		if IsDuplicateKeyError(err) {
-			api_response.Error(c, http.StatusConflict, "AB test already exists")
-			return
-		}
+	created, err := abTestingService.CreateExperiment(c.Request.Context(), item.Name, item.Description, item.Status, item.Variants, item.TrafficPct)
+	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to create AB test")
 		return
 	}
 
-	api_response.Created(c, item)
+	api_response.Created(c, gin.H{
+		"experiment": created,
+	})
 }
 
 func AdminUpdateABTest(c *gin.Context) {
 	id := c.Param("id")
-	var experiment models.ABExperiment
-	if err := db.DB.Where(queryID, id).First(&experiment).Error; err != nil {
+	experiment, err := abTestingService.GetExperiment(c.Request.Context(), id)
+	if err != nil {
 		api_response.Error(c, http.StatusNotFound, "AB Test not found")
 		return
 	}
@@ -52,6 +57,8 @@ func AdminUpdateABTest(c *gin.Context) {
 		Status       *string  `json:"status"`
 		TrafficSplit *float64 `json:"trafficSplit"`
 		TrafficPct   *int     `json:"trafficPct"`
+		Winner       *string  `json:"winner"`
+		Variants     *string  `json:"variants"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -59,37 +66,66 @@ func AdminUpdateABTest(c *gin.Context) {
 		return
 	}
 
-	updates := map[string]interface{}{}
 	if input.Name != nil {
-		updates["name"] = *input.Name
+		experiment.Name = *input.Name
 	}
 	if input.Description != nil {
-		updates["description"] = *input.Description
+		experiment.Description = *input.Description
 	}
 	if input.Status != nil {
-		updates["status"] = *input.Status
+		experiment.Status = *input.Status
 	}
 	if input.TrafficPct != nil {
-		updates["traffic_pct"] = *input.TrafficPct
+		experiment.TrafficPct = *input.TrafficPct
 	} else if input.TrafficSplit != nil {
-		updates["traffic_pct"] = int(*input.TrafficSplit)
+		experiment.TrafficPct = int(*input.TrafficSplit)
+	}
+	if input.Winner != nil {
+		experiment.Winner = input.Winner
+	}
+	if input.Variants != nil {
+		experiment.Variants = *input.Variants
 	}
 
-	if len(updates) > 0 {
-		if err := db.DB.Model(&models.ABExperiment{}).Where(queryID, id).Updates(updates).Error; err != nil {
-			api_response.Error(c, http.StatusInternalServerError, "Failed to update AB test")
-			return
-		}
+	if err := abTestingService.UpdateExperiment(c.Request.Context(), experiment); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to update AB test")
+		return
 	}
 
-	api_response.Success(c, experiment)
+	api_response.Success(c, gin.H{
+		"experiment": experiment,
+	})
 }
 
 func AdminDeleteABTest(c *gin.Context) {
 	id := c.Param("id")
-	if err := db.DB.Where(queryID, id).Delete(&models.ABExperiment{}).Error; err != nil {
+	if err := abTestingService.DeleteExperiment(c.Request.Context(), id); err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to delete AB test")
 		return
 	}
 	api_response.Success(c, nil)
+}
+
+// AdminTrackABEvent tracks an event for a specific experiment variant
+func AdminTrackABEvent(c *gin.Context) {
+	id := c.Param("id")
+	var input struct {
+		UserID string `json:"userId" binding:"required"`
+		Event  string `json:"event" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := abTestingService.TrackEvent(c.Request.Context(), id, input.UserID, input.Event); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	api_response.Success(c, gin.H{
+		"tracked": true,
+		"event":   input.Event,
+	})
 }

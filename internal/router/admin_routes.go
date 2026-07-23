@@ -29,11 +29,21 @@ func SetupAdminRoutes(router *gin.Engine) {
 	admin.Use(middleware.Auth())
 	admin.Use(middleware.AdminOrModerator())
 	admin.Use(middleware.StrictRBAC())
+	// Keep an immutable, server-authoritative audit trail for every admin
+	// operation. This is deliberately registered after authentication so the
+	// logger can associate each event with the authenticated administrator.
+	admin.Use(middleware.NewAdminAuditLogger(middleware.DefaultAuditLoggerConfig()).LogAdminOperations())
 	{
 		// Dashboard
 		admin.GET("/dashboard", handlers.GetAdminDashboard)
 		admin.GET("/live", handlers.GetAdminLive)
+		admin.GET("/live-sessions", handlers.AdminListLiveSessions)
+		admin.POST("/live-sessions", handlers.AdminCreateLiveSession)
 		admin.GET("/analytics", handlers.GetAdminAnalytics)
+		// Analytics sub-resources used by the admin analytics workspace.
+		admin.GET("/analytics/revenue", handlers.GetAdminRevenue)
+		admin.GET("/analytics/journeys", handlers.GetUserJourneys)
+		admin.GET("/analytics/metrics", handlers.GetActivityMetrics)
 		admin.GET("/infrastructure/stats", handlers.GetAdminInfrastructureStats)
 		admin.GET(adminAnnouncementsRoute, handlers.GetAdminAnnouncements)
 		admin.POST(adminAnnouncementsRoute, handlers.CreateAdminAnnouncement)
@@ -42,6 +52,9 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.GET("/reports/overview", handlers.GetAdminReportsOverview)
 		admin.GET("/reports/users", handlers.GetAdminReportsUsers)
 		admin.GET("/reports/books", handlers.GetAdminReportsBooks)
+		// Audit logs are read-only. Audit entries themselves are created by the
+		// middleware above, never from a browser supplied payload.
+		admin.GET("/audit-logs", handlers.AdminGetAuditLogs)
 
 		// AI
 		admin.GET("/ai", handlers.AdminAIGet)
@@ -66,6 +79,32 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST(adminTeachersRoute, handlers.CreateTeacher)
 		admin.PATCH(adminTeachersRoute, handlers.UpdateTeacher)
 		admin.DELETE(adminTeachersRoute, handlers.DeleteTeacher)
+		admin.GET(adminTeachersRoute+"/applications", handlers.GetTeacherApplications)
+		admin.DELETE(adminTeachersRoute+"/applications", handlers.ReviewTeacherApplication)
+
+		// Instructor management
+		admin.GET("/instructors", handlers.GetInstructors)
+		admin.POST("/instructors", handlers.CreateInstructor)
+		admin.GET("/instructors/statistics", handlers.GetInstructorStatistics)
+		admin.GET("/instructors/export", handlers.ExportInstructors)
+		admin.POST("/instructors/bulk-delete", handlers.BulkDeleteInstructors)
+		admin.POST("/instructors/bulk-notifications", handlers.BulkSendInstructorNotifications)
+		admin.GET("/instructors/:id", handlers.GetInstructor)
+		admin.PATCH("/instructors/:id", handlers.UpdateInstructor)
+		admin.DELETE("/instructors/:id", handlers.DeleteInstructor)
+		admin.POST("/instructors/:id/approve", handlers.ApproveInstructor)
+		admin.POST("/instructors/:id/reject", handlers.RejectInstructor)
+		admin.POST("/instructors/:id/suspend", handlers.SuspendInstructor)
+		admin.GET("/instructors/:id/documents", handlers.GetInstructorDocuments)
+		admin.POST("/instructors/:id/documents/:documentId/review", handlers.ReviewInstructorDocument)
+		admin.GET("/instructors/:id/contracts", handlers.GetInstructorContracts)
+		admin.POST("/instructors/:id/contracts", handlers.CreateInstructorContract)
+		admin.GET("/instructors/:id/payouts", handlers.GetInstructorPayouts)
+		admin.GET("/instructors/:id/performance", handlers.GetInstructorPerformance)
+		admin.GET("/instructors/:id/violations", handlers.GetInstructorViolations)
+		admin.POST("/instructors/:id/violations", handlers.CreateInstructorViolation)
+		admin.POST("/instructors/:id/violations/:violationId/resolve", handlers.ResolveInstructorViolation)
+		admin.POST("/instructors/:id/notifications", handlers.SendInstructorNotification)
 
 		// Categories
 		admin.GET(adminCourseCategoriesRoute, handlers.GetCategoriesForAdmin)
@@ -109,6 +148,7 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/security/sessions/user/:userId/revoke-all", handlers.RevokeUserSessions)
 		admin.POST("/security/sessions/:id/suspend", handlers.SuspendSession)
 		admin.GET("/security/sessions/activity", handlers.GetSessionActivity)
+		admin.GET("/security/logs/users/:id", handlers.GetSecurityLogsForUser)
 
 		// IP Whitelist (admin-only)
 		sensitive.GET("/security/ip-whitelist", handlers.GetIPWhitelist)
@@ -175,6 +215,7 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/ab-testing", handlers.AdminCreateABTest)
 		admin.PATCH("/ab-testing/:id", handlers.AdminUpdateABTest)
 		admin.DELETE("/ab-testing/:id", handlers.AdminDeleteABTest)
+		admin.POST("/ab-testing/:id/track", handlers.AdminTrackABEvent)
 
 		// Forum Categories
 		admin.GET("/forum", handlers.AdminGetForum)
@@ -183,6 +224,15 @@ func SetupAdminRoutes(router *gin.Engine) {
 
 		// Books
 		admin.GET("/books", handlers.AdminGetBooks)
+
+		// Affiliates
+		admin.GET("/affiliates", handlers.AdminGetAffiliates)
+		admin.POST("/affiliates", handlers.AdminCreateAffiliate)
+		admin.GET("/affiliates/:id", handlers.AdminGetAffiliate)
+		admin.PATCH("/affiliates/:id", handlers.AdminUpdateAffiliate)
+		admin.DELETE("/affiliates/:id", handlers.AdminDeleteAffiliate)
+		admin.GET("/affiliates/:id/referrals", handlers.AdminGetAffiliateReferrals)
+		admin.POST("/affiliates/:id/pay", handlers.AdminPayAffiliate)
 		admin.POST("/books", handlers.AdminCreateBook)
 		admin.PATCH("/books/:id", handlers.AdminUpdateBook)
 		admin.DELETE("/books/:id", handlers.AdminDeleteBook)
@@ -197,6 +247,10 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.GET(adminUserIDRoute, handlers.GetUserByID)
 		admin.PATCH(adminUserIDRoute, handlers.UpdateUser)
 		sensitive.DELETE(adminUserIDRoute, handlers.DeleteUser) // ADMIN-only
+		admin.GET("/users/:id/enrollments", handlers.GetUserEnrollments)
+		admin.POST("/users/:id/enrollments", handlers.AdminEnrollUser)
+		admin.GET("/users/:id/login-attempts", handlers.GetUserLoginAttempts)
+		admin.GET("/users/:id/video-engagement", handlers.GetUserVideoEngagement)
 		admin.GET("/search/users", handlers.SearchUsers)
 		admin.POST("/users/search", handlers.SearchUsers)
 
@@ -216,6 +270,31 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.PATCH("/courses/:id/curriculum", handlers.UpdateCourseCurriculum)
 		admin.POST("/courses/duplicate", handlers.DuplicateCourse)
 		admin.POST("/courses/batch", handlers.BatchCourseAction)
+
+		// Course lifecycle workflow (migration 0064) - TODO: implement missing handlers
+		// admin.POST("/courses/:id/submit-review", handlers.SubmitCourseForReview)
+		admin.POST("/courses/:id/reject", handlers.RejectCourse)
+		admin.POST("/courses/:id/archive", handlers.ArchiveCourse)
+		// admin.POST("/courses/:id/restore", handlers.RestoreCourse)
+		// admin.GET("/courses/review-queue", handlers.GetReviewQueue)
+		admin.GET("/courses/:id/changelog", handlers.GetCourseChangelog)
+
+		// Course tags CRUD
+		admin.GET("/course-tags", handlers.GetCourseTags)
+		admin.POST("/course-tags", handlers.CreateCourseTag)
+		admin.PATCH("/course-tags/:id", handlers.UpdateCourseTag)
+		admin.DELETE("/course-tags/:id", handlers.DeleteCourseTag)
+		admin.PUT("/courses/:id/tags", handlers.AssignTagsToCourse)
+
+		// Related / prerequisite courses
+		admin.GET("/courses/:id/related", handlers.GetRelatedCourses)
+		admin.POST("/courses/:id/related", handlers.AddRelatedCourse)
+		admin.DELETE("/courses/:id/related/:relatedId", handlers.RemoveRelatedCourse)
+
+		// Review workflow comments
+		admin.GET("/courses/:id/review-comments", handlers.GetReviewComments)
+		admin.POST("/courses/:id/review-comments", handlers.AddReviewComment)
+		admin.PATCH("/courses/:id/review-comments/:commentId", handlers.UpdateReviewComment)
 
 		// Curriculum
 		admin.PATCH("/subjects/:id/curriculum", handlers.UpdateCourseCurriculum)
@@ -292,5 +371,38 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/notifications/:id/read", handlers.AdminMarkNotificationRead)
 		admin.POST("/notifications/read-all", handlers.AdminMarkAllNotificationsRead)
 		admin.DELETE("/notifications/:id", handlers.AdminDeleteNotification)
+
+		// Interactive Questions for Video Lessons - TODO: implement missing handlers
+		// admin.GET("/courses/lessons/:id/interactive-questions", handlers.GetInteractiveQuestions)
+		// admin.POST("/courses/lessons/:id/interactive-questions", handlers.CreateInteractiveQuestion)
+		// admin.GET("/interactive-questions/:id", handlers.GetInteractiveQuestion)
+		// admin.PATCH("/interactive-questions", handlers.UpdateInteractiveQuestion)
+		// admin.DELETE("/interactive-questions/:id", handlers.DeleteInteractiveQuestion)
+
+		// Phase 1: Course Pricing, Bundles & Workflow
+		// Course Pricing
+		admin.GET("/courses/:id/pricing", handlers.GetCoursePricing)
+		admin.PUT("/courses/:id/pricing", handlers.UpdateCoursePricing)
+
+		// Course Bundles
+		admin.GET("/bundles", handlers.ListBundles)
+		admin.POST("/bundles", handlers.CreateBundle)
+		admin.GET("/bundles/:id", handlers.GetBundle)
+		admin.PATCH("/bundles/:id", handlers.UpdateBundle)
+		admin.DELETE("/bundles/:id", handlers.DeleteBundle)
+		admin.POST("/bundles/:id/courses", handlers.AddCoursesToBundle)
+		admin.DELETE("/bundles/:id/courses", handlers.RemoveCoursesFromBundle)
+		admin.GET("/bundles/:id/enrollments", handlers.GetBundleEnrollments)
+
+		// Course Versioning
+		admin.GET("/courses/:id/versions", handlers.GetCourseVersions)
+		admin.POST("/courses/:id/versions", handlers.CreateCourseVersion)
+		admin.POST("/courses/:id/versions/:versionId/restore", handlers.RestoreCourseVersion)
+
+		// Course Status Workflow
+		admin.POST("/courses/:id/submit-review", handlers.SubmitForReview)
+		admin.POST("/courses/:id/unarchive", handlers.UnarchiveCourse)
+		admin.GET("/courses/pending-review", handlers.GetCoursesPendingReview)
+		admin.POST("/courses/bulk-status", handlers.BulkStatusChange)
 	}
 }

@@ -109,6 +109,10 @@ tmp/
 *.log
 logs/
 
+# Local development output (keep source and reproducible scripts in version control)
+/test_output.txt
+/tsconfig.tsbuildinfo
+
 # ==========================================
 # OS / System Specific
 # ==========================================
@@ -124,6 +128,7 @@ desktop.ini
 
 .vercel
 *.md
+!README.md
 
 
 # ==========================================

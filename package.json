@@ -17,6 +17,8 @@
     "db:pull": "npx prisma db pull",
     "db:push": "npx prisma db push",
     "db:studio": "npx prisma studio",
-    "db:validate": "npx prisma validate"
+    "db:validate": "npx prisma validate",
+    "tools:generate-token": "go run ./tools/dev/generate-token",
+    "tools:sync-vercel-env": "node ./tools/deployment/sync-vercel-env.mjs"
   }
 }

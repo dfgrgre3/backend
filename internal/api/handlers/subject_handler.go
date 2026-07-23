@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -28,6 +29,7 @@ import (
 const (
 	msgSubjectNotFound      = "Subject not found"
 	preloadTopicsSubTopics  = "Topics.SubTopics"
+	preloadAdvanced         = "Topics.SubTopics.Attachments"
 	msgUserNotAuthenticated = "User not authenticated"
 	msgInvalidInput         = "Invalid input"
 	subjectIDQuery          = "subject_id = ?"
@@ -46,25 +48,156 @@ func getSubjectRepo() *repository.SubjectRepository {
 	return subjectRepo
 }
 
+func sanitizeSearchTerm(term string) string {
+	// Remove potential SQL injection patterns
+	term = strings.ReplaceAll(term, "--", "")
+	term = strings.ReplaceAll(term, "/*", "")
+	term = strings.ReplaceAll(term, "*/", "")
+	term = strings.ReplaceAll(term, ";", "")
+	term = strings.TrimSpace(term)
+
+	// Limit length to prevent abuse
+	if len(term) > 100 {
+		term = term[:100]
+	}
+
+	return term
+}
+
+func isValidLevel(level string) bool {
+	switch level {
+	case "BEGINNER", "INTERMEDIATE", "ADVANCED":
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidBoolean(value string) bool {
+	return value == "true" || value == "false"
+}
+
+func isValidCourseStatus(status string) bool {
+	switch status {
+	case "DRAFT", "UNDER_REVIEW", "PUBLISHED", "ARCHIVED", "REJECTED":
+		return true
+	default:
+		return false
+	}
+}
+
+// fetchTopicCounts retrieves topic counts for multiple subjects in a single query
+func fetchTopicCounts(ctx context.Context, subjectIDs []string) map[string]int64 {
+	if len(subjectIDs) == 0 {
+		return map[string]int64{}
+	}
+
+	type countResult struct {
+		SubjectID string
+		Count     int64
+	}
+	var topicCounts []countResult
+	db.ReadDB(ctx).Table("Topic").
+		Select("subject_id, count(*) as count").
+		Where("subject_id IN ?", subjectIDs).
+		Group("subject_id").
+		Scan(&topicCounts)
+
+	topicCountMap := make(map[string]int64)
+	for _, c := range topicCounts {
+		topicCountMap[c.SubjectID] = c.Count
+	}
+	return topicCountMap
+}
+
+// buildSubjectListResponse creates a standardized response for subject lists
+func buildSubjectListResponse(subjects []models.Subject, topicCountMap map[string]int64) []gin.H {
+	items := make([]gin.H, 0, len(subjects))
+	for _, subject := range subjects {
+		items = append(items, gin.H{
+			"id":                     subject.ID,
+			"name":                   subject.Name,
+			"nameAr":                 subject.NameAr,
+			"code":                   subject.Code,
+			"description":            subject.Description,
+			"icon":                   subject.Icon,
+			"color":                  subject.Color,
+			"type":                   "COURSE",
+			"isActive":               subject.IsActive,
+			"isPublished":            subject.IsPublished,
+			"price":                  subject.Price,
+			"level":                  subject.Level,
+			"instructorName":         subject.InstructorName,
+			"instructorId":           subject.InstructorId,
+			"categoryId":             subject.CategoryId,
+			"thumbnailUrl":           subject.ThumbnailUrl,
+			"trailerUrl":             subject.TrailerUrl,
+			"trailerDurationMinutes": subject.TrailerDurationMinutes,
+			"durationHours":          subject.DurationHours,
+			"requirements":           subject.Requirements,
+			"learningObjectives":     subject.LearningObjectives,
+			"seoTitle":               subject.SeoTitle,
+			"seoDescription":         subject.SeoDescription,
+			"slug":                   subject.Slug,
+			"rating":                 subject.Rating,
+			"enrolledCount":          subject.EnrolledCount,
+			"createdAt":              subject.CreatedAt,
+			"updatedAt":              subject.UpdatedAt,
+			"_count": gin.H{
+				"enrollments": subject.EnrolledCount,
+				"topics":      topicCountMap[subject.ID],
+				"reviews":     0,
+				"teachers":    0,
+			},
+		})
+	}
+	return items
+}
+
 // buildSubjectFilters applies common filter conditions to a query and returns it.
 func buildSubjectFilters(query *gorm.DB, c *gin.Context) *gorm.DB {
 	if catID := c.Query("categoryId"); catID != "" {
-		query = query.Where("category_id = ?", catID)
+		if _, err := uuid.Parse(catID); err == nil {
+			query = query.Where("category_id = ?", catID)
+		}
 	}
 
 	search := c.Query("search")
 	if search != "" {
-		query = query.Where("name ILIKE ? OR name_ar ILIKE ?", "%"+search+"%", "%"+search+"%")
+		search = sanitizeSearchTerm(search)
+		if search != "" {
+			query = query.Where("name ILIKE ? OR name_ar ILIKE ?", "%"+search+"%", "%"+search+"%")
+		}
 	}
 
 	if level := c.Query("level"); level != "" {
-		query = query.Where("level = ?", level)
+		if isValidLevel(level) {
+			query = query.Where("level = ?", level)
+		}
 	}
 	if isPublished := c.Query("isPublished"); isPublished != "" {
-		query = query.Where("is_published = ?", isPublished == "true")
+		if isValidBoolean(isPublished) {
+			query = query.Where("is_published = ?", isPublished == "true")
+		}
 	}
 	if isActive := c.Query("isActive"); isActive != "" {
-		query = query.Where(isActiveQuery, isActive == "true")
+		if isValidBoolean(isActive) {
+			query = query.Where(isActiveQuery, isActive == "true")
+		}
+	}
+	if status := c.Query("status"); status != "" {
+		if isValidCourseStatus(status) {
+			query = query.Where("status = ?", status)
+		}
+	}
+	if isFeatured := c.Query("isFeatured"); isValidBoolean(isFeatured) && isFeatured == "true" {
+		query = query.Where("is_featured = ?", true)
+	}
+	if isTrending := c.Query("isTrending"); isValidBoolean(isTrending) && isTrending == "true" {
+		query = query.Where("is_trending = ?", true)
+	}
+	if isNew := c.Query("isNew"); isValidBoolean(isNew) && isNew == "true" {
+		query = query.Where("is_new = ?", true)
 	}
 	return query
 }
@@ -138,64 +271,10 @@ func GetSubjects(c *gin.Context) {
 		subjectIDs[i] = s.ID
 	}
 
-	type countResult struct {
-		SubjectID string
-		Count     int64
-	}
-	var topicCounts []countResult
-	if len(subjectIDs) > 0 {
-		db.ReadDB(c.Request.Context()).Table("Topic").
-			Select("subject_id, count(*) as count").
-			Where("subject_id IN ?", subjectIDs).
-			Group("subject_id").
-			Scan(&topicCounts)
-	}
-
-	topicCountMap := make(map[string]int64)
-	for _, c := range topicCounts {
-		topicCountMap[c.SubjectID] = c.Count
-	}
+	topicCountMap := fetchTopicCounts(c.Request.Context(), subjectIDs)
 
 	// Format response for frontend
-	items := make([]gin.H, 0, len(subjects))
-	for _, subject := range subjects {
-		items = append(items, gin.H{
-			"id":                     subject.ID,
-			"name":                   subject.Name,
-			"nameAr":                 subject.NameAr,
-			"code":                   subject.Code,
-			"description":            subject.Description,
-			"icon":                   subject.Icon,
-			"color":                  subject.Color,
-			"type":                   "COURSE",
-			"isActive":               subject.IsActive,
-			"isPublished":            subject.IsPublished,
-			"price":                  subject.Price,
-			"level":                  subject.Level,
-			"instructorName":         subject.InstructorName,
-			"instructorId":           subject.InstructorId,
-			"categoryId":             subject.CategoryId,
-			"thumbnailUrl":           subject.ThumbnailUrl,
-			"trailerUrl":             subject.TrailerUrl,
-			"trailerDurationMinutes": subject.TrailerDurationMinutes,
-			"durationHours":          subject.DurationHours,
-			"requirements":           subject.Requirements,
-			"learningObjectives":     subject.LearningObjectives,
-			"seoTitle":               subject.SeoTitle,
-			"seoDescription":         subject.SeoDescription,
-			"slug":                   subject.Slug,
-			"rating":                 subject.Rating,
-			"enrolledCount":          subject.EnrolledCount,
-			"createdAt":              subject.CreatedAt,
-			"updatedAt":              subject.UpdatedAt,
-			"_count": gin.H{
-				"enrollments": subject.EnrolledCount,
-				"topics":      topicCountMap[subject.ID],
-				"reviews":     0,
-				"teachers":    0,
-			},
-		})
-	}
+	items := buildSubjectListResponse(subjects, topicCountMap)
 
 	responsePayload := gin.H{
 		"items": items,
@@ -271,6 +350,31 @@ func GetSubject(c *gin.Context) {
 	api_response.Success(c, response)
 }
 
+// Lesson represents the lesson structure returned to the frontend
+type Lesson struct {
+	ID                string `json:"id"`
+	Title             string `json:"title"`
+	Description       string `json:"description"`
+	VideoUrl          string `json:"videoUrl"`
+	AudioUrl          string `json:"audioUrl,omitempty"`
+	AudioDuration     int    `json:"audioDuration,omitempty"`
+	ExternalLinkUrl   string `json:"externalLinkUrl,omitempty"`
+	ExternalLinkTitle string `json:"externalLinkTitle,omitempty"`
+	Type              string `json:"type"`
+	IsFree            bool   `json:"isFree"`
+	Order             int    `json:"order"`
+	DurationMinutes   int    `json:"durationMinutes"`
+	ExamID            string `json:"examId,omitempty"`
+	// Advanced fields
+	IsDripEnabled      bool   `json:"isDripEnabled,omitempty"`
+	DripReleaseDate    string `json:"dripReleaseDate,omitempty"`
+	IsContentProtected bool   `json:"isContentProtected,omitempty"`
+	HasSubtitles       bool   `json:"hasSubtitles,omitempty"`
+	HasChapters        bool   `json:"hasChapters,omitempty"`
+	ViewCount          int    `json:"viewCount,omitempty"`
+	CompletionCount    int    `json:"completionCount,omitempty"`
+}
+
 func GetCourseLessons(c *gin.Context) {
 	database, aborted := safeDB(c)
 	if aborted {
@@ -279,7 +383,7 @@ func GetCourseLessons(c *gin.Context) {
 	id := c.Param("id")
 	var subject models.Subject
 
-	query := database.Preload(preloadTopicsSubTopics)
+	query := database.Preload(preloadAdvanced)
 	query = applyIDOrSlugQuery(query, id)
 
 	if err := query.First(&subject).Error; err != nil {
@@ -287,33 +391,53 @@ func GetCourseLessons(c *gin.Context) {
 		return
 	}
 
-	// Simplified lesson structure for frontend
-	type Lesson struct {
-		ID              string `json:"id"`
-		Title           string `json:"title"`
-		Description     string `json:"description"`
-		VideoUrl        string `json:"videoUrl"`
-		IsFree          bool   `json:"isFree"`
-		Order           int    `json:"order"`
-		DurationMinutes int    `json:"durationMinutes"`
-	}
-
 	var lessons []Lesson
 	for _, topic := range subject.Topics {
 		for _, st := range topic.SubTopics {
-			lessons = append(lessons, Lesson{
-				ID:              st.ID,
-				Title:           st.Title,
-				Description:     stringOrEmpty(st.Description),
-				VideoUrl:        stringOrEmpty(st.VideoUrl),
-				IsFree:          st.IsFree,
-				Order:           st.Order,
-				DurationMinutes: st.DurationMinutes,
-			})
+			l := Lesson{
+				ID:                 st.ID,
+				Title:              st.Title,
+				Description:        stringOrEmpty(st.Description),
+				VideoUrl:           stringOrEmpty(st.VideoUrl),
+				AudioUrl:           stringOrEmpty(st.AudioUrl),
+				AudioDuration:      st.AudioDurationSeconds,
+				ExternalLinkUrl:    stringOrEmpty(st.ExternalLinkUrl),
+				ExternalLinkTitle:  stringOrEmpty(st.ExternalLinkTitle),
+				Type:               string(st.Type),
+				IsFree:             st.IsFree,
+				Order:              st.Order,
+				DurationMinutes:    st.DurationMinutes,
+				ExamID:             stringOrEmpty(st.ExamID),
+				IsDripEnabled:      st.IsDripEnabled,
+				IsContentProtected: st.IsContentProtected,
+				ViewCount:          st.ViewCount,
+				CompletionCount:    st.CompletionCount,
+			}
+			if st.DripReleaseDate != nil {
+				l.DripReleaseDate = st.DripReleaseDate.Format(time.RFC3339)
+			}
+			// Check for subtitles and chapters
+			if len(st.SubtitleUrls) > 0 {
+				l.HasSubtitles = true
+			}
+			if len(st.VideoChaptersData) > 0 {
+				l.HasChapters = true
+			}
+			lessons = append(lessons, l)
 		}
 	}
 
-	api_response.Success(c, gin.H{"lessons": lessons})
+	api_response.Success(c, gin.H{
+		"lessons": lessons,
+		"course": gin.H{
+			"id":        subject.ID,
+			"title":     subject.Name,
+			"titleAr":   subject.NameAr,
+			"status":    subject.Status,
+			"type":      string(subject.Type),
+			"thumbnail": subject.ThumbnailUrl,
+		},
+	})
 }
 
 // applyIDOrSlugQuery applies where clause based on whether id is a UUID or a slug
@@ -799,6 +923,11 @@ func mapInputToSubjectUpdatesMap(input map[string]interface{}) (map[string]inter
 		"level":          "level",
 		"language":       "language",
 		"type":           "type",
+		// Lifecycle fields (migration 0064)
+		"status":           "status",
+		"version":          "version",
+		"shortDescription": "short_description",
+		"longDescription":  "long_description",
 	}
 
 	for inputKey, dbCol := range mappings {
@@ -812,6 +941,7 @@ func mapInputToSubjectUpdatesMap(input map[string]interface{}) (map[string]inter
 		"price":                  "price",
 		"durationHours":          "duration_hours",
 		"trailerDurationMinutes": "trailer_duration_minutes",
+		"maxStudents":            "max_students",
 	}
 	for inputKey, dbCol := range numMappings {
 		if val, exists := input[inputKey]; exists {
@@ -820,10 +950,13 @@ func mapInputToSubjectUpdatesMap(input map[string]interface{}) (map[string]inter
 	}
 
 	boolMappings := map[string]string{
-		"isActive":    "is_active",
-		"isPublished": "is_published",
-		"isFree":      "is_free",
-		"isFeatured":  "is_featured",
+		"isActive":       "is_active",
+		"isPublished":    "is_published",
+		"isFree":         "is_free",
+		"isFeatured":     "is_featured",
+		"isTrending":     "is_trending",
+		"isNew":          "is_new",
+		"hasCertificate": "has_certificate",
 	}
 	for inputKey, dbCol := range boolMappings {
 		if val, exists := input[inputKey]; exists {
@@ -849,6 +982,24 @@ func mapInputToSubjectUpdatesMap(input map[string]interface{}) (map[string]inter
 		}
 	}
 
+	// Date/time fields (accept ISO 8601 strings or null)
+	dateFields := map[string]string{
+		"availableFrom":  "available_from",
+		"availableUntil": "available_until",
+		"newUntil":       "new_until",
+	}
+	for inputKey, dbCol := range dateFields {
+		if val, exists := input[inputKey]; exists {
+			if val == nil {
+				updates[dbCol] = nil
+			} else if str, ok := val.(string); ok && str != "" {
+				if t, err := time.Parse(time.RFC3339, str); err == nil {
+					updates[dbCol] = t
+				}
+			}
+		}
+	}
+
 	return updates, nil
 }
 
@@ -868,7 +1019,12 @@ func parseStringArray(val interface{}) (*models.PGStringArray, error) {
 }
 
 func normalizeInputMap(input map[string]interface{}) {
-	pointerFields := []string{"code", "slug", "instructorId", "categoryId", "thumbnailUrl", "trailerUrl", "nameAr", "description", "icon", "instructorName", "seoTitle", "seoDescription"}
+	pointerFields := []string{
+		"code", "slug", "instructorId", "categoryId",
+		"thumbnailUrl", "trailerUrl", "nameAr", "description",
+		"icon", "instructorName", "seoTitle", "seoDescription",
+		"shortDescription", "longDescription",
+	}
 	for _, field := range pointerFields {
 		if val, exists := input[field]; exists {
 			if str, ok := val.(string); ok && str == "" {
@@ -895,6 +1051,13 @@ func DeleteSubject(c *gin.Context) {
 		id = input.ID
 	}
 
+	// Check admin permissions
+	role, exists := c.Get("role")
+	if !exists || (role != "ADMIN" && role != "SUPER_ADMIN") {
+		api_response.Error(c, http.StatusForbidden, "Admin access required")
+		return
+	}
+
 	log.Printf("Attempting to delete subject with ID: %q", id)
 
 	// First, check if subject exists
@@ -911,7 +1074,12 @@ func DeleteSubject(c *gin.Context) {
 
 	// Delete in transaction to ensure atomicity
 	tx := db.DB.Begin()
-	defer tx.Rollback()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			panic(r)
+		}
+	}()
 
 	// Delete related records that don't have CASCADE constraints
 	// Delete StudySessions referencing this subject
@@ -1665,52 +1833,9 @@ func GetPopularCourses(c *gin.Context) {
 		subjectIDs[i] = s.ID
 	}
 
-	type countResult struct {
-		SubjectID string
-		Count     int64
-	}
-	var topicCounts []countResult
-	if len(subjectIDs) > 0 {
-		db.ReadDB(c.Request.Context()).Table("Topic").
-			Select("subject_id, count(*) as count").
-			Where("subject_id IN ?", subjectIDs).
-			Group("subject_id").
-			Scan(&topicCounts)
-	}
+	topicCountMap := fetchTopicCounts(c.Request.Context(), subjectIDs)
 
-	topicCountMap := make(map[string]int64)
-	for _, c := range topicCounts {
-		topicCountMap[c.SubjectID] = c.Count
-	}
-
-	items := make([]gin.H, 0, len(subjects))
-	for _, subject := range subjects {
-		items = append(items, gin.H{
-			"id":                     subject.ID,
-			"name":                   subject.Name,
-			"nameAr":                 subject.NameAr,
-			"code":                   subject.Code,
-			"description":            subject.Description,
-			"icon":                   subject.Icon,
-			"color":                  subject.Color,
-			"type":                   "COURSE",
-			"isActive":               subject.IsActive,
-			"isPublished":            subject.IsPublished,
-			"price":                  subject.Price,
-			"level":                  subject.Level,
-			"instructorName":         subject.InstructorName,
-			"instructorId":           subject.InstructorId,
-			"categoryId":             subject.CategoryId,
-			"thumbnailUrl":           subject.ThumbnailUrl,
-			"trailerUrl":             subject.TrailerUrl,
-			"trailerDurationMinutes": subject.TrailerDurationMinutes,
-			"slug":                   subject.Slug,
-			"rating":                 subject.Rating,
-			"enrolledCount":          subject.EnrolledCount,
-			"durationHours":          subject.DurationHours,
-			"topicCount":             topicCountMap[subject.ID],
-		})
-	}
+	items := buildSubjectListResponse(subjects, topicCountMap)
 
 	response := gin.H{
 		"items": items,

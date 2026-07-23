@@ -35,19 +35,6 @@ type Automation struct {
 	UpdatedAt   time.Time  `gorm:"column:updated_at" json:"updatedAt"`
 }
 
-type ABExperiment struct {
-	ID          string     `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	Name        string     `gorm:"not null;column:name" json:"name"`
-	Description string     `gorm:"column:description" json:"description"`
-	Status      string     `gorm:"default:'DRAFT';column:status" json:"status"`
-	Variants    string     `gorm:"type:text;column:variants" json:"variants"`
-	TrafficPct  int        `gorm:"default:100;column:traffic_pct" json:"trafficPct"`
-	StartDate   *time.Time `gorm:"column:start_date" json:"startDate"`
-	EndDate     *time.Time `gorm:"column:end_date" json:"endDate"`
-	CreatedAt   time.Time  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt   time.Time  `gorm:"column:updated_at" json:"updatedAt"`
-}
-
 // Campaign represents a marketing campaign
 type Campaign struct {
 	ID          string     `gorm:"primaryKey;type:uuid;column:id" json:"id"`
@@ -93,14 +80,6 @@ func (c *Coupon) BeforeCreate(tx *gorm.DB) error {
 
 func (Automation) TableName() string { return "Automation" }
 func (a *Automation) BeforeCreate(tx *gorm.DB) error {
-	if a.ID == "" {
-		a.ID = uuid.New().String()
-	}
-	return nil
-}
-
-func (ABExperiment) TableName() string { return "ABExperiment" }
-func (a *ABExperiment) BeforeCreate(tx *gorm.DB) error {
 	if a.ID == "" {
 		a.ID = uuid.New().String()
 	}

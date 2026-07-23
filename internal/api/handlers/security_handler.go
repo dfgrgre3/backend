@@ -1,15 +1,16 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/repository"
 
-	"fmt"
 	"github.com/gin-gonic/gin"
 )
 
@@ -52,6 +53,77 @@ func GetSecurityLogs(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"logs": logs,
+	})
+}
+
+func GetSecurityLogsForUser(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user id is required"})
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "50")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50
+	}
+
+	logs, err := getSecurityLogRepo().FindByUserID(userID, limit)
+	if err != nil {
+		fmt.Printf("Error fetching security logs for user %s: %v\n", userID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch security logs", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"logs": logs,
+	})
+}
+
+func GetUserLoginAttempts(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		api_response.Error(c, http.StatusBadRequest, "user id is required")
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "50")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50
+	}
+
+	logs, err := getSecurityLogRepo().FindByUserID(userID, limit)
+	if err != nil {
+		fmt.Printf("Error fetching login attempts for user %s: %v\n", userID, err)
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch login attempts")
+		return
+	}
+
+	attempts := make([]gin.H, 0, len(logs))
+	failedCount := 0
+	for _, logEntry := range logs {
+		success := logEntry.EventType == models.SecurityEventLoginSuccess
+		if !success {
+			failedCount++
+		}
+		attempts = append(attempts, gin.H{
+			"id":         logEntry.ID,
+			"eventType":  logEntry.EventType,
+			"success":    success,
+			"ip":         logEntry.IP,
+			"userAgent":  logEntry.UserAgent,
+			"location":   logEntry.Location,
+			"createdAt":  logEntry.CreatedAt,
+		})
+	}
+
+	api_response.Success(c, gin.H{
+		"userId":      userID,
+		"total":       len(attempts),
+		"failedCount": failedCount,
+		"attempts":    attempts,
 	})
 }
 

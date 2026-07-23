@@ -20,11 +20,21 @@ const headerContentType = "Content-Type"
 
 func AdminGetBooks(c *gin.Context) {
 	var books []models.Book
-	if err := db.DB.Preload("Subject").Order("created_at DESC").Find(&books).Error; err != nil {
+	if err := db.DB.Preload("Subject").Order(bookListOrder()).Find(&books).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch books")
 		return
 	}
 	api_response.Success(c, books)
+}
+
+// bookListOrder supports databases that have not yet applied the timestamp
+// naming migration. New and migrated databases use created_at; older ones use
+// Prisma's legacy createdAt column.
+func bookListOrder() string {
+	if db.DB.Migrator().HasColumn(&models.Book{}, "created_at") {
+		return "created_at DESC"
+	}
+	return `"createdAt" DESC`
 }
 
 func AdminCreateBook(c *gin.Context) {

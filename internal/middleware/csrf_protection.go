@@ -20,24 +20,22 @@ const (
 	csrfTokenLength = 32
 )
 
-// CSRFProtection middleware for cookie-based authentication
-// Uses Double Submit Cookie pattern: cookie is NOT HttpOnly so JS can read it
+// CSRFProtection middleware for cookie-based authentication.
+// It skips auth handshake endpoints and safe methods, and validates state-changing
+// requests using the Double Submit Cookie pattern.
 func CSRFProtection() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Skip CSRF for safe methods
-		if c.Request.Method == "GET" || c.Request.Method == "HEAD" || c.Request.Method == "OPTIONS" {
-			// For GET requests, ensure we have a CSRF token
+		if isSafeMethod(c.Request.Method) {
 			ensureCSRFToken(c)
 			c.Next()
 			return
 		}
 
-		env := os.Getenv("NODE_ENV")
-		if env == "" {
-			env = "development"
+		if shouldSkipPath(c.Request.URL.Path) {
+			c.Next()
+			return
 		}
 
-		// For state-changing methods, validate CSRF token
 		if !validateCSRFToken(c) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error": "CSRF token validation failed",

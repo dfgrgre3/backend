@@ -27,6 +27,8 @@ const (
 	studySessionsRedisTTL = 10 * time.Minute
 )
 
+const userIDQuery = "user_id = ?"
+
 // Tasks
 func GetTasks(c *gin.Context) {
 	userIdValue, exists := c.Get("userId")

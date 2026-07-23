@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"log"
 	"os"
 	"strings"
@@ -80,6 +81,16 @@ func StartWorker() {
 
 	summaryHandler := NewLessonSummaryHandler()
 	mux.HandleFunc(TypeLessonSummary, WithTaskIdempotency(summaryHandler.ProcessTask))
+
+	// Drip content release notifications (Phase 3)
+	mux.HandleFunc(TypeDripContentRelease, func(ctx context.Context, task *asynq.Task) error {
+		return HandleDripContentRelease(task)
+	})
+
+	// Course availability scheduling (Phase 3)
+	mux.HandleFunc(TypeCourseAvailability, func(ctx context.Context, task *asynq.Task) error {
+		return HandleCourseAvailability(task)
+	})
 
 	log.Printf("Worker server starting on Redis %s", redisAddr)
 	if err := srv.Run(mux); err != nil {

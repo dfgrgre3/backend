@@ -99,6 +99,9 @@ func shouldSkipLogging(path string) bool {
 		"/healthz",
 		"/readyz",
 		"/metrics",
+		// Reading the audit feed must not create an audit event for every poll;
+		// otherwise the feed becomes dominated by its own read operations.
+		"/api/admin/audit-logs",
 	}
 
 	for _, p := range skippedPaths {
@@ -215,7 +218,9 @@ func (al *AdminAuditLogger) logOperation(
 	// Convert userID to string
 	userIDStr := ""
 	if userID != nil {
-		userIDStr = userID.(string)
+		if value, ok := userID.(string); ok {
+			userIDStr = value
+		}
 	}
 
 	// Log asynchronously to not block response

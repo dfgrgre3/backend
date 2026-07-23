@@ -12,7 +12,6 @@ import (
 // SetupPublicRoutes configures public API endpoints
 func SetupPublicRoutes(router *gin.Engine) {
 	// Health Checks
-	router.GET("/health", handlers.HealthCheck)
 	router.GET("/health/live", handlers.LivenessCheck)
 	router.GET("/health/ready", handlers.ReadinessCheck)
 
@@ -21,6 +20,8 @@ func SetupPublicRoutes(router *gin.Engine) {
 	router.GET("/api/courses/popular", handlers.GetPopularCourses)
 	router.GET("/api/courses/:id", handlers.GetSubject)
 	router.GET("/api/courses/:id/lessons", handlers.GetCourseLessons)
+	router.GET("/api/lessons/:lessonId/subtitles", handlers.GetLessonSubtitles) // Public subtitles
+	router.GET("/api/lessons/:lessonId/chapters", handlers.GetVideoChapters)     // Public chapters
 	router.GET("/api/courses/:id/reviews", handlers.GetCourseReviews)
 	router.GET("/api/categories", handlers.GetCategories)
 	router.GET("/api/courses/categories", handlers.GetCategories)

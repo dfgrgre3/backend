@@ -1758,6 +1758,14 @@ model User {
   TwoFactorSetting               TwoFactorSetting?
   SecurityAuditLog               SecurityAuditLog[]
   teacher                        Teacher?
+  PrimaryInstructorCourses       LmsCourse[]           @relation("PrimaryInstructorCourses")
+  lmsInstructors                 LmsCourseInstructor[]
+  lmsVideoNotes                  LmsVideoNote[]
+  lmsLessonInteractions          LmsLessonInteraction[]
+  lmsChangelogs                  LmsCourseChangelog[]
+  lmsReviews                     LmsCourseReview[]
+  lmsCertificates                LmsCertificate[]
+
 
   UserRoleMapping    UserRoleMapping[]
   AuthSession        AuthSession[]
@@ -2857,3 +2865,394 @@ model TrustedDevice {
   @@unique([userId, fingerprintHash])
   @@map("trusted_devices")
 }
+
+enum CourseStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  ARCHIVED
+  REJECTED
+}
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum PriceType {
+  FREE
+  PAID
+  SUBSCRIPTION
+  BUNDLE
+  ONE_TIME
+}
+
+enum LmsLessonType {
+  VIDEO
+  TEXT
+  AUDIO
+  FILE
+  EXTERNAL_LINK
+  INTERACTIVE_QUIZ
+}
+
+enum AvailabilityType {
+  CALENDAR_DATE
+  ENROLLMENT_RELATIVE
+}
+
+enum AvailabilityWindowType {
+  ENROLLMENT
+  ACCESS
+  PUBLISH
+  UNPUBLISH
+}
+
+model LmsCourse {
+
+  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title                 String              @db.VarChar(255)
+  slug                  String              @unique @db.VarChar(255)
+  shortDescription      String?             @db.Text
+  longDescription       String?             @db.Text
+  coverImageUrl         String?             @db.Text
+  promoVideoUrl         String?             @db.Text
+  status                CourseStatus        @default(DRAFT)
+  level                 CourseLevel         @default(BEGINNER)
+  language              String              @default("ar") @db.VarChar(10)
+  estimatedDurationMins Int                 @default(0)
+  hasCertificate        Boolean             @default(true)
+  certificateTemplate   String?             @db.VarChar(100)
+  maxStudents           Int?
+  version               Int                 @default(1)
+  isFeatured            Boolean             @default(false)
+  isTrending            Boolean             @default(false)
+  isNew                 Boolean             @default(false)
+  newFrom               DateTime?           @db.Timestamptz(6)
+  newUntil              DateTime?           @db.Timestamptz(6)
+  availableFrom         DateTime?           @db.Timestamptz(6)
+  availableUntil        DateTime?           @db.Timestamptz(6)
+  seoTitle              String?             @db.VarChar(255)
+  seoDescription        String?             @db.VarChar(500)
+  seoKeywords           String[]
+  prerequisitesText     String?             @db.Text
+  targetAudience        String?             @db.Text
+  learningOutcomes      String[]
+  primaryInstructorId   String              @db.Uuid
+  createdAt             DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
+
+  primaryInstructor     User                @relation("PrimaryInstructorCourses", fields: [primaryInstructorId], references: [id], onDelete: Cascade)
+  categories            LmsCourseCategory[]
+  tags                  LmsCourseTag[]
+  instructors           LmsCourseInstructor[]
+  sections              LmsSection[]
+  pricing               LmsPricing[]
+  changelogs            LmsCourseChangelog[]
+  versions              LmsCourseVersion[]
+  reviews               LmsCourseReview[]
+  certificates          LmsCertificate[]
+  bundles               LmsBundleCourse[]
+  prerequisites         LmsCoursePrerequisite[] @relation("CoursePrerequisiteMain")
+  prerequisiteOf        LmsCoursePrerequisite[] @relation("CoursePrerequisiteTarget")
+  relatedFrom           LmsCourseRelated[]      @relation("CourseRelatedMain")
+  relatedTo             LmsCourseRelated[]      @relation("CourseRelatedTarget")
+
+  @@map("lms_courses")
+}
+
+model LmsCategory {
+  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String              @db.VarChar(100)
+  slug        String              @unique @db.VarChar(100)
+  parentId    String?             @db.Uuid
+  createdAt   DateTime            @default(now()) @db.Timestamptz(6)
+
+  parent      LmsCategory?        @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    LmsCategory[]       @relation("CategoryHierarchy")
+  courses     LmsCourseCategory[]
+
+  @@map("lms_categories")
+}
+
+model LmsCourseCategory {
+  courseId   String      @db.Uuid
+  categoryId String      @db.Uuid
+  course     LmsCourse   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  category   LmsCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, categoryId])
+  @@map("lms_course_categories")
+}
+
+model LmsTag {
+  id      String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name    String       @unique @db.VarChar(50)
+  courses LmsCourseTag[]
+
+  @@map("lms_tags")
+}
+
+model LmsCourseTag {
+  courseId String    @db.Uuid
+  tagId    String    @db.Uuid
+  course   LmsCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  tag      LmsTag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, tagId])
+  @@map("lms_course_tags")
+}
+
+model LmsCourseInstructor {
+  courseId     String    @db.Uuid
+  instructorId String    @db.Uuid
+  role         String    @default("ASSISTANT") @db.VarChar(50)
+  permissions  Json?     @default("{}")
+  course       LmsCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  instructor   User      @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, instructorId])
+  @@map("lms_course_instructors")
+}
+
+model LmsCoursePrerequisite {
+  courseId       String    @db.Uuid
+  prerequisiteId String    @db.Uuid
+  course         LmsCourse @relation("CoursePrerequisiteMain", fields: [courseId], references: [id], onDelete: Cascade)
+  prerequisite   LmsCourse @relation("CoursePrerequisiteTarget", fields: [prerequisiteId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, prerequisiteId])
+  @@map("lms_course_prerequisites")
+}
+
+model LmsCourseRelated {
+  courseId  String    @db.Uuid
+  relatedId String    @db.Uuid
+  course    LmsCourse @relation("CourseRelatedMain", fields: [courseId], references: [id], onDelete: Cascade)
+  related   LmsCourse @relation("CourseRelatedTarget", fields: [relatedId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, relatedId])
+  @@map("lms_course_related")
+}
+
+model LmsSection {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courseId      String       @db.Uuid
+  title         String       @db.VarChar(255)
+  orderIndex    Int          @default(0)
+  availableFrom DateTime?    @db.Timestamptz(6)
+  dripDelayDays Int?         @default(0)
+  course        LmsCourse    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons       LmsLesson[]
+
+  @@map("lms_sections")
+}
+
+model LmsLesson {
+  id               String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sectionId        String                 @db.Uuid
+  title            String                 @db.VarChar(255)
+  type             LmsLessonType          @default(VIDEO)
+  content          String?                @db.Text
+
+  mediaUrl         String?                @db.Text
+  durationSeconds  Int                    @default(0)
+  isFreePreview    Boolean                @default(false)
+  orderIndex       Int                    @default(0)
+  availabilityType AvailabilityType?      @default(CALENDAR_DATE)
+  availableFrom    DateTime?              @db.Timestamptz(6)
+  dripDelayDays    Int?                   @default(0)
+  section          LmsSection             @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  attachments      LmsLessonAttachment[]
+  subtitles        LmsLessonSubtitle[]
+  interactiveQuizzes LmsInteractiveQuiz[]
+  videoNotes       LmsVideoNote[]
+  interactions     LmsLessonInteraction[]
+
+  @@map("lms_lessons")
+}
+
+model LmsLessonAttachment {
+  id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId String    @db.Uuid
+  title    String    @db.VarChar(255)
+  fileUrl  String    @db.Text
+  fileSize BigInt?
+  lesson   LmsLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("lms_lesson_attachments")
+}
+
+model LmsLessonSubtitle {
+  id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId String    @db.Uuid
+  language String    @db.VarChar(10)
+  vttUrl   String    @db.Text
+  lesson   LmsLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("lms_lesson_subtitles")
+}
+
+model LmsInteractiveQuiz {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId     String    @db.Uuid
+  timestampSec Int
+  question     String    @db.Text
+  options      Json
+  correctIndex Int
+  lesson       LmsLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("lms_interactive_quizzes")
+}
+
+model LmsVideoNote {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId     String    @db.Uuid
+  userId       String    @db.Uuid
+  timestampSec Int
+  note         String    @db.Text
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  lesson       LmsLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("lms_video_notes")
+}
+
+model LmsLessonInteraction {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId            String    @db.Uuid
+  userId              String    @db.Uuid
+  watchedDurationSec Int       @default(0)
+  lastPositionSec     Int       @default(0)
+  playCount           Int       @default(0)
+  isCompleted         Boolean   @default(false)
+  quizAnswers         Json?     @default("{}")
+  updatedAt           DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  lesson              LmsLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, userId])
+  @@map("lms_lesson_interactions")
+}
+
+model LmsCurrency {
+  code         String       @id @db.VarChar(3)
+  name         String       @db.VarChar(50)
+  symbol       String       @db.VarChar(10)
+  exchangeRate Decimal      @default(1.0) @db.Decimal(10, 4)
+  pricings     LmsPricing[]
+  bundles      LmsBundle[]
+
+  @@map("lms_currencies")
+}
+
+model LmsPricing {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courseId     String      @db.Uuid
+  type         PriceType   @default(FREE)
+  amount       Decimal     @default(0.0) @db.Decimal(10, 2)
+  currencyCode String      @db.VarChar(3)
+  course       LmsCourse   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  currency     LmsCurrency @relation(fields: [currencyCode], references: [code], onDelete: Cascade)
+
+  @@map("lms_pricings")
+}
+
+model LmsBundle {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title        String            @db.VarChar(255)
+  slug         String            @unique @db.VarChar(255)
+  description  String?           @db.Text
+  coverUrl     String?           @db.Text
+  price        Decimal           @db.Decimal(10, 2)
+  currencyCode String            @db.VarChar(3)
+  isActive     Boolean           @default(true)
+  createdAt    DateTime          @default(now()) @db.Timestamptz(6)
+  currency     LmsCurrency       @relation(fields: [currencyCode], references: [code], onDelete: Cascade)
+  courses      LmsBundleCourse[]
+  availabilityWindows LmsCourseAvailabilityWindow[]
+
+  @@map("lms_bundles")
+}
+
+model LmsBundleCourse {
+  bundleId String    @db.Uuid
+  courseId String    @db.Uuid
+  bundle   LmsBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  course   LmsCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@id([bundleId, courseId])
+  @@map("lms_bundle_courses")
+}
+
+model LmsCourseAvailabilityWindow {
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courseId      String               @db.Uuid
+  windowType    AvailabilityWindowType @default(PUBLISH)
+  startsAt      DateTime             @db.Timestamptz(6)
+  endsAt        DateTime?            @db.Timestamptz(6)
+  isRepeating   Boolean              @default(false)
+  repeatPattern String?              @db.VarChar(100)
+  isActive      Boolean              @default(true)
+  createdAt     DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime             @default(now()) @db.Timestamptz(6)
+  course        LmsCourse            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("lms_course_availability_windows")
+}
+
+model LmsCourseChangelog {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courseId  String    @db.Uuid
+  userId    String    @db.Uuid
+  field     String    @db.VarChar(100)
+  oldValue  String?   @db.Text
+  newValue  String?   @db.Text
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  course    LmsCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("lms_course_changelogs")
+}
+
+model LmsCourseVersion {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courseId     String    @db.Uuid
+  versionNumber Int
+  snapshot     Json
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  course       LmsCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("lms_course_versions")
+}
+
+model LmsCourseReview {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courseId  String    @db.Uuid
+  userId    String    @db.Uuid
+  rating    Int
+  comment   String?   @db.Text
+  isApproved Boolean  @default(false)
+  reply     String?   @db.Text
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  course    LmsCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("lms_course_reviews")
+}
+
+model LmsCertificate {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courseId      String    @db.Uuid
+  userId        String    @db.Uuid
+  certificateNo String    @unique @db.VarChar(100)
+  qrCodeUrl     String?   @db.Text
+  pdfUrl        String    @db.Text
+  issuedAt      DateTime  @default(now()) @db.Timestamptz(6)
+  course        LmsCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("lms_certificates")
+}
+

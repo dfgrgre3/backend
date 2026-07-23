@@ -43,7 +43,12 @@ func StartScheduler() {
 		return
 	}
 
-	log.Println("[Scheduler] Periodic CQRS view refresh (5m) and Session cleanup (1h) scheduled")
+	// Check for drip content releases every 5 minutes (fallback for missed tasks)
+	if _, err := scheduler.Register("@every 5m", asynq.NewTask(TypeDripContentRelease, []byte("{\"check\":\"fallback\"}"))); err != nil {
+		log.Printf("Failed to register Drip content check task: %v", err)
+	}
+
+	log.Println("[Scheduler] Periodic CQRS view refresh (5m), Session cleanup (1h), and Drip check (5m) scheduled")
 	if err := scheduler.Start(); err != nil {
 		log.Printf("Failed to start scheduler: %v", err)
 	}
