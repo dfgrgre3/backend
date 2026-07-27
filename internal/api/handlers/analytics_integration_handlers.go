@@ -4,10 +4,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/models"
+
+	"github.com/gin-gonic/gin"
 )
 
 const startedAtGteQuery = "started_at >= ?"
@@ -59,7 +61,7 @@ type ConversionEventRequest struct {
 func TrackUserJourney(c *gin.Context) {
 	var req UserJourneyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -89,11 +91,11 @@ func TrackUserJourney(c *gin.Context) {
 	}
 
 	if err := db.WriteDB().Create(&journey).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save journey"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to save journey")
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
+	api_response.Success(c, gin.H{
 		"message":   "Journey tracked successfully",
 		"journeyId": journey.ID,
 	})
@@ -111,7 +113,7 @@ func TrackUserJourney(c *gin.Context) {
 func TrackConversionEvent(c *gin.Context) {
 	var req ConversionEventRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -126,7 +128,7 @@ func TrackConversionEvent(c *gin.Context) {
 	}
 
 	if err := db.WriteDB().Create(&conversion).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save conversion"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to save conversion")
 		return
 	}
 
@@ -138,7 +140,7 @@ func TrackConversionEvent(c *gin.Context) {
 		"journey_steps": req.JourneySteps,
 	})
 
-	c.JSON(http.StatusCreated, gin.H{
+	api_response.Success(c, gin.H{
 		"message":      "Conversion tracked successfully",
 		"conversionId": conversion.ID,
 	})
@@ -199,15 +201,13 @@ func GetUserJourneys(c *gin.Context) {
 
 	var journeys []models.UserJourney
 	if err := query.Find(&journeys).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch journeys"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch journeys")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"journeys": journeys,
-			"count":    len(journeys),
-		},
+	api_response.Success(c, gin.H{
+		"journeys": journeys,
+		"count":    len(journeys),
 	})
 }
 
@@ -240,9 +240,7 @@ func GetActivityMetrics(c *gin.Context) {
 
 	metrics := calculateActivityMetrics(fromTime, toTime)
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": metrics,
-	})
+	api_response.Success(c, metrics)
 }
 
 // calculateActivityMetrics calculates various activity metrics
@@ -297,7 +295,7 @@ func calculateActivityMetrics(from, to time.Time) ActivityMetrics {
 	// Calculate average session duration
 	db.ReadDB().Model(&models.UserJourney{}).
 		Where("started_at >= ? AND started_at <= ?", from, to).
-		Select("AVG(total_duration)").
+		Select("COALESCE(AVG(total_duration), 0)").
 		Scan(&metrics.AverageSessionDuration)
 
 	// Calculate bounce rate (sessions with only 1 step)
@@ -307,7 +305,7 @@ func calculateActivityMetrics(from, to time.Time) ActivityMetrics {
 		Count(&totalSessions)
 
 	db.ReadDB().Model(&models.UserJourney{}).
-		Where("started_at >= ? AND started_at <= ? AND (SELECT COUNT(*) FROM user_journey_steps WHERE user_journey_id = user_journeys.id) = 1", from, to).
+		Where("started_at >= ? AND started_at <= ? AND (SELECT COUNT(*) FROM user_journey_steps WHERE journey_id = user_journeys.id AND deleted_at IS NULL) = 1", from, to).
 		Count(&bouncedSessions)
 
 	if totalSessions > 0 {

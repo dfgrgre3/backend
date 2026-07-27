@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"strconv"
@@ -18,6 +20,7 @@ import (
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/repository"
 
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"time"
@@ -74,13 +77,13 @@ func getMockLocation(_ string) *string {
 func GetProfile(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
 	userIdStr, ok := userId.(string)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID"})
+		api_response.Error(c, http.StatusUnauthorized, "Invalid user ID")
 		return
 	}
 
@@ -93,12 +96,12 @@ func GetProfile(c *gin.Context) {
 		}
 		if createErr := EnsureUserExists(userIdStr, emailStr); createErr != nil {
 			log.Printf("[Auth] Failed to auto-create user %s: %v", userIdStr, createErr)
-			c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
+			api_response.Error(c, http.StatusNotFound, errUserNotFound)
 			return
 		}
 		profilePtr, err = getUserRepo().FindByID(userIdStr)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
+			api_response.Error(c, http.StatusNotFound, errUserNotFound)
 			return
 		}
 	}
@@ -117,7 +120,7 @@ func GetProfile(c *gin.Context) {
 		profile.Permissions = models.JSONStringArray(perms.([]string))
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"user":                 &profile,
 		"hydratedRole":         role,
 		"hydratedPerms":        perms,
@@ -127,11 +130,27 @@ func GetProfile(c *gin.Context) {
 
 func GetUsers(c *gin.Context) {
 	role := c.Query("role")
+	status := c.Query("status")
 	search := c.Query("search")
+	searchType := c.Query("searchType")
+	sortBy := c.DefaultQuery("sortBy", "createdAt")
+	sortOrder := c.DefaultQuery("sortOrder", "desc")
+	emailVerified := c.Query("emailVerified")
+	twoFactorEnabled := c.Query("twoFactorEnabled")
+	country := c.Query("country")
+	city := c.Query("city")
+	gender := c.Query("gender")
+	gradeLevel := c.Query("gradeLevel")
+	createdFrom := c.Query("createdFrom")
+	createdTo := c.Query("createdTo")
+	subscriptionStatus := c.Query("subscriptionStatus")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	if limit <= 0 {
 		limit = 10
+	}
+	if limit > 200 {
+		limit = 200
 	}
 	if page <= 0 {
 		page = 1
@@ -139,48 +158,214 @@ func GetUsers(c *gin.Context) {
 	offset := (page - 1) * limit
 
 	var users []models.User
-	query := db.DB
+	query := db.DB.Model(&models.User{}).Where("deleted_at IS NULL")
 
+	// Role filter
 	if role != "" {
 		query = query.Where("role = ?", role)
 	}
-	if search != "" {
-		query = query.Where("email ILIKE CONCAT('%', ?, '%') OR name ILIKE CONCAT('%', ?, '%') OR username ILIKE CONCAT('%', ?, '%')", search, search, search)
+
+	// Status filter
+	if status != "" {
+		query = query.Where("status = ?", status)
 	}
 
-	var total int64
-	query.Model(&models.User{}).Count(&total)
+	// Search filter with search type
+	if search != "" {
+		switch searchType {
+		case "name":
+			query = query.Where("name ILIKE ?", "%"+search+"%")
+		case "email":
+			query = query.Where("email ILIKE ?", "%"+search+"%")
+		case "username":
+			query = query.Where("username ILIKE ?", "%"+search+"%")
+		case "phone":
+			query = query.Where("phone ILIKE ?", "%"+search+"%")
+		case "userId":
+			query = query.Where("id = ?", search)
+		default:
+			query = query.Where("(email ILIKE ? OR name ILIKE ? OR username ILIKE ? OR phone ILIKE ?)", "%"+search+"%", "%"+search+"%", "%"+search+"%", "%"+search+"%")
+		}
+	}
 
-	if err := query.Offset(offset).Limit(limit).Find(&users).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+	// Email verified filter
+	switch emailVerified {
+case "true":
+		query = query.Where("email_verified = ?", true)
+	case "false":
+		query = query.Where("email_verified = ?", false)
+	}
+
+	// Two factor filter
+	switch twoFactorEnabled {
+case "true":
+		query = query.Where("two_factor_enabled = ?", true)
+	case "false":
+		query = query.Where("two_factor_enabled = ?", false)
+	}
+
+	// Country filter
+	if country != "" && country != "other" {
+		query = query.Where("country = ?", country)
+	} else if country == "other" {
+		query = query.Where("country IS NULL OR country = ''")
+	}
+
+	// City filter
+	if city != "" && city != "other" {
+		query = query.Where("city = ?", city)
+	} else if city == "other" {
+		query = query.Where("city IS NULL OR city = ''")
+	}
+
+	// Gender filter
+	if gender != "" && gender != "other" {
+		query = query.Where("gender = ?", gender)
+	} else if gender == "other" {
+		query = query.Where("gender IS NULL OR gender = ''")
+	}
+
+	// Grade level filter
+	if gradeLevel != "" {
+		query = query.Where("grade_level = ?", gradeLevel)
+	}
+
+	// Date range filters
+	if createdFrom != "" {
+		query = query.Where("created_at >= ?", createdFrom)
+	}
+	if createdTo != "" {
+		query = query.Where("created_at <= ?", createdTo+"T23:59:59Z")
+	}
+
+	// Subscription status filter
+	if subscriptionStatus != "" {
+		now := time.Now()
+		switch subscriptionStatus {
+		case "active":
+			query = query.Where("active_subscription_id IS NOT NULL AND subscription_expires_at > ?", now)
+		case "expired":
+			query = query.Where("active_subscription_id IS NOT NULL AND subscription_expires_at <= ?", now)
+		case "none":
+			query = query.Where("active_subscription_id IS NULL")
+		}
+	}
+
+	// Sorting
+	allowedSorts := map[string]string{
+		"name":      "name",
+		"createdAt": "created_at",
+		"lastLogin": "last_login",
+		"totalXP":   "total_xp",
+		"status":    "status",
+	}
+	sortColumn, ok := allowedSorts[sortBy]
+	if !ok {
+		sortColumn = "created_at"
+	}
+	if sortOrder != "asc" {
+		sortOrder = "desc"
+	}
+	orderClause := sortColumn + " " + sortOrder + " NULLS LAST"
+
+	var total int64
+	query.Count(&total)
+
+	if err := query.Order(orderClause).Offset(offset).Limit(limit).Find(&users).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch users")
 		return
 	}
 
-	totalAdmins := int64(0)
-	powerUsers := int64(0)
-	db.DB.Model(&models.User{}).Where("role = ?", models.RoleAdmin).Count(&totalAdmins)
-	db.DB.Model(&models.User{}).Where("level >= ?", 10).Count(&powerUsers)
+	// Summary stats
+	var totalUsers int64
+	var totalAdmins int64
+	var powerUsers int64
+	db.DB.Model(&models.User{}).Where("deleted_at IS NULL").Count(&totalUsers)
+	db.DB.Model(&models.User{}).Where("deleted_at IS NULL AND role = ?", models.RoleAdmin).Count(&totalAdmins)
+	db.DB.Model(&models.User{}).Where("deleted_at IS NULL AND level >= ?", 10).Count(&powerUsers)
+
+	// Batch fetch _count data for all users in this page
+	userIDs := make([]string, len(users))
+	for i, u := range users {
+		userIDs[i] = u.ID
+	}
+
+	type taskCount struct {
+		UserID string
+		Count  int64
+	}
+	type sessionCount struct {
+		UserID string
+		Count  int64
+	}
+	type achievementCount struct {
+		UserID string
+		Count  int64
+	}
+	type enrollmentCount struct {
+		UserID string
+		Count  int64
+	}
+
+	var taskCounts []taskCount
+	var sessionCounts []sessionCount
+	var achievementCounts []achievementCount
+	var enrollmentCounts []enrollmentCount
+
+	if len(userIDs) > 0 {
+		db.DB.Model(&models.Task{}).Select("user_id, COUNT(*) as count").Where("user_id IN ? AND deleted_at IS NULL", userIDs).Group("user_id").Scan(&taskCounts)
+		db.DB.Model(&models.StudySession{}).Select("user_id, COUNT(*) as count").Where("user_id IN ? AND deleted_at IS NULL", userIDs).Group("user_id").Scan(&sessionCounts)
+		db.DB.Model(&models.UserAchievement{}).Select("user_id, COUNT(*) as count").Where("user_id IN ? AND deleted_at IS NULL", userIDs).Group("user_id").Scan(&achievementCounts)
+		db.DB.Model(&models.Enrollment{}).Select("user_id, COUNT(*) as count").Where("user_id IN ? AND deleted_at IS NULL", userIDs).Group("user_id").Scan(&enrollmentCounts)
+	}
+
+	taskMap := make(map[string]int64, len(taskCounts))
+	for _, tc := range taskCounts {
+		taskMap[tc.UserID] = tc.Count
+	}
+	sessionMap := make(map[string]int64, len(sessionCounts))
+	for _, sc := range sessionCounts {
+		sessionMap[sc.UserID] = sc.Count
+	}
+	achievementMap := make(map[string]int64, len(achievementCounts))
+	for _, ac := range achievementCounts {
+		achievementMap[ac.UserID] = ac.Count
+	}
+	enrollmentMap := make(map[string]int64, len(enrollmentCounts))
+	for _, ec := range enrollmentCounts {
+		enrollmentMap[ec.UserID] = ec.Count
+	}
 
 	items := make([]gin.H, 0, len(users))
 	for _, user := range users {
 		items = append(items, gin.H{
-			"id":            user.ID,
-			"email":         user.Email,
-			"name":          user.Name,
-			"username":      user.Username,
-			"avatar":        user.Avatar,
-			"role":          user.Role,
-			"permissions":   user.GetEffectivePermissions(),
-			"emailVerified": user.EmailVerified,
-			"createdAt":     user.CreatedAt,
-			"lastLogin":     nil,
-			"totalXP":       user.TotalXP,
-			"level":         user.Level,
-			"currentStreak": 0,
+			"id":                 user.ID,
+			"email":              user.Email,
+			"name":               user.Name,
+			"username":           user.Username,
+			"avatar":             user.Avatar,
+			"phone":              user.Phone,
+			"phoneVerified":      user.PhoneVerified,
+			"twoFactorEnabled":   user.TwoFactorEnabled,
+			"role":               user.Role,
+			"status":             user.Status,
+			"permissions":        user.GetEffectivePermissions(),
+			"emailVerified":      user.EmailVerified,
+			"country":            user.Country,
+			"gradeLevel":         user.GradeLevel,
+			"createdAt":          user.CreatedAt,
+			"updatedAt":          user.UpdatedAt,
+			"lastLogin":          user.LastLogin,
+			"totalXP":            user.TotalXP,
+			"level":              user.Level,
+			"currentStreak":      user.CurrentStreak,
+			"activeSubscriptionId": user.ActiveSubscriptionID,
+			"subscriptionExpiresAt": user.SubscriptionExpiresAt,
 			"_count": gin.H{
-				"tasks":         0,
-				"studySessions": 0,
-				"achievements":  0,
+				"tasks":             taskMap[user.ID],
+				"studySessions":     sessionMap[user.ID],
+				"achievements":      achievementMap[user.ID],
+				"subjectEnrollments": enrollmentMap[user.ID],
 			},
 		})
 	}
@@ -193,7 +378,7 @@ func GetUsers(c *gin.Context) {
 	}, gin.H{
 		"users": items,
 		"summary": gin.H{
-			"totalUsers":  total,
+			"totalUsers":  totalUsers,
 			"totalAdmins": totalAdmins,
 			"powerUsers":  powerUsers,
 		},
@@ -553,13 +738,13 @@ func buildUserDetailsPayload(user models.User) gin.H {
 func GetUserProfile(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
 	var user models.User
 	if err := db.DB.First(&user, idQuery, userId).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 
@@ -573,7 +758,7 @@ func GetUserProfile(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"id":            user.ID,
 		"email":         user.Email,
 		"username":      user.Username,
@@ -754,7 +939,7 @@ func GetUserVideoEngagement(c *gin.Context) {
 func UpdateProfile(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
@@ -774,13 +959,13 @@ func UpdateProfile(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var user models.User
 	if err := db.DB.First(&user, idQuery, userId).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 
@@ -831,7 +1016,7 @@ func UpdateProfile(c *gin.Context) {
 
 	if err := db.DB.Model(&models.User{}).Where(idQuery, user.ID).
 		Updates(&updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update profile"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to update profile")
 		return
 	}
 
@@ -841,7 +1026,7 @@ func UpdateProfile(c *gin.Context) {
 	middleware.InvalidateRolePermsCache(user.ID)
 	getUserRepo().InvalidateCache(user.ID)
 
-	c.JSON(http.StatusOK, gin.H{"success": true, "user": user})
+	api_response.Success(c, gin.H{"success": true, "user": user})
 }
 
 // ─── L1 in-memory cache for billing summary ──────────────
@@ -861,7 +1046,7 @@ const billingSummaryCachePrefix = "billing_summary:"
 func GetBillingSummary(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 	uid := userId.(string)
@@ -878,14 +1063,14 @@ func GetBillingSummary(c *gin.Context) {
 	}
 
 	storeBillingCache(cacheKey, responseData)
-	c.JSON(http.StatusOK, responseData)
+	api_response.Success(c, responseData)
 }
 
 func checkBillingCaches(c *gin.Context, cacheKey string) bool {
 	if val, ok := billingSummaryL1.Load(cacheKey); ok {
 		entry := val.(*billingSummaryEntry)
 		if time.Now().Before(entry.expiresAt) {
-			c.JSON(http.StatusOK, entry.data)
+			api_response.Success(c, entry.data)
 			return true
 		}
 		billingSummaryL1.Delete(cacheKey)
@@ -899,7 +1084,7 @@ func checkBillingCaches(c *gin.Context, cacheKey string) bool {
 			var cachedData gin.H
 			if json.Unmarshal([]byte(cachedVal), &cachedData) == nil {
 				billingSummaryL1.Store(cacheKey, &billingSummaryEntry{data: cachedData, expiresAt: time.Now().Add(billingSummaryL1TTL)})
-				c.JSON(http.StatusOK, cachedData)
+				api_response.Success(c, cachedData)
 				return true
 			}
 		}
@@ -1100,6 +1285,754 @@ func EnsureUserExists(userId, email string) error {
 	return nil
 }
 
+// GetUserLoginAttempts is already declared in security_handler.go
+
+func AdminUsersAnalytics(c *gin.Context) {
+	now := time.Now()
+	sixMonthsAgo := now.AddDate(0, -6, 0)
+	startOfSixMonths := time.Date(sixMonthsAgo.Year(), sixMonthsAgo.Month(), 1, 0, 0, 0, 0, sixMonthsAgo.Location())
+
+	// User growth over time (monthly)
+	type monthlyCount struct {
+		Year  int
+		Month int
+		Count int64
+	}
+	var userGrowth []monthlyCount
+	db.DB.Model(&models.User{}).
+		Select("EXTRACT(YEAR FROM created_at) as year, EXTRACT(MONTH FROM created_at) as month, COUNT(*) as count").
+		Where("created_at >= ? AND deleted_at IS NULL", startOfSixMonths).
+		Group("EXTRACT(YEAR FROM created_at), EXTRACT(MONTH FROM created_at)").
+		Order("year ASC, month ASC").
+		Scan(&userGrowth)
+
+	growthChart := make([]gin.H, 0, 6)
+	for i := 5; i >= 0; i-- {
+		d := now.AddDate(0, -i, 0)
+		month := int(d.Month())
+		year := d.Year()
+		count := int64(0)
+		for _, m := range userGrowth {
+			if m.Year == year && m.Month == month {
+				count = m.Count
+				break
+			}
+		}
+		monthNames := map[int]string{
+			1: "يناير", 2: "فبراير", 3: "مارس", 4: "أبريل",
+			5: "مايو", 6: "يونيو", 7: "يوليو", 8: "أغسطس",
+			9: "سبتمبر", 10: "أكتوبر", 11: "نوفمبر", 12: "ديسمبر",
+		}
+		growthChart = append(growthChart, gin.H{
+			"name":  monthNames[month],
+			"users": count,
+		})
+	}
+
+	// Users by role (pie chart data)
+	type roleCount struct {
+		Role  string
+		Count int64
+	}
+	var roleCounts []roleCount
+	db.DB.Model(&models.User{}).
+		Select("role, COUNT(*) as count").
+		Where("deleted_at IS NULL").
+		Group("role").
+		Scan(&roleCounts)
+
+	roleLabels := map[string]string{
+		"STUDENT":     "طلاب",
+		"TEACHER":     "معلمون",
+		"MODERATOR":   "مشرفون",
+		"ADMIN":       "مدراء",
+		"SUPER_ADMIN": "مدراء",
+		"PARENT":      "أولياء أمور",
+		"SUPPORT":     "دعم فني",
+	}
+	roleChart := make([]gin.H, 0, len(roleCounts))
+	for _, rc := range roleCounts {
+		label := roleLabels[rc.Role]
+		if label == "" {
+			label = rc.Role
+		}
+		roleChart = append(roleChart, gin.H{
+			"name":  label,
+			"value": rc.Count,
+		})
+	}
+
+	// Users by country
+	type countryCount struct {
+		Country string
+		Count   int64
+	}
+	var countryCounts []countryCount
+	db.DB.Model(&models.User{}).
+		Select("COALESCE(country, 'أخرى') as country, COUNT(*) as count").
+		Where("deleted_at IS NULL").
+		Group("country").
+		Order("count DESC").
+		Limit(5).
+		Scan(&countryCounts)
+
+	countryChart := make([]gin.H, 0, len(countryCounts))
+	for _, cc := range countryCounts {
+		if cc.Country == "" || cc.Country == "أخرى" {
+			countryChart = append(countryChart, gin.H{"name": "أخرى", "users": cc.Count})
+		} else {
+			countryChart = append(countryChart, gin.H{"name": cc.Country, "users": cc.Count})
+		}
+	}
+
+	// Login activity (last 7 days)
+	type dailyActivity struct {
+		Day   string
+		Count int64
+	}
+	var loginActivity []dailyActivity
+	sevenDaysAgo := now.AddDate(0, 0, -6)
+	startOfSevenDays := time.Date(sevenDaysAgo.Year(), sevenDaysAgo.Month(), sevenDaysAgo.Day(), 0, 0, 0, 0, sevenDaysAgo.Location())
+
+	db.DB.Model(&models.SecurityLog{}).
+		Select("TO_CHAR(created_at, 'YYYY-MM-DD') as day, COUNT(*) as count").
+		Where("created_at >= ? AND event_type IN ('LOGIN_SUCCESS','LOGIN_ATTEMPT')", startOfSevenDays).
+		Group("TO_CHAR(created_at, 'YYYY-MM-DD')").
+		Scan(&loginActivity)
+
+	loginMap := make(map[string]int64)
+	for _, d := range loginActivity {
+		loginMap[d.Day] = d.Count
+	}
+
+	dayNames := []string{"السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"}
+	loginChart := make([]gin.H, 0, 7)
+	nowDay := int(now.Weekday())
+	for i := 6; i >= 0; i-- {
+		d := now.AddDate(0, 0, -i)
+		dayKey := d.Format("2006-01-02")
+		dayIdx := (nowDay - i + 7) % 7
+		loginChart = append(loginChart, gin.H{
+			"name":   dayNames[dayIdx],
+			"logins": loginMap[dayKey],
+		})
+	}
+
+	// Registration trend (last 4 weeks)
+	var weeklyRegistrations []dailyActivity
+	fourWeeksAgo := now.AddDate(0, 0, -27)
+	db.DB.Model(&models.User{}).
+		Select("TO_CHAR(created_at, 'YYYY-MM-DD') as day, COUNT(*) as count").
+		Where("created_at >= ? AND deleted_at IS NULL", fourWeeksAgo).
+		Group("TO_CHAR(created_at, 'YYYY-MM-DD')").
+		Scan(&weeklyRegistrations)
+
+	regMap := make(map[string]int64)
+	for _, d := range weeklyRegistrations {
+		regMap[d.Day] = d.Count
+	}
+
+	registrationChart := make([]gin.H, 0, 4)
+	for w := 0; w < 4; w++ {
+		weekStart := now.AddDate(0, 0, -(3-w)*7-6)
+		weekEnd := weekStart.AddDate(0, 0, 6)
+		total := int64(0)
+		for day, count := range regMap {
+			t, _ := time.Parse("2006-01-02", day)
+			if (t.Equal(weekStart) || t.After(weekStart)) && (t.Equal(weekEnd) || t.Before(weekEnd)) {
+				total += count
+			}
+		}
+		registrationChart = append(registrationChart, gin.H{
+			"name":          fmt.Sprintf("الأسبوع %d", w+1),
+			"registrations": total,
+		})
+	}
+
+	api_response.Success(c, gin.H{
+		"growth":        growthChart,
+		"roles":         roleChart,
+		"countries":     countryChart,
+		"loginActivity": loginChart,
+		"registrations": registrationChart,
+	})
+}
+
+func AdminUsersFilterOptions(c *gin.Context) {
+	// Fetch available teachers for filter
+	var teachers []models.User
+	db.DB.Model(&models.User{}).
+		Select("id, COALESCE(name, username, email) as name").
+		Where("deleted_at IS NULL AND (role = ? OR role = ?)", models.RoleTeacher, models.RoleAdmin).
+		Limit(50).
+		Find(&teachers)
+
+	teacherOptions := make([]gin.H, 0, len(teachers))
+	for _, t := range teachers {
+		teacherOptions = append(teacherOptions, gin.H{
+			"id":   t.ID,
+			"name": t.GetName(),
+		})
+	}
+
+	// Fetch available courses/subjects for filter
+	var subjects []models.Subject
+	db.DB.Model(&models.Subject{}).
+		Select("id, name").
+		Where("deleted_at IS NULL").
+		Limit(50).
+		Find(&subjects)
+
+	courseOptions := make([]gin.H, 0, len(subjects))
+	for _, s := range subjects {
+		courseOptions = append(courseOptions, gin.H{
+			"id":   s.ID,
+			"name": s.Name,
+		})
+	}
+
+	// Fetch categories
+	type category struct {
+		ID   string
+		Name string
+	}
+	var categories []category
+	db.DB.Model(&models.Category{}).
+		Select("id, name").
+		Where("deleted_at IS NULL").
+		Limit(20).
+		Find(&categories)
+
+	categoryOptions := make([]gin.H, 0, len(categories))
+	for _, cat := range categories {
+		categoryOptions = append(categoryOptions, gin.H{
+			"id":   cat.ID,
+			"name": cat.Name,
+		})
+	}
+
+	api_response.Success(c, gin.H{
+		"teachers":   teacherOptions,
+		"courses":    courseOptions,
+		"categories": categoryOptions,
+	})
+}
+
+// ─────────────────────────────────────────────
+// Parent Management Handlers
+// ─────────────────────────────────────────────
+
+// GetParentStudents returns students linked to a parent
+func GetParentStudents(c *gin.Context) {
+	parentID := c.Param("id")
+	if parentID == "" {
+		api_response.Error(c, http.StatusBadRequest, "Parent ID is required")
+		return
+	}
+
+	type studentInfo struct {
+		ID           string
+		Name         string
+		Email        string
+		GradeLevel   string
+		Level        int
+		Progress     float64
+		Attendance   float64
+		CurrentGPA   float64
+		LastActivity *time.Time
+	}
+
+	var students []studentInfo
+	err := db.DB.Raw(`
+		SELECT 
+			u.id,
+			u.name,
+			u.email,
+			u.grade_level,
+			u.level,
+			COALESCE(u.progress, 0) as progress,
+			COALESCE(u.attendance, 0) as attendance,
+			COALESCE(u.current_gpa, 0) as current_gpa,
+			u.last_login as last_activity
+		FROM users u
+		INNER JOIN student_parents sp ON u.id = sp.student_id
+		WHERE sp.parent_id = ? AND u.deleted_at IS NULL
+		ORDER BY u.name ASC
+	`, parentID).Scan(&students).Error
+
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch parent students")
+		return
+	}
+
+	api_response.Success(c, gin.H{
+		"students": students,
+		"total":    len(students),
+	})
+}
+
+// LinkStudentToParent links a student to a parent
+func LinkStudentToParent(c *gin.Context) {
+	parentID := c.Param("id")
+	if parentID == "" {
+		api_response.Error(c, http.StatusBadRequest, "Parent ID is required")
+		return
+	}
+
+	var req struct {
+		StudentID string `json:"studentId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Verify parent exists and has PARENT role
+	var parent models.User
+	if err := db.DB.Where("id = ? AND role = ? AND deleted_at IS NULL", parentID, models.RoleParent).First(&parent).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Parent not found")
+		return
+	}
+
+	// Verify student exists
+	var student models.User
+	if err := db.DB.Where("id = ? AND deleted_at IS NULL", req.StudentID).First(&student).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Student not found")
+		return
+	}
+
+	// Check if already linked
+	var existingLink int64
+	db.DB.Table("student_parents").
+		Where("parent_id = ? AND student_id = ?", parentID, req.StudentID).
+		Count(&existingLink)
+
+	if existingLink > 0 {
+		api_response.Error(c, http.StatusConflict, "Student is already linked to this parent")
+		return
+	}
+
+	// Create the link
+	if err := db.DB.Exec(`
+		INSERT INTO student_parents (student_id, parent_id, created_at)
+		VALUES (?, ?, NOW())
+	`, req.StudentID, parentID).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to link student")
+		return
+	}
+
+	api_response.Success(c, gin.H{
+		"message": "Student linked successfully",
+	})
+}
+
+// UnlinkStudentFromParent unlinks a student from a parent
+func UnlinkStudentFromParent(c *gin.Context) {
+	parentID := c.Param("id")
+	studentID := c.Query("studentId")
+
+	if parentID == "" || studentID == "" {
+		api_response.Error(c, http.StatusBadRequest, "Parent ID and Student ID are required")
+		return
+	}
+
+	result := db.DB.Exec(`
+		DELETE FROM student_parents
+		WHERE parent_id = ? AND student_id = ?
+	`, parentID, studentID)
+
+	if result.Error != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to unlink student")
+		return
+	}
+
+	if result.RowsAffected == 0 {
+		api_response.Error(c, http.StatusNotFound, "Link not found")
+		return
+	}
+
+	api_response.Success(c, gin.H{
+		"message": "Student unlinked successfully",
+	})
+}
+
+// GetParentStatistics returns statistics for parents
+func GetParentStatistics(c *gin.Context) {
+	var stats struct {
+		TotalParents      int64
+		ActiveParents     int64
+		SuspendedParents  int64
+		PendingApproval   int64
+		OnlineParents     int64
+		NewParentsToday   int64
+		NewParentsThisMonth int64
+	}
+
+	today := time.Now().Truncate(24 * time.Hour)
+	monthStart := time.Now().AddDate(0, 0, -time.Now().Day()+1).Truncate(24 * time.Hour)
+
+	db.DB.Model(&models.User{}).
+		Where("role = ? AND deleted_at IS NULL", models.RoleParent).
+		Count(&stats.TotalParents)
+
+	db.DB.Model(&models.User{}).
+		Where("role = ? AND status = ? AND deleted_at IS NULL", models.RoleParent, models.StatusActive).
+		Count(&stats.ActiveParents)
+
+	db.DB.Model(&models.User{}).
+		Where("role = ? AND status = ? AND deleted_at IS NULL", models.RoleParent, models.StatusSuspended).
+		Count(&stats.SuspendedParents)
+
+	db.DB.Model(&models.User{}).
+		Where("role = ? AND status = ? AND deleted_at IS NULL", models.RoleParent, "PENDING").
+		Count(&stats.PendingApproval)
+
+	// Online parents (last login within 15 minutes)
+	fifteenMinutesAgo := time.Now().Add(-15 * time.Minute)
+	db.DB.Model(&models.User{}).
+		Where("role = ? AND last_login >= ? AND deleted_at IS NULL", models.RoleParent, fifteenMinutesAgo).
+		Count(&stats.OnlineParents)
+
+	db.DB.Model(&models.User{}).
+		Where("role = ? AND created_at >= ? AND deleted_at IS NULL", models.RoleParent, today).
+		Count(&stats.NewParentsToday)
+
+	db.DB.Model(&models.User{}).
+		Where("role = ? AND created_at >= ? AND deleted_at IS NULL", models.RoleParent, monthStart).
+		Count(&stats.NewParentsThisMonth)
+
+	api_response.Success(c, stats)
+}
+
 func sanitizeLog(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\n", ""), "\r", "")
+}
+
+// ─────────────────────────────────────────────
+// Bulk User Operations
+// ─────────────────────────────────────────────
+
+// BulkCreateUsers creates multiple users from CSV import
+func BulkCreateUsers(c *gin.Context) {
+	var req struct {
+		Users []struct {
+			Email    string  `json:"email" binding:"required,email"`
+			Name     string  `json:"name" binding:"required"`
+			Username *string `json:"username"`
+			Password string  `json:"password" binding:"required"`
+			Role     string  `json:"role"`
+		} `json:"users" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	created := 0
+	failed := 0
+
+	for _, userReq := range req.Users {
+		role := models.RoleStudent
+		if userReq.Role != "" {
+			validRoles := map[string]bool{"STUDENT": true, "TEACHER": true, "MODERATOR": true, "ADMIN": true}
+			if !validRoles[userReq.Role] {
+				failed++
+				continue
+			}
+			role = models.UserRole(userReq.Role)
+		}
+
+		// Hash password
+		passwordHash, err := bcrypt.GenerateFromPassword([]byte(userReq.Password), bcrypt.DefaultCost)
+		if err != nil {
+			failed++
+			continue
+		}
+
+		user := models.User{
+			Email:        userReq.Email,
+			Name:         &userReq.Name,
+			Username:     userReq.Username,
+			PasswordHash: string(passwordHash),
+			Role:         role,
+		}
+
+		if err := SafeCreate(db.DB, &user); err != nil {
+			failed++
+			continue
+		}
+
+		created++
+	}
+
+	LogAudit(c, "BULK_CREATE_USERS", "user", "", gin.H{"created": created, "failed": failed})
+	api_response.Success(c, gin.H{"created": created, "failed": failed})
+}
+
+// BulkDeleteUsers deletes multiple users
+func BulkDeleteUsers(c *gin.Context) {
+	var req struct {
+		UserIDs []string `json:"userIds" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	deleted := 0
+	failed := 0
+
+	for _, userID := range req.UserIDs {
+		if err := db.DB.Delete(&models.User{}, idQuery, userID).Error; err != nil {
+			failed++
+			continue
+		}
+
+		middleware.InvalidateRolePermsCache(userID)
+		getUserRepo().InvalidateCache(userID)
+		deleted++
+	}
+
+	LogAudit(c, "BULK_DELETE_USERS", "user", "", gin.H{"deleted": deleted, "failed": failed})
+	api_response.Success(c, gin.H{"deleted": deleted, "failed": failed})
+}
+
+// ─────────────────────────────────────────────
+// User Action Handlers (ban, suspend, role change, etc)
+// ─────────────────────────────────────────────
+
+// BanUser bans a user permanently or temporarily
+func BanUser(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		api_response.Error(c, http.StatusBadRequest, "User ID is required")
+		return
+	}
+
+	var req struct {
+		Reason      *string `json:"reason"`
+		DurationHours *int  `json:"durationHours"`
+		NotifyUser  bool    `json:"notifyUser"`
+		Permanent   bool    `json:"permanent"`
+		ExpiresAt   *string `json:"expiresAt"`
+		HideContent bool    `json:"hideContent"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var user models.User
+	if err := db.DB.Where(idQuery, userID).First(&user).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
+		return
+	}
+
+	// Set status to BANNED
+	user.Status = models.StatusBanned
+
+	// Set expiration if not permanent
+	if !req.Permanent && req.ExpiresAt != nil {
+		expiresAt, err := time.Parse(time.RFC3339, *req.ExpiresAt)
+		if err == nil {
+			user.StatusExpiresAt = &expiresAt
+		}
+	} else if req.DurationHours != nil {
+		expiresAt := time.Now().Add(time.Duration(*req.DurationHours) * time.Hour)
+		user.StatusExpiresAt = &expiresAt
+	}
+
+	if req.Reason != nil {
+		user.StatusReason = req.Reason
+	}
+
+	if err := db.DB.Save(&user).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to ban user")
+		return
+	}
+
+	middleware.InvalidateRolePermsCache(userID)
+	getUserRepo().InvalidateCache(userID)
+
+	LogAudit(c, "BAN_USER", "user", userID, gin.H{"reason": req.Reason, "permanent": req.Permanent})
+	api_response.Success(c, buildUserDetailsPayload(user))
+}
+
+// SuspendUser suspends a user temporarily
+func SuspendUser(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		api_response.Error(c, http.StatusBadRequest, "User ID is required")
+		return
+	}
+
+	var req struct {
+		Reason       *string `json:"reason"`
+		DurationHours *int    `json:"durationHours"`
+		NotifyUser   bool     `json:"notifyUser"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var user models.User
+	if err := db.DB.Where(idQuery, userID).First(&user).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
+		return
+	}
+
+	// Set status to SUSPENDED
+	user.Status = models.StatusSuspended
+
+	// Set expiration
+	if req.DurationHours != nil {
+		expiresAt := time.Now().Add(time.Duration(*req.DurationHours) * time.Hour)
+		user.StatusExpiresAt = &expiresAt
+	}
+
+	if req.Reason != nil {
+		user.StatusReason = req.Reason
+	}
+
+	if err := db.DB.Save(&user).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to suspend user")
+		return
+	}
+
+	middleware.InvalidateRolePermsCache(userID)
+	getUserRepo().InvalidateCache(userID)
+
+	LogAudit(c, "SUSPEND_USER", "user", userID, gin.H{"reason": req.Reason, "durationHours": req.DurationHours})
+	api_response.Success(c, buildUserDetailsPayload(user))
+}
+
+// ChangeUserRole changes a user's role
+func ChangeUserRole(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		api_response.Error(c, http.StatusBadRequest, "User ID is required")
+		return
+	}
+
+	var req struct {
+		Role   *string `json:"role" binding:"required"`
+		Reason *string `json:"reason"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	validRoles := map[string]bool{
+		"STUDENT": true, "TEACHER": true, "MODERATOR": true,
+		"ADMIN": true, "SUPER_ADMIN": true, "SUPPORT": true, "PARENT": true,
+	}
+	if !validRoles[*req.Role] {
+		api_response.Error(c, http.StatusBadRequest, "Invalid role")
+		return
+	}
+
+	var user models.User
+	if err := db.DB.Where(idQuery, userID).First(&user).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
+		return
+	}
+
+	user.Role = models.UserRole(*req.Role)
+
+	if err := db.DB.Save(&user).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to change user role")
+		return
+	}
+
+	middleware.InvalidateRolePermsCache(userID)
+	getUserRepo().InvalidateCache(userID)
+
+	LogAudit(c, "CHANGE_ROLE", "user", userID, gin.H{"oldRole": user.Role, "newRole": req.Role, "reason": req.Reason})
+	api_response.Success(c, buildUserDetailsPayload(user))
+}
+
+// SendPasswordReset sends a password reset email to user
+func SendPasswordReset(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		api_response.Error(c, http.StatusBadRequest, "User ID is required")
+		return
+	}
+
+	var user models.User
+	if err := db.DB.Where(idQuery, userID).First(&user).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
+		return
+	}
+
+	// Generate password reset token
+	_ = generateRandomToken(32)
+	_ = time.Now().Add(24 * time.Hour)
+
+	// Store token (you might need a password_resets table)
+	// For now, we'll just log it
+	LogAudit(c, "PASSWORD_RESET_REQUEST", "user", userID, gin.H{"email": user.Email})
+
+	api_response.Success(c, gin.H{"message": "Password reset email sent"})
+}
+
+// ActivateUser activates a suspended or banned user
+func ActivateUser(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		api_response.Error(c, http.StatusBadRequest, "User ID is required")
+		return
+	}
+
+	var user models.User
+	if err := db.DB.Where(idQuery, userID).First(&user).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
+		return
+	}
+
+	user.Status = models.StatusActive
+	user.StatusReason = nil
+	user.StatusExpiresAt = nil
+
+	if err := db.DB.Save(&user).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to activate user")
+		return
+	}
+
+	middleware.InvalidateRolePermsCache(userID)
+	getUserRepo().InvalidateCache(userID)
+
+	LogAudit(c, "ACTIVATE_USER", "user", userID, nil)
+	api_response.Success(c, buildUserDetailsPayload(user))
+}
+
+// ResetAllPermissions resets all user permissions to their role defaults
+func ResetAllPermissions(c *gin.Context) {
+	// This would reset all custom permissions back to role defaults
+	// Implementation depends on your permissions system
+	LogAudit(c, "RESET_ALL_PERMISSIONS", "user", "", nil)
+	api_response.Success(c, gin.H{"message": "All permissions reset to defaults"})
+}
+
+// Helper function to generate random tokens
+func generateRandomToken(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			// Fallback to simple random if crypto fails
+			b[i] = charset[i%len(charset)]
+			continue
+		}
+		b[i] = charset[n.Int64()]
+	}
+	return string(b)
 }

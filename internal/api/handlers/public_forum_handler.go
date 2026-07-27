@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 
@@ -16,10 +17,10 @@ import (
 func GetForumCategories(c *gin.Context) {
 	var cats []models.ForumCategory
 	if err := db.DB.Order("\"order\" ASC, created_at DESC").Find(&cats).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch forum categories"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch forum categories")
 		return
 	}
-	c.JSON(http.StatusOK, cats)
+	api_response.Success(c, cats)
 }
 
 // GetForumPosts returns forum topics/posts with pagination
@@ -41,7 +42,7 @@ func GetForumPosts(c *gin.Context) {
 		Limit(limit).
 		Offset(offset).
 		Find(&topics).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch forum posts"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch forum posts")
 		return
 	}
 
@@ -50,7 +51,7 @@ func GetForumPosts(c *gin.Context) {
 		posts = append(posts, buildForumPostResponse(t))
 	}
 
-	c.JSON(http.StatusOK, posts)
+	api_response.Success(c, posts)
 }
 
 // GetForumPost returns a single forum topic by ID (public)
@@ -58,11 +59,11 @@ func GetForumPost(c *gin.Context) {
 	id := c.Param("id")
 	var topic models.ForumTopic
 	if err := db.DB.Preload("Author").Preload("Category").First(&topic, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Forum post not found"})
+		api_response.Error(c, http.StatusNotFound, "Forum post not found")
 		return
 	}
 
-	c.JSON(http.StatusOK, buildForumPostResponse(topic))
+	api_response.Success(c, buildForumPostResponse(topic))
 }
 
 func CreateForumPost(c *gin.Context) {
@@ -73,14 +74,14 @@ func CreateForumPost(c *gin.Context) {
 		CategoryID string `json:"categoryId"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	input.Title = strings.TrimSpace(input.Title)
 	input.Content = strings.TrimSpace(input.Content)
 	input.CategoryID = strings.TrimSpace(input.CategoryID)
 	if input.Title == "" || input.Content == "" || input.CategoryID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "title, content, and categoryId are required"})
+		api_response.Error(c, http.StatusBadRequest, "title, content, and categoryId are required")
 		return
 	}
 
@@ -91,28 +92,28 @@ func CreateForumPost(c *gin.Context) {
 		AuthorID:   userID,
 	}
 	if err := SafeCreate(db.DB, &topic); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create forum post"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create forum post")
 		return
 	}
 	db.DB.Preload("Author").Preload("Category").First(&topic, idQuery, topic.ID)
-	c.JSON(http.StatusCreated, buildForumPostResponse(topic))
+	api_response.Success(c, buildForumPostResponse(topic))
 }
 
 func IncrementForumPostView(c *gin.Context) {
 	if err := db.DB.WithContext(c.Request.Context()).Model(&models.ForumTopic{}).Where(idQuery, c.Param("id")).
 		UpdateColumn("views", gorm.Expr("views + 1")).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update forum post view"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to update forum post view")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	api_response.Success(c, gin.H{"success": true})
 }
 
 func GetForumPostReplies(c *gin.Context) {
-	c.JSON(http.StatusOK, []gin.H{})
+	api_response.Success(c, []gin.H{})
 }
 
 func CreateForumPostReply(c *gin.Context) {
-	c.JSON(http.StatusCreated, gin.H{"success": true})
+	api_response.Success(c, gin.H{"success": true})
 }
 
 func buildForumPostResponse(topic models.ForumTopic) gin.H {

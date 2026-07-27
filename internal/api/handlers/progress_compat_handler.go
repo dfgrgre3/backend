@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	"thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 
@@ -12,17 +13,17 @@ import (
 func GetUserCoursesProgress(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
 	var total int64
 	if err := db.DB.Model(&models.Enrollment{}).Where("user_id = ?", userID).Count(&total).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch course progress"})
+		response.Error(c, http.StatusInternalServerError, "Failed to fetch course progress")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.Success(c, gin.H{
 		"courses":        []gin.H{},
 		"totalCourses":   total,
 		"completed":      0,
@@ -34,17 +35,17 @@ func GetUserCoursesProgress(c *gin.Context) {
 func GetUserTimeProgress(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
 	summary, err := progressQuery.GetSummary(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch time progress"})
+		response.Error(c, http.StatusInternalServerError, "Failed to fetch time progress")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.Success(c, gin.H{
 		"totalMinutes":   summary.TotalMinutes,
 		"averageFocus":   summary.AverageFocus,
 		"tasksCompleted": summary.TasksCompleted,
@@ -55,17 +56,17 @@ func GetUserTimeProgress(c *gin.Context) {
 func GetUserAchievementsProgress(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
 	achievements, err := gamificationQuery.GetUserAchievements(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch achievements progress"})
+		response.Error(c, http.StatusInternalServerError, "Failed to fetch achievements progress")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.Success(c, gin.H{
 		"achievements": achievements,
 		"total":        len(achievements),
 	})

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/models"
@@ -32,15 +33,13 @@ func GetActiveSessions(c *gin.Context) {
 
 	var sessions []models.UserSession
 	if err := query.Order("last_accessed DESC").Find(&sessions).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sessions"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch sessions")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"sessions": sessions,
-			"count":    len(sessions),
-		},
+	api_response.Success(c, gin.H{
+		"sessions": sessions,
+		"count":    len(sessions),
 	})
 }
 
@@ -58,7 +57,7 @@ func RevokeSession(c *gin.Context) {
 
 	var session models.UserSession
 	if err := db.DB.First(&session, "id = ?", sessionID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+		api_response.Error(c, http.StatusNotFound, "Session not found")
 		return
 	}
 
@@ -68,7 +67,7 @@ func RevokeSession(c *gin.Context) {
 	session.RevokedAt = &now
 
 	if err := db.DB.Save(&session).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revoke session"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to revoke session")
 		return
 	}
 
@@ -77,7 +76,7 @@ func RevokeSession(c *gin.Context) {
 		"user_id":    session.UserID,
 	})
 
-	c.JSON(http.StatusOK, gin.H{"message": "Session revoked successfully"})
+	api_response.Success(c, gin.H{"message": "Session revoked successfully"})
 }
 
 // RevokeOtherSessions revokes all sessions except current
@@ -104,11 +103,9 @@ func RevokeOtherSessions(c *gin.Context) {
 		"revoked_count": result.RowsAffected,
 	})
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"message": "Other sessions revoked",
-		"data": gin.H{
-			"revokedCount": result.RowsAffected,
-		},
+		"revokedCount": result.RowsAffected,
 	})
 }
 
@@ -137,11 +134,9 @@ func RevokeUserSessions(c *gin.Context) {
 		"revoked_count": result.RowsAffected,
 	})
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"message": "All user sessions revoked",
-		"data": gin.H{
-			"revokedCount": result.RowsAffected,
-		},
+		"revokedCount": result.RowsAffected,
 	})
 }
 
@@ -164,7 +159,5 @@ func GetSessionStats(c *gin.Context) {
 	db.DB.Model(&models.UserSession{}).Where("is_active = ?", false).Count(&stats.TotalExpired)
 	db.DB.Model(&models.UserSession{}).Where("is_active = ?", true).Select("COUNT(DISTINCT user_agent)").Scan(&stats.UniqueDevices)
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": stats,
-	})
+	api_response.Success(c, stats)
 }

@@ -3,10 +3,12 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"thanawy-backend/internal/api/pagination"
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
+
+	"github.com/gin-gonic/gin"
 )
 
 // SearchUsers performs full-text search on users with cursor pagination
@@ -51,14 +53,14 @@ func SearchUsers(c *gin.Context) {
 	// Apply cursor pagination
 	paginatedQuery, err := params.Pagination.ApplyCursor(query)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Fetch results
 	var users []models.User
 	if err := paginatedQuery.Find(&users).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch users")
 		return
 	}
 

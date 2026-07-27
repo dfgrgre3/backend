@@ -5,11 +5,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/services"
+
+	"github.com/gin-gonic/gin"
 )
 
 // NotificationRequest represents a broadcast notification request
@@ -51,13 +53,13 @@ type NotificationSummary struct {
 func SendNotificationBroadcast(c *gin.Context) {
 	var req NotificationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	adminID, ok := contextString(c, "userId", "user_id")
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		api_response.Error(c, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 	adminRole, _ := contextString(c, "role", "user_role")
@@ -88,7 +90,7 @@ func SendNotificationBroadcast(c *gin.Context) {
 	}
 
 	if err := SafeCreate(db.DB, &broadcast); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create broadcast: " + err.Error()})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create broadcast: "+err.Error())
 		return
 	}
 
@@ -139,7 +141,7 @@ func SendNotificationBroadcast(c *gin.Context) {
 		"adminRole":   adminRole,
 	})
 
-	c.JSON(http.StatusOK, NotificationResponse{
+	api_response.Success(c, NotificationResponse{
 		BroadcastID: broadcast.ID,
 		Summary: NotificationSummary{
 			Total:   len(req.UserIDs),
@@ -163,18 +165,18 @@ func SendNotificationBroadcast(c *gin.Context) {
 func ScheduleNotificationBroadcast(c *gin.Context) {
 	var req NotificationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if req.ScheduledFor == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "scheduledFor is required"})
+		api_response.Error(c, http.StatusBadRequest, "scheduledFor is required")
 		return
 	}
 
 	// Ensure scheduled time is in the future
 	if req.ScheduledFor.Before(time.Now()) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "scheduledFor must be in the future"})
+		api_response.Error(c, http.StatusBadRequest, "scheduledFor must be in the future")
 		return
 	}
 
@@ -198,19 +200,19 @@ func CancelScheduledBroadcast(c *gin.Context) {
 	}
 	adminID, ok := contextString(c, "userId", "user_id")
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		api_response.Error(c, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
 	var broadcast models.Broadcast
 	if err := db.DB.First(&broadcast, "id = ?", broadcastID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Broadcast not found"})
+		api_response.Error(c, http.StatusNotFound, "Broadcast not found")
 		return
 	}
 
 	// Check if broadcast is scheduled
 	if broadcast.Status != "scheduled" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Can only cancel scheduled broadcasts"})
+		api_response.Error(c, http.StatusBadRequest, "Can only cancel scheduled broadcasts")
 		return
 	}
 
@@ -221,7 +223,7 @@ func CancelScheduledBroadcast(c *gin.Context) {
 	broadcast.CancelledAt = &now
 
 	if err := db.DB.Save(&broadcast).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel broadcast"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to cancel broadcast")
 		return
 	}
 
@@ -230,7 +232,7 @@ func CancelScheduledBroadcast(c *gin.Context) {
 		Where("broadcast_id = ? AND status = ?", broadcastID, "pending").
 		Update("status", "cancelled")
 
-	c.JSON(http.StatusOK, gin.H{"message": "Broadcast cancelled successfully"})
+	api_response.Success(c, gin.H{"message": "Broadcast cancelled successfully"})
 }
 
 // RetryFailedNotifications retries failed notifications from a broadcast
@@ -247,7 +249,7 @@ func RetryFailedNotifications(c *gin.Context) {
 
 	var notifications []models.Notification
 	if err := db.DB.Where("broadcast_id = ? AND status = ?", broadcastID, "failed").Find(&notifications).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch failed notifications"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch failed notifications")
 		return
 	}
 
@@ -267,7 +269,7 @@ func RetryFailedNotifications(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, NotificationResponse{
+	api_response.Success(c, NotificationResponse{
 		BroadcastID: broadcastID,
 		Summary: NotificationSummary{
 			Total:   len(notifications),
@@ -314,14 +316,12 @@ func GetBroadcasts(c *gin.Context) {
 
 	var broadcasts []models.Broadcast
 	if err := query.Find(&broadcasts).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch broadcasts"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch broadcasts")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"broadcasts": broadcasts,
-		},
+	api_response.Success(c, gin.H{
+		"broadcasts": broadcasts,
 	})
 }
 
@@ -360,12 +360,10 @@ func GetNotificationStats(c *gin.Context) {
 	var recentBroadcasts []models.Broadcast
 	db.DB.Order("created_at DESC").Limit(5).Find(&recentBroadcasts)
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"overview":         stats,
-			"byChannel":        channelStats,
-			"recentBroadcasts": recentBroadcasts,
-		},
+	api_response.Success(c, gin.H{
+		"overview":         stats,
+		"byChannel":        channelStats,
+		"recentBroadcasts": recentBroadcasts,
 	})
 }
 
@@ -387,7 +385,7 @@ func SendPushNotification(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -417,7 +415,7 @@ func SendPushNotification(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"message": "Push notifications processed",
 		"sent":    sent,
 		"failed":  failed,

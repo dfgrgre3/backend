@@ -160,3 +160,69 @@ func TestUpdateInstructor_ReturnsUpdatedInstructorPayload(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "Dina Updated", instructor["name"])
 }
+
+func TestReviewInstructorDocument_ReturnsReviewedPayload(t *testing.T) {
+	testDB := setupTestDB(t)
+	db.DB = testDB
+
+	name := "Eve Teacher"
+	teacher := models.User{
+		Email:            "eve@thanawy.local",
+		Name:             &name,
+		Username:         &name,
+		PasswordHash:     "hashed",
+		Role:             models.RoleTeacher,
+		InstructorStatus: "PENDING",
+	}
+	require.NoError(t, testDB.Create(&teacher).Error)
+
+	router := setupTestRouter()
+	router.POST("/instructors/:id/documents/:documentId/review", ReviewInstructorDocument)
+
+	body := map[string]interface{}{"status": "APPROVED", "notes": "Looks good"}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/instructors/"+teacher.ID+"/documents/identity/review", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var payload map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+	assert.Equal(t, "APPROVED", payload["status"])
+	assert.Equal(t, "identity", payload["documentId"])
+}
+
+func TestCreateInstructorViolation_ReturnsViolationPayload(t *testing.T) {
+	testDB := setupTestDB(t)
+	db.DB = testDB
+
+	name := "Frank Teacher"
+	teacher := models.User{
+		Email:            "frank@thanawy.local",
+		Name:             &name,
+		Username:         &name,
+		PasswordHash:     "hashed",
+		Role:             models.RoleTeacher,
+		InstructorStatus: "APPROVED",
+	}
+	require.NoError(t, testDB.Create(&teacher).Error)
+
+	router := setupTestRouter()
+	router.POST("/instructors/:id/violations", CreateInstructorViolation)
+
+	body := map[string]interface{}{"type": "policy", "description": "Late submission", "severity": "medium"}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/instructors/"+teacher.ID+"/violations", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var payload map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+	assert.Equal(t, "policy", payload["type"])
+	assert.Equal(t, "Late submission", payload["description"])
+}

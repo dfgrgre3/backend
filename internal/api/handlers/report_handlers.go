@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
+
+	"github.com/gin-gonic/gin"
 )
 
 const errReportNotFound = "Report not found"
@@ -84,7 +86,7 @@ type CustomReportRequest struct {
 func CreateCustomReport(c *gin.Context) {
 	var req CustomReportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -112,15 +114,13 @@ func CreateCustomReport(c *gin.Context) {
 	}
 
 	if err := SafeCreate(db.DB, &report); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create report"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create report")
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
+	api_response.Success(c, gin.H{
 		"message": "Report created successfully",
-		"data": gin.H{
-			"report": report,
-		},
+		"report": report,
 	})
 }
 
@@ -144,14 +144,12 @@ func GetCustomReports(c *gin.Context) {
 
 	var reports []models.CustomReport
 	if err := query.Order("updated_at DESC").Find(&reports).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch reports"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch reports")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"reports": reports,
-		},
+	api_response.Success(c, gin.H{
+		"reports": reports,
 	})
 }
 
@@ -169,14 +167,12 @@ func GetCustomReport(c *gin.Context) {
 
 	var report models.CustomReport
 	if err := db.DB.First(&report, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errReportNotFound})
+		api_response.Error(c, http.StatusNotFound, errReportNotFound)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"report": report,
-		},
+	api_response.Success(c, gin.H{
+		"report": report,
 	})
 }
 
@@ -195,13 +191,13 @@ func UpdateCustomReport(c *gin.Context) {
 
 	var report models.CustomReport
 	if err := db.DB.First(&report, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errReportNotFound})
+		api_response.Error(c, http.StatusNotFound, errReportNotFound)
 		return
 	}
 
 	var req CustomReportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -224,15 +220,13 @@ func UpdateCustomReport(c *gin.Context) {
 	}
 
 	if err := db.DB.Save(&report).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update report"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to update report")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"message": "Report updated successfully",
-		"data": gin.H{
-			"report": report,
-		},
+		"report": report,
 	})
 }
 
@@ -250,16 +244,16 @@ func DeleteCustomReport(c *gin.Context) {
 
 	var report models.CustomReport
 	if err := db.DB.First(&report, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errReportNotFound})
+		api_response.Error(c, http.StatusNotFound, errReportNotFound)
 		return
 	}
 
 	if err := db.DB.Delete(&report).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete report"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to delete report")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Report deleted successfully"})
+	api_response.Success(c, gin.H{"message": "Report deleted successfully"})
 }
 
 // ExecuteCustomReport executes a custom report and returns results
@@ -276,7 +270,7 @@ func ExecuteCustomReport(c *gin.Context) {
 
 	var report models.CustomReport
 	if err := db.DB.First(&report, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errReportNotFound})
+		api_response.Error(c, http.StatusNotFound, errReportNotFound)
 		return
 	}
 
@@ -298,13 +292,11 @@ func ExecuteCustomReport(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"result": gin.H{
-				"reportId":   report.ID,
-				"executedAt": now,
-				"results":    results,
-			},
+	api_response.Success(c, gin.H{
+		"result": gin.H{
+			"reportId":   report.ID,
+			"executedAt": now,
+			"results":    results,
 		},
 	})
 }
@@ -329,7 +321,7 @@ func ExportCustomReport(c *gin.Context) {
 
 	var report models.CustomReport
 	if err := db.DB.First(&report, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errReportNotFound})
+		api_response.Error(c, http.StatusNotFound, errReportNotFound)
 		return
 	}
 
@@ -341,7 +333,7 @@ func ExportCustomReport(c *gin.Context) {
 	case "pdf":
 		exportToPDF(c, report)
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid format"})
+		api_response.Error(c, http.StatusBadRequest, "Invalid format")
 	}
 }
 
@@ -360,7 +352,7 @@ func ScheduleCustomReport(c *gin.Context) {
 
 	var report models.CustomReport
 	if err := db.DB.First(&report, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errReportNotFound})
+		api_response.Error(c, http.StatusNotFound, errReportNotFound)
 		return
 	}
 
@@ -370,7 +362,7 @@ func ScheduleCustomReport(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -378,11 +370,11 @@ func ScheduleCustomReport(c *gin.Context) {
 	report.ScheduleEmailTo = req.EmailTo
 
 	if err := db.DB.Save(&report).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to schedule report"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to schedule report")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Report scheduled successfully"})
+	api_response.Success(c, gin.H{"message": "Report scheduled successfully"})
 }
 
 // Helper functions
@@ -422,10 +414,10 @@ func exportToCSV(c *gin.Context, report models.CustomReport) {
 
 func exportToExcel(c *gin.Context, _ models.CustomReport) {
 	// In production, use a library like excelize to generate Excel files
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "Excel export not yet implemented"})
+	api_response.Error(c, http.StatusNotImplemented, "Excel export not yet implemented")
 }
 
 func exportToPDF(c *gin.Context, _ models.CustomReport) {
 	// In production, use a library like gofpdf or headless Chrome to generate PDFs
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "PDF export not yet implemented"})
+	api_response.Error(c, http.StatusNotImplemented, "PDF export not yet implemented")
 }

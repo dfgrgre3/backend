@@ -40,8 +40,8 @@ const (
 type AvailabilityType string
 
 const (
-	AvailabilityTypeCalendarDate        AvailabilityType = "CALENDAR_DATE"
-	AvailabilityTypeEnrollmentRelative  AvailabilityType = "ENROLLMENT_RELATIVE"
+	AvailabilityTypeCalendarDate       AvailabilityType = "CALENDAR_DATE"
+	AvailabilityTypeEnrollmentRelative AvailabilityType = "ENROLLMENT_RELATIVE"
 )
 
 // LmsCourse represents the primary course model
@@ -74,16 +74,16 @@ type LmsCourse struct {
 	LearningOutcomes      PGStringArray  `gorm:"type:text[];column:learning_outcomes" json:"learningOutcomes"`
 	PrimaryInstructorID   uuid.UUID      `gorm:"not null;type:uuid;index;column:primary_instructor_id" json:"primaryInstructorId"`
 	AvailableFrom         *time.Time     `gorm:"column:available_from" json:"availableFrom,omitempty"`
-	AvailableUntil         *time.Time     `gorm:"column:available_until" json:"availableUntil,omitempty"`
+	AvailableUntil        *time.Time     `gorm:"column:available_until" json:"availableUntil,omitempty"`
 	CreatedAt             time.Time      `gorm:"index;column:created_at" json:"createdAt"`
 	UpdatedAt             time.Time      `gorm:"column:updated_at" json:"updatedAt"`
 	DeletedAt             gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
 
 	// Associations
-	Sections             []LmsSection                   `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"sections,omitempty"`
-	Pricings             []LmsPricing                   `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"pricings,omitempty"`
-	Instructors          []LmsInstructor                `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"instructors,omitempty"`
-	AvailabilityWindows  []LmsCourseAvailabilityWindow  `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"availabilityWindows,omitempty"`
+	Sections            []LmsSection                  `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"sections,omitempty"`
+	Pricings            []LmsPricing                  `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"pricings,omitempty"`
+	Instructors         []LmsInstructor               `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"instructors,omitempty"`
+	AvailabilityWindows []LmsCourseAvailabilityWindow `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"availabilityWindows,omitempty"`
 }
 
 func (LmsCourse) TableName() string {
@@ -135,7 +135,7 @@ type LmsLesson struct {
 	DurationSeconds  int              `gorm:"default:0;column:duration_seconds" json:"durationSeconds"`
 	IsFreePreview    bool             `gorm:"default:false;index;column:is_free_preview" json:"isFreePreview"`
 	OrderIndex       int              `gorm:"default:0;index;column:order_index" json:"orderIndex"`
-	AvailabilityType AvailabilityType  `gorm:"default:'CALENDAR_DATE';column:availability_type" json:"availabilityType"`
+	AvailabilityType AvailabilityType `gorm:"default:'CALENDAR_DATE';column:availability_type" json:"availabilityType"`
 	AvailableFrom    *time.Time       `gorm:"column:available_from" json:"availableFrom,omitempty"`
 	DripDelayDays    *int             `gorm:"column:drip_delay_days" json:"dripDelayDays,omitempty"`
 	CreatedAt        time.Time        `gorm:"column:created_at" json:"createdAt"`
@@ -205,14 +205,14 @@ func (s *LmsSubtitle) BeforeCreate(tx *gorm.DB) (err error) {
 
 // LmsInteractiveQuiz represents inline interactive video questions
 type LmsInteractiveQuiz struct {
-	ID           uuid.UUID      `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	LessonID      uuid.UUID      `gorm:"not null;type:uuid;index;column:lesson_id;constraint:OnDelete:CASCADE" json:"lessonId"`
-	TimestampSec int            `gorm:"not null;column:timestamp_sec" json:"timestampSec"`
-	Question     string         `gorm:"not null;type:text;column:question" json:"question"`
+	ID           uuid.UUID       `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	LessonID     uuid.UUID       `gorm:"not null;type:uuid;index;column:lesson_id;constraint:OnDelete:CASCADE" json:"lessonId"`
+	TimestampSec int             `gorm:"not null;column:timestamp_sec" json:"timestampSec"`
+	Question     string          `gorm:"not null;type:text;column:question" json:"question"`
 	Options      json.RawMessage `gorm:"type:jsonb;column:options" json:"options"`
-	CorrectIndex int            `gorm:"not null;column:correct_index" json:"correctIndex"`
-	CreatedAt    time.Time      `gorm:"column:created_at" json:"createdAt"`
-	DeletedAt    gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
+	CorrectIndex int             `gorm:"not null;column:correct_index" json:"correctIndex"`
+	CreatedAt    time.Time       `gorm:"column:created_at" json:"createdAt"`
+	DeletedAt    gorm.DeletedAt  `gorm:"index;column:deleted_at" json:"-"`
 }
 
 func (LmsInteractiveQuiz) TableName() string {
@@ -296,9 +296,9 @@ func (c *LmsCategory) BeforeCreate(tx *gorm.DB) (err error) {
 
 // LmsTag represents course tags
 type LmsTag struct {
-	ID   uuid.UUID      `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	Name string         `gorm:"uniqueIndex;not null;column:name" json:"name"`
-	CreatedAt time.Time `gorm:"column:created_at" json:"createdAt"`
+	ID        uuid.UUID      `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	Name      string         `gorm:"uniqueIndex;not null;column:name" json:"name"`
+	CreatedAt time.Time      `gorm:"column:created_at" json:"createdAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
 }
 
@@ -335,7 +335,7 @@ func (LmsCourseTag) TableName() string {
 
 // LmsCoursePrerequisite is a join table for course prerequisites
 type LmsCoursePrerequisite struct {
-	CourseID            uuid.UUID `gorm:"primaryKey;type:uuid;column:course_id;constraint:OnDelete:CASCADE" json:"courseId"`
+	CourseID             uuid.UUID `gorm:"primaryKey;type:uuid;column:course_id;constraint:OnDelete:CASCADE" json:"courseId"`
 	PrerequisiteCourseID uuid.UUID `gorm:"primaryKey;type:uuid;column:prerequisite_course_id;constraint:OnDelete:CASCADE" json:"prerequisiteCourseId"`
 }
 
@@ -345,7 +345,7 @@ func (LmsCoursePrerequisite) TableName() string {
 
 // LmsRelatedCourse is a join table for related courses
 type LmsRelatedCourse struct {
-	CourseID      uuid.UUID `gorm:"primaryKey;type:uuid;column:course_id;constraint:OnDelete:CASCADE" json:"courseId"`
+	CourseID        uuid.UUID `gorm:"primaryKey;type:uuid;column:course_id;constraint:OnDelete:CASCADE" json:"courseId"`
 	RelatedCourseID uuid.UUID `gorm:"primaryKey;type:uuid;column:related_course_id;constraint:OnDelete:CASCADE" json:"relatedCourseId"`
 }
 
@@ -368,16 +368,16 @@ func (LmsInstructor) TableName() string {
 
 // LmsPricing for multi-currency & price types
 type LmsPricing struct {
-	ID           uuid.UUID      `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	CourseID      uuid.UUID      `gorm:"not null;type:uuid;index;column:course_id;constraint:OnDelete:CASCADE" json:"courseId"`
-	Type         PriceType      `gorm:"default:'FREE';index;column:type" json:"type"`
-	Amount       float64        `gorm:"default:0;column:amount" json:"amount"`
-	CurrencyCode string         `gorm:"default:'USD';index;column:currency_code" json:"currencyCode"`
-	SubscriptionDurationDays *int `gorm:"column:subscription_duration_days" json:"subscriptionDurationDays,omitempty"`
-	IsActive     bool          `gorm:"default:true;column:is_active" json:"isActive"`
-	CreatedAt    time.Time      `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt    time.Time      `gorm:"column:updated_at" json:"updatedAt"`
-	DeletedAt    gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
+	ID                       uuid.UUID      `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	CourseID                 uuid.UUID      `gorm:"not null;type:uuid;index;column:course_id;constraint:OnDelete:CASCADE" json:"courseId"`
+	Type                     PriceType      `gorm:"default:'FREE';index;column:type" json:"type"`
+	Amount                   float64        `gorm:"default:0;column:amount" json:"amount"`
+	CurrencyCode             string         `gorm:"default:'USD';index;column:currency_code" json:"currencyCode"`
+	SubscriptionDurationDays *int           `gorm:"column:subscription_duration_days" json:"subscriptionDurationDays,omitempty"`
+	IsActive                 bool           `gorm:"default:true;column:is_active" json:"isActive"`
+	CreatedAt                time.Time      `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt                time.Time      `gorm:"column:updated_at" json:"updatedAt"`
+	DeletedAt                gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
 }
 
 func (LmsPricing) TableName() string {
@@ -537,16 +537,16 @@ func (rc *LmsReviewComment) BeforeCreate(tx *gorm.DB) (err error) {
 
 // LmsEnrollment represents student enrollment in a course
 type LmsEnrollment struct {
-	ID              uuid.UUID      `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	CourseID        uuid.UUID      `gorm:"not null;type:uuid;index:idx_lms_enroll_user_course,unique;column:course_id;constraint:OnDelete:CASCADE" json:"courseId"`
-	UserID          uuid.UUID      `gorm:"not null;type:uuid;index:idx_lms_enroll_user_course,unique;column:user_id;constraint:OnDelete:CASCADE" json:"userId"`
-	Progress        float64       `gorm:"default:0;column:progress" json:"progress"`
-	EnrolledAt      time.Time     `gorm:"index;column:enrolled_at" json:"enrolledAt"`
-	CompletedAt     *time.Time    `gorm:"column:completed_at" json:"completedAt,omitempty"`
-	BundleID        *uuid.UUID    `gorm:"type:uuid;index;column:bundle_id" json:"bundleId,omitempty"`
-	CreatedAt       time.Time     `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt       time.Time     `gorm:"column:updated_at" json:"updatedAt"`
-	DeletedAt       gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
+	ID          uuid.UUID      `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	CourseID    uuid.UUID      `gorm:"not null;type:uuid;index:idx_lms_enroll_user_course,unique;column:course_id;constraint:OnDelete:CASCADE" json:"courseId"`
+	UserID      uuid.UUID      `gorm:"not null;type:uuid;index:idx_lms_enroll_user_course,unique;column:user_id;constraint:OnDelete:CASCADE" json:"userId"`
+	Progress    float64        `gorm:"default:0;column:progress" json:"progress"`
+	EnrolledAt  time.Time      `gorm:"index;column:enrolled_at" json:"enrolledAt"`
+	CompletedAt *time.Time     `gorm:"column:completed_at" json:"completedAt,omitempty"`
+	BundleID    *uuid.UUID     `gorm:"type:uuid;index;column:bundle_id" json:"bundleId,omitempty"`
+	CreatedAt   time.Time      `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt   time.Time      `gorm:"column:updated_at" json:"updatedAt"`
+	DeletedAt   gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
 }
 
 func (LmsEnrollment) TableName() string {

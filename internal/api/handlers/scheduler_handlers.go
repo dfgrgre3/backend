@@ -4,11 +4,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/services"
+
+	"github.com/gin-gonic/gin"
 )
 
 const errItemNotFound = "Item not found"
@@ -37,7 +39,7 @@ type ScheduledItemRequest struct {
 func CreateScheduledItem(c *gin.Context) {
 	var req ScheduledItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -55,7 +57,7 @@ func CreateScheduledItem(c *gin.Context) {
 	// Validate timezone
 	loc, err := time.LoadLocation(req.Timezone)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid timezone: " + req.Timezone})
+		api_response.Error(c, http.StatusBadRequest, "Invalid timezone: "+req.Timezone)
 		return
 	}
 
@@ -63,7 +65,7 @@ func CreateScheduledItem(c *gin.Context) {
 	nowInLoc := time.Now().In(loc)
 	scheduledInLoc := req.ScheduledFor.In(loc)
 	if !scheduledInLoc.After(nowInLoc) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "scheduledFor must be in the future"})
+		api_response.Error(c, http.StatusBadRequest, "scheduledFor must be in the future")
 		return
 	}
 
@@ -87,7 +89,7 @@ func CreateScheduledItem(c *gin.Context) {
 	}
 
 	if err := SafeCreate(db.DB, &item); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create schedule"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create schedule")
 		return
 	}
 
@@ -104,11 +106,9 @@ func CreateScheduledItem(c *gin.Context) {
 		go services.GetSchedulerService().ProcessItem(item.ID)
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
+	api_response.Success(c, gin.H{
 		"message": "Item scheduled successfully",
-		"data": gin.H{
-			"item": item,
-		},
+		"item": item,
 	})
 }
 
@@ -151,15 +151,13 @@ func GetScheduledItems(c *gin.Context) {
 
 	var items []models.ScheduledItem
 	if err := query.Find(&items).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch items"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch items")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"items": items,
-			"count": len(items),
-		},
+	api_response.Success(c, gin.H{
+		"items": items,
+		"count": len(items),
 	})
 }
 
@@ -177,13 +175,13 @@ func CancelScheduledItem(c *gin.Context) {
 
 	var item models.ScheduledItem
 	if err := db.DB.First(&item, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errItemNotFound})
+		api_response.Error(c, http.StatusNotFound, errItemNotFound)
 		return
 	}
 
 	// Can only cancel pending items
 	if item.Status != "pending" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Can only cancel pending items"})
+		api_response.Error(c, http.StatusBadRequest, "Can only cancel pending items")
 		return
 	}
 
@@ -192,11 +190,11 @@ func CancelScheduledItem(c *gin.Context) {
 	item.CancelledAt = &now
 
 	if err := db.DB.Save(&item).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel item"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to cancel item")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Item cancelled successfully"})
+	api_response.Success(c, gin.H{"message": "Item cancelled successfully"})
 }
 
 // RetryScheduledItem retries a failed scheduled item
@@ -213,19 +211,19 @@ func RetryScheduledItem(c *gin.Context) {
 
 	var item models.ScheduledItem
 	if err := db.DB.First(&item, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errItemNotFound})
+		api_response.Error(c, http.StatusNotFound, errItemNotFound)
 		return
 	}
 
 	// Can only retry failed items
 	if item.Status != "failed" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Can only retry failed items"})
+		api_response.Error(c, http.StatusBadRequest, "Can only retry failed items")
 		return
 	}
 
 	// Check retry limit
 	if item.RetryCount >= item.MaxRetries {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Maximum retry attempts reached"})
+		api_response.Error(c, http.StatusBadRequest, "Maximum retry attempts reached")
 		return
 	}
 
@@ -233,18 +231,16 @@ func RetryScheduledItem(c *gin.Context) {
 	item.Error = ""
 
 	if err := db.DB.Save(&item).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retry item"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to retry item")
 		return
 	}
 
 	// Trigger immediate processing
 	go services.GetSchedulerService().ProcessItem(item.ID)
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"message": "Item queued for retry",
-		"data": gin.H{
-			"retryCount": item.RetryCount + 1,
-		},
+		"retryCount": item.RetryCount + 1,
 	})
 }
 
@@ -262,12 +258,12 @@ func ExecuteScheduledItemNow(c *gin.Context) {
 
 	var item models.ScheduledItem
 	if err := db.DB.First(&item, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errItemNotFound})
+		api_response.Error(c, http.StatusNotFound, errItemNotFound)
 		return
 	}
 
 	if item.Status != "pending" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Can only execute pending items"})
+		api_response.Error(c, http.StatusBadRequest, "Can only execute pending items")
 		return
 	}
 
@@ -278,11 +274,11 @@ func ExecuteScheduledItemNow(c *gin.Context) {
 	// Process synchronously for immediate feedback
 	err := services.GetSchedulerService().ProcessItem(item.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Item executed successfully"})
+	api_response.Success(c, gin.H{"message": "Item executed successfully"})
 }
 
 // DeleteScheduledItem deletes a scheduled item
@@ -300,21 +296,21 @@ func DeleteScheduledItem(c *gin.Context) {
 	// Prevent deleting processing items
 	var item models.ScheduledItem
 	if err := db.DB.First(&item, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errItemNotFound})
+		api_response.Error(c, http.StatusNotFound, errItemNotFound)
 		return
 	}
 
 	if item.Status == "processing" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete processing item"})
+		api_response.Error(c, http.StatusBadRequest, "Cannot delete processing item")
 		return
 	}
 
 	if err := db.DB.Delete(&item).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete item"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to delete item")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Item deleted successfully"})
+	api_response.Success(c, gin.H{"message": "Item deleted successfully"})
 }
 
 // GetSchedulerStats returns scheduler statistics
@@ -346,10 +342,8 @@ func GetSchedulerStats(c *gin.Context) {
 		Where("status = ? AND scheduled_for <= ?", "pending", time.Now().Add(24*time.Hour)).
 		Count(&upcoming)
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"overview": stats,
-			"upcoming": upcoming,
-		},
+	api_response.Success(c, gin.H{
+		"overview": stats,
+		"upcoming": upcoming,
 	})
 }

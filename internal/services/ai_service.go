@@ -445,11 +445,11 @@ func (s *AIService) callGeminiWithMessages(ctx context.Context, messages []map[s
 		content := m["content"].(string)
 		switch role {
 		case "system":
-			prompt.WriteString("System: " + content + "\n")
+			prompt.WriteString("System: ");prompt.WriteString(content);prompt.WriteString("\n")
 		case "user":
-			prompt.WriteString("User: " + content + "\n")
+			prompt.WriteString("User: ");prompt.WriteString(content);prompt.WriteString("\n")
 		default:
-			prompt.WriteString("Assistant: " + content + "\n")
+			prompt.WriteString("Assistant: ");prompt.WriteString(content);prompt.WriteString("\n")
 		}
 	}
 

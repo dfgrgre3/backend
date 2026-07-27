@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/services"
@@ -22,14 +23,14 @@ func PaymobWebhook(c *gin.Context) {
 	decoder := json.NewDecoder(c.Request.Body)
 	decoder.UseNumber()
 	if err := decoder.Decode(&payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payload"})
+		api_response.Error(c, http.StatusBadRequest, "Invalid payload")
 		return
 	}
 
 	paymobSvc := services.NewPaymobService()
 	if !paymobSvc.VerifyHMAC(payload) {
 		fmt.Println("Paymob Webhook: HMAC verification failed")
-		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid signature"})
+		api_response.Error(c, http.StatusForbidden, "Invalid signature")
 		return
 	}
 
@@ -41,7 +42,7 @@ func PaymobWebhook(c *gin.Context) {
 	var payment models.Payment
 	if err := db.DB.Where("\"paymobOrderId\" = ?", data.OrderID).First(&payment).Error; err != nil {
 		fmt.Printf("Payment record not found for Paymob Order: %d\n", data.OrderID)
-		c.JSON(http.StatusOK, gin.H{"status": "ignored"})
+		api_response.Success(c, gin.H{"status": "ignored"})
 		return
 	}
 
@@ -51,7 +52,7 @@ func PaymobWebhook(c *gin.Context) {
 		handleFailedPayment(&payment, data.OrderID)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "received"})
+	api_response.Success(c, gin.H{"status": "received"})
 }
 
 type paymobTransactionData struct {
@@ -110,7 +111,7 @@ func handleSuccessfulPayment(c *gin.Context, payment *models.Payment, data paymo
 
 	if err != nil {
 		services.GetAuditService().LogAsync(payment.UserID, services.AuditEventPaymentFailed, "payment", payment.ID, map[string]interface{}{"error": err.Error(), "orderId": data.OrderID}, c.ClientIP(), c.Request.UserAgent())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update record"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to update record")
 		return
 	}
 
@@ -251,13 +252,13 @@ func generateSecureReference(prefix string) string {
 func CreatePayment(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists || userId == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": authRequired})
+		api_response.Error(c, http.StatusUnauthorized, authRequired)
 		return
 	}
 
 	var req CreatePaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -265,23 +266,23 @@ func CreatePayment(c *gin.Context) {
 		req.Currency = "EGP"
 	}
 	if !allowedPaymentMethods[req.Method] {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported payment method"})
+		api_response.Error(c, http.StatusBadRequest, "Unsupported payment method")
 		return
 	}
 
 	// Validate amount bounds
 	if req.Amount > 100000 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Amount exceeds maximum allowed"})
+		api_response.Error(c, http.StatusBadRequest, "Amount exceeds maximum allowed")
 		return
 	}
 	if req.SubjectID != nil && *req.SubjectID != "" {
 		var subject models.Subject
 		if err := db.DB.Select("id", "price").First(&subject, idQuery, *req.SubjectID).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid subject"})
+			api_response.Error(c, http.StatusBadRequest, "Invalid subject")
 			return
 		}
 		if subject.Price > 0 && req.Amount != subject.Price {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payment amount"})
+			api_response.Error(c, http.StatusBadRequest, "Invalid payment amount")
 			return
 		}
 	}
@@ -297,30 +298,30 @@ func CreatePayment(c *gin.Context) {
 	}
 
 	if err := SafeCreate(db.DB, &payment); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create payment"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create payment")
 		return
 	}
 
 	services.GetAuditService().LogAsync(userId.(string), services.AuditEventPaymentStarted, "payment", payment.ID, map[string]interface{}{"amount": req.Amount, "method": req.Method}, c.ClientIP(), c.Request.UserAgent())
 
-	c.JSON(http.StatusCreated, payment)
+	api_response.Success(c, payment)
 }
 
 func GetPaymentHistory(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists || userId == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": authRequired})
+		api_response.Error(c, http.StatusUnauthorized, authRequired)
 		return
 	}
 
 	var payments []models.Payment
 
 	if err := db.DB.Where("user_id = ?", userId).Order("created_at desc").Limit(100).Find(&payments).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch payments"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch payments")
 		return
 	}
 
-	c.JSON(http.StatusOK, payments)
+	api_response.Success(c, payments)
 }
 
 func GetSubscriptionAddons(c *gin.Context) {
@@ -353,7 +354,7 @@ func GetSubscriptionAddons(c *gin.Context) {
 			"value":       100,
 		},
 	}
-	c.JSON(http.StatusOK, gin.H{"addons": addons})
+	api_response.Success(c, gin.H{"addons": addons})
 }
 
 // addonPrices maps addon IDs to their prices for server-side validation
@@ -366,7 +367,7 @@ var addonPrices = map[string]float64{
 func PurchaseAddon(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists || userId == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": authRequired})
+		api_response.Error(c, http.StatusUnauthorized, authRequired)
 		return
 	}
 
@@ -374,13 +375,13 @@ func PurchaseAddon(c *gin.Context) {
 		AddonID string `json:"addonId" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		api_response.Error(c, http.StatusBadRequest, "Invalid request")
 		return
 	}
 
 	price, validAddon := addonPrices[req.AddonID]
 	if !validAddon {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid addon ID"})
+		api_response.Error(c, http.StatusBadRequest, "Invalid addon ID")
 		return
 	}
 
@@ -412,7 +413,7 @@ func PurchaseAddon(c *gin.Context) {
 	}
 
 	services.GetAuditService().LogAsync(userId.(string), services.AuditEventAdminAction, "addon", req.AddonID, map[string]interface{}{"price": price}, c.ClientIP(), c.Request.UserAgent())
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	api_response.Success(c, gin.H{"success": true})
 }
 
 func getUserForPurchase(tx *gorm.DB, userID string) (*models.User, error) {
@@ -483,20 +484,20 @@ func createAddonRecords(tx *gorm.DB, userID string, addonID string, price float6
 
 func handlePurchaseError(c *gin.Context, err error) {
 	if err == services.ErrInsufficientBalance {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "رصيدك غير كافٍ لإتمام هذه العملية"})
+		api_response.Error(c, http.StatusBadRequest, "رصيدك غير كافٍ لإتمام هذه العملية")
 		return
 	}
 	if err == services.ErrOptimisticLock {
-		c.JSON(http.StatusConflict, gin.H{"error": "يرجى المحاولة مرة أخرى"})
+		api_response.Error(c, http.StatusConflict, "يرجى المحاولة مرة أخرى")
 		return
 	}
-	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to apply addon credits"})
+	api_response.Error(c, http.StatusInternalServerError, "Failed to apply addon credits")
 }
 
 func HandleWalletDeposit(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists || userId == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": authRequired})
+		api_response.Error(c, http.StatusUnauthorized, authRequired)
 		return
 	}
 
@@ -504,7 +505,7 @@ func HandleWalletDeposit(c *gin.Context) {
 		Amount float64 `json:"amount" binding:"required,gt=0"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid amount"})
+		api_response.Error(c, http.StatusBadRequest, "Invalid amount")
 		return
 	}
 
@@ -520,10 +521,10 @@ func HandleWalletDeposit(c *gin.Context) {
 
 	if err != nil {
 		if err == services.ErrOptimisticLock {
-			c.JSON(http.StatusConflict, gin.H{"error": "يرجى المحاولة مرة أخرى"})
+			api_response.Error(c, http.StatusConflict, "يرجى المحاولة مرة أخرى")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update wallet"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to update wallet")
 		return
 	}
 
@@ -548,7 +549,7 @@ func HandleWalletDeposit(c *gin.Context) {
 	var user models.User
 	db.DB.First(&user, idQuery, userId)
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"success": true,
 		"balance": user.Balance,
 		"message": "تم شحن الرصيد بنجاح",

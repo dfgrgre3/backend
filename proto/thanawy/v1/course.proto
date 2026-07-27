@@ -5,27 +5,471 @@ package thanawy.v1;
 option go_package = "thanawy-backend/internal/proto/thanawy/v1;thanawyv1";
 
 service CourseService {
-  rpc GetCourses(GetCoursesRequest) returns (GetCoursesResponse);
+  // Course CRUD
+  rpc CreateCourse(CreateCourseRequest) returns (CreateCourseResponse);
   rpc GetCourse(GetCourseRequest) returns (GetCourseResponse);
+  rpc UpdateCourse(UpdateCourseRequest) returns (UpdateCourseResponse);
+  rpc DeleteCourse(DeleteCourseRequest) returns (DeleteCourseResponse);
+  rpc ListCourses(ListCoursesRequest) returns (ListCoursesResponse);
+  
+  // Course Workflow
+  rpc SubmitForReview(SubmitForReviewRequest) returns (SubmitForReviewResponse);
+  rpc ApproveCourse(ApproveCourseRequest) returns (ApproveCourseResponse);
+  rpc RejectCourse(RejectCourseRequest) returns (RejectCourseResponse);
+  rpc ArchiveCourse(ArchiveCourseRequest) returns (ArchiveCourseResponse);
+  rpc UnarchiveCourse(UnarchiveCourseRequest) returns (UnarchiveCourseResponse);
+  
+  // Section Management
+  rpc CreateSection(CreateSectionRequest) returns (CreateSectionResponse);
+  rpc UpdateSection(UpdateSectionRequest) returns (UpdateSectionResponse);
+  rpc DeleteSection(DeleteSectionRequest) returns (DeleteSectionResponse);
+  rpc ListSections(ListSectionsRequest) returns (ListSectionsResponse);
+  rpc ReorderSections(ReorderSectionsRequest) returns (ReorderSectionsResponse);
+  
+  // Lesson Management
+  rpc CreateLesson(CreateLessonRequest) returns (CreateLessonResponse);
+  rpc UpdateLesson(UpdateLessonRequest) returns (UpdateLessonResponse);
+  rpc DeleteLesson(DeleteLessonRequest) returns (DeleteLessonResponse);
+  rpc ListLessons(ListLessonsRequest) returns (ListLessonsResponse);
+  rpc ReorderLessons(ReorderLessonsRequest) returns (ReorderLessonsResponse);
+  
+  // Enrollment Management
+  rpc EnrollUser(EnrollUserRequest) returns (EnrollUserResponse);
+  rpc GetEnrollment(GetEnrollmentRequest) returns (GetEnrollmentResponse);
+  rpc UpdateProgress(UpdateProgressRequest) returns (UpdateProgressResponse);
+  rpc ListEnrollments(ListEnrollmentsRequest) returns (ListEnrollmentsResponse);
+  
+  // Pricing Management
+  rpc SetPricing(SetPricingRequest) returns (SetPricingResponse);
+  rpc GetPricing(GetPricingRequest) returns (GetPricingResponse);
 }
 
+// Course Messages
 message Course {
   string id = 1;
   string title = 2;
-  string description = 3;
-  string teacher_name = 4;
+  string slug = 3;
+  string short_description = 4;
+  string long_description = 5;
+  string cover_image_url = 6;
+  string promo_video_url = 7;
+  string status = 8;
+  string level = 9;
+  string language = 10;
+  int32 estimated_duration_mins = 11;
+  bool has_certificate = 12;
+  string certificate_template = 13;
+  int32 max_students = 14;
+  int32 version = 15;
+  bool is_featured = 16;
+  bool is_trending = 17;
+  bool is_new = 18;
+  string seo_title = 19;
+  string seo_description = 20;
+  repeated string seo_keywords = 21;
+  string prerequisites_text = 22;
+  string target_audience = 23;
+  repeated string learning_outcomes = 24;
+  string primary_instructor_id = 25;
+  int64 created_at = 26;
+  int64 updated_at = 27;
+  repeated Section sections = 28;
+  repeated Pricing pricings = 29;
 }
 
-message GetCoursesRequest {}
+message CreateCourseRequest {
+  string title = 1;
+  string slug = 2;
+  string short_description = 3;
+  string long_description = 4;
+  string cover_image_url = 5;
+  string promo_video_url = 6;
+  string level = 7;
+  string language = 8;
+  int32 estimated_duration_mins = 9;
+  bool has_certificate = 10;
+  string certificate_template = 11;
+  int32 max_students = 12;
+  string seo_title = 13;
+  string seo_description = 14;
+  repeated string seo_keywords = 15;
+  string prerequisites_text = 16;
+  string target_audience = 17;
+  repeated string learning_outcomes = 18;
+  string primary_instructor_id = 19;
+  repeated string category_ids = 20;
+}
 
-message GetCoursesResponse {
-  repeated Course courses = 1;
+message CreateCourseResponse {
+  Course course = 1;
 }
 
 message GetCourseRequest {
   string id = 1;
+  string slug = 2;
 }
 
 message GetCourseResponse {
   Course course = 1;
+}
+
+message UpdateCourseRequest {
+  string id = 1;
+  string title = 2;
+  string slug = 3;
+  string short_description = 4;
+  string long_description = 5;
+  string cover_image_url = 6;
+  string promo_video_url = 7;
+  string level = 8;
+  string language = 9;
+  int32 estimated_duration_mins = 10;
+  bool has_certificate = 11;
+  string certificate_template = 12;
+  int32 max_students = 13;
+  bool is_featured = 14;
+  bool is_trending = 15;
+  bool is_new = 16;
+  string seo_title = 17;
+  string seo_description = 18;
+  repeated string seo_keywords = 19;
+  string prerequisites_text = 20;
+  string target_audience = 21;
+  repeated string learning_outcomes = 22;
+  string primary_instructor_id = 23;
+  repeated string category_ids = 24;
+}
+
+message UpdateCourseResponse {
+  Course course = 1;
+}
+
+message DeleteCourseRequest {
+  string id = 1;
+}
+
+message DeleteCourseResponse {
+  bool success = 1;
+}
+
+message ListCoursesRequest {
+  string status = 1;
+  string level = 2;
+  string language = 3;
+  string category_id = 4;
+  string instructor_id = 5;
+  bool is_featured = 6;
+  bool is_trending = 7;
+  bool is_new = 8;
+  string search_query = 9;
+  int32 page = 10;
+  int32 limit = 11;
+}
+
+message ListCoursesResponse {
+  repeated Course courses = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 limit = 4;
+  int32 total_pages = 5;
+}
+
+// Workflow Messages
+message SubmitForReviewRequest {
+  string id = 1;
+}
+
+message SubmitForReviewResponse {
+  bool success = 1;
+  string status = 2;
+}
+
+message ApproveCourseRequest {
+  string id = 1;
+  string reviewer_id = 2;
+  string notes = 3;
+}
+
+message ApproveCourseResponse {
+  bool success = 1;
+  string status = 2;
+}
+
+message RejectCourseRequest {
+  string id = 1;
+  string reviewer_id = 2;
+  string reason = 3;
+}
+
+message RejectCourseResponse {
+  bool success = 1;
+  string status = 2;
+}
+
+message ArchiveCourseRequest {
+  string id = 1;
+}
+
+message ArchiveCourseResponse {
+  bool success = 1;
+  string status = 2;
+}
+
+message UnarchiveCourseRequest {
+  string id = 1;
+}
+
+message UnarchiveCourseResponse {
+  bool success = 1;
+  string status = 2;
+}
+
+// Section Messages
+message Section {
+  string id = 1;
+  string course_id = 2;
+  string title = 3;
+  int32 order_index = 4;
+  int64 available_from = 5;
+  int32 drip_delay_days = 6;
+  int64 created_at = 7;
+  int64 updated_at = 8;
+  repeated Lesson lessons = 9;
+}
+
+message CreateSectionRequest {
+  string course_id = 1;
+  string title = 2;
+  int32 order_index = 3;
+  int64 available_from = 4;
+  int32 drip_delay_days = 5;
+}
+
+message CreateSectionResponse {
+  Section section = 1;
+}
+
+message UpdateSectionRequest {
+  string id = 1;
+  string title = 2;
+  int32 order_index = 3;
+  int64 available_from = 4;
+  int32 drip_delay_days = 5;
+}
+
+message UpdateSectionResponse {
+  Section section = 1;
+}
+
+message DeleteSectionRequest {
+  string id = 1;
+}
+
+message DeleteSectionResponse {
+  bool success = 1;
+}
+
+message ListSectionsRequest {
+  string course_id = 1;
+}
+
+message ListSectionsResponse {
+  repeated Section sections = 1;
+}
+
+message ReorderSectionsRequest {
+  string course_id = 1;
+  repeated string section_ids = 2;
+}
+
+message ReorderSectionsResponse {
+  repeated Section sections = 1;
+}
+
+// Lesson Messages
+message Lesson {
+  string id = 1;
+  string section_id = 2;
+  string title = 3;
+  string type = 4;
+  string content = 5;
+  string media_url = 6;
+  int32 duration_seconds = 7;
+  bool is_free_preview = 8;
+  int32 order_index = 9;
+  string availability_type = 10;
+  int64 available_from = 11;
+  int32 drip_delay_days = 12;
+  int64 created_at = 13;
+  int64 updated_at = 14;
+  repeated Attachment attachments = 15;
+}
+
+message CreateLessonRequest {
+  string section_id = 1;
+  string title = 2;
+  string type = 3;
+  string content = 4;
+  string media_url = 5;
+  int32 duration_seconds = 6;
+  bool is_free_preview = 7;
+  int32 order_index = 8;
+  string availability_type = 9;
+  int64 available_from = 10;
+  int32 drip_delay_days = 11;
+}
+
+message CreateLessonResponse {
+  Lesson lesson = 1;
+}
+
+message UpdateLessonRequest {
+  string id = 1;
+  string title = 2;
+  string type = 3;
+  string content = 4;
+  string media_url = 5;
+  int32 duration_seconds = 6;
+  bool is_free_preview = 7;
+  int32 order_index = 8;
+  string availability_type = 9;
+  int64 available_from = 10;
+  int32 drip_delay_days = 11;
+}
+
+message UpdateLessonResponse {
+  Lesson lesson = 1;
+}
+
+message DeleteLessonRequest {
+  string id = 1;
+}
+
+message DeleteLessonResponse {
+  bool success = 1;
+}
+
+message ListLessonsRequest {
+  string section_id = 1;
+}
+
+message ListLessonsResponse {
+  repeated Lesson lessons = 1;
+}
+
+message ReorderLessonsRequest {
+  string section_id = 1;
+  repeated string lesson_ids = 2;
+}
+
+message ReorderLessonsResponse {
+  repeated Lesson lessons = 1;
+}
+
+// Attachment Messages
+message Attachment {
+  string id = 1;
+  string lesson_id = 2;
+  string title = 3;
+  string file_url = 4;
+  string file_type = 5;
+  int64 file_size = 6;
+  int64 created_at = 7;
+}
+
+// Enrollment Messages
+message Enrollment {
+  string id = 1;
+  string course_id = 2;
+  string user_id = 3;
+  double progress = 4;
+  int64 enrolled_at = 5;
+  int64 completed_at = 6;
+  string bundle_id = 7;
+  int64 created_at = 8;
+  int64 updated_at = 9;
+}
+
+message EnrollUserRequest {
+  string course_id = 1;
+  string user_id = 2;
+}
+
+message EnrollUserResponse {
+  Enrollment enrollment = 1;
+}
+
+message GetEnrollmentRequest {
+  string course_id = 1;
+  string user_id = 2;
+}
+
+message GetEnrollmentResponse {
+  Enrollment enrollment = 1;
+}
+
+message UpdateProgressRequest {
+  string course_id = 1;
+  string user_id = 2;
+  double progress = 3;
+}
+
+message UpdateProgressResponse {
+  Enrollment enrollment = 1;
+}
+
+message ListEnrollmentsRequest {
+  string course_id = 1;
+  string user_id = 2;
+  string status = 3;
+  int32 page = 4;
+  int32 limit = 5;
+}
+
+message ListEnrollmentsResponse {
+  repeated Enrollment enrollments = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 limit = 4;
+}
+
+// Pricing Messages
+message Pricing {
+  string id = 1;
+  string course_id = 2;
+  string type = 3;
+  double amount = 4;
+  string currency_code = 5;
+  int32 subscription_duration_days = 6;
+  double discount_price = 7;
+  int64 discount_start_at = 8;
+  int64 discount_end_at = 9;
+  string subscription_plan_id = 10;
+  bool is_active = 11;
+  int64 created_at = 12;
+  int64 updated_at = 13;
+}
+
+message SetPricingRequest {
+  string course_id = 1;
+  string type = 2;
+  double amount = 3;
+  string currency_code = 4;
+  int32 subscription_duration_days = 5;
+  double discount_price = 6;
+  int64 discount_start_at = 7;
+  int64 discount_end_at = 8;
+  string subscription_plan_id = 9;
+}
+
+message SetPricingResponse {
+  Pricing pricing = 1;
+}
+
+message GetPricingRequest {
+  string course_id = 1;
+}
+
+message GetPricingResponse {
+  Pricing pricing = 1;
 }

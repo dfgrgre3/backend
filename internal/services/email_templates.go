@@ -27,9 +27,10 @@ func GetVerificationEmailTemplate(userName, code string) string {
 // GetWelcomeEmailTemplate returns HTML template for welcome email
 func GetWelcomeEmailTemplate(userName, role string) string {
 	roleName := "طالب"
-	if role == "TEACHER" {
+	switch role {
+case "TEACHER":
 		roleName = "معلم"
-	} else if role == "PARENT" {
+	case "PARENT":
 		roleName = "ولي أمر"
 	}
 
@@ -69,6 +70,26 @@ func GetPasswordResetEmailTemplate(userName, resetURL string) string {
 			<p style="color: #a0aec0; font-size: 12px; text-align: center; margin: 0;">&copy; 2026 Tolo Academy. جميع الحقوق محفوظة.</p>
 		</div>
 	`, userName, resetURL)
+}
+
+// GetForgotPasswordCodeEmailTemplate returns HTML template for forgot password verification code
+func GetForgotPasswordCodeEmailTemplate(userName, code string) string {
+	return fmt.Sprintf(`
+		<div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #1a202c; text-align: right;">
+			<div style="text-align: center; margin-bottom: 20px;">
+				<h2 style="color: #f97316; margin: 0; font-size: 26px; font-weight: 800;">رمز استعادة كلمة المرور</h2>
+			</div>
+			<hr style="border: none; border-top: 1px solid #edf2f7; margin: 20px 0;">
+			<p style="font-size: 16px; line-height: 1.6; color: #4a5568;">مرحباً <strong>%s</strong>،</p>
+			<p style="font-size: 16px; line-height: 1.6; color: #4a5568;">لقد تلقينا طلباً لاستعادة كلمة المرور الخاصة بحسابك على منصة Tolo. يرجى استخدام رمز التحقق التالي:</p>
+			<div style="text-align: center; margin: 30px 0;">
+				<span style="display: inline-block; font-size: 32px; font-weight: 800; letter-spacing: 4px; color: #f97316; background-color: #fff7ed; border: 2px dashed #fdba74; padding: 12px 30px; border-radius: 8px; font-family: monospace;">%s</span>
+			</div>
+			<p style="font-size: 14px; color: #718096; line-height: 1.5;">هذا الرمز صالح لمدة 15 دقيقة فقط. إذا لم تطلب استعادة كلمة المرور، يرجى تجاهل هذا البريد والاطمئنان بأن حسابك آمن.</p>
+			<hr style="border: none; border-top: 1px solid #edf2f7; margin: 25px 0;">
+			<p style="color: #a0aec0; font-size: 12px; text-align: center; margin: 0;">&copy; 2026 Tolo Academy. جميع الحقوق محفوظة.</p>
+		</div>
+	`, userName, code)
 }
 
 // GetSecurityAlertEmailTemplate returns HTML template for security alerts

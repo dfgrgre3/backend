@@ -31,7 +31,7 @@ var (
 func GetSettings(c *gin.Context) {
 	uid, err := extractUserID(c)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
@@ -93,10 +93,7 @@ func fetchOrCreateSettingsForGet(c *gin.Context, uid string) (models.UserSetting
 func handleSettingsFetchError(c *gin.Context, uid string, result *gorm.DB) bool {
 	if result.Error != gorm.ErrRecordNotFound {
 		log.Printf("ERROR: Failed to fetch settings for user %v: %v", uid, result.Error)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to fetch settings",
-			"details": result.Error.Error(),
-		})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch settings")
 		return true
 	}
 
@@ -154,10 +151,7 @@ func createDefaultUserSettings(c *gin.Context, uid string) (models.UserSettings,
 	// Use OnConflict DO NOTHING to prevent duplicates if concurrent requests try to create settings
 	if err := db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&settings).Error; err != nil {
 		log.Printf("ERROR: Failed to create settings for user %v: %v", uid, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to create settings",
-			"details": err.Error(),
-		})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create settings")
 		return settings, err
 	}
 
@@ -409,12 +403,7 @@ func GetSystemSettings(c *gin.Context) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("CRITICAL: Panic in GetSystemSettings: %v", r)
-			c.JSON(http.StatusOK, gin.H{
-				"success": true,
-				"data": gin.H{
-					"settings": defaultSettings,
-				},
-			})
+			api_response.Success(c, gin.H{"settings": defaultSettings})
 			c.Abort()
 		}
 	}()

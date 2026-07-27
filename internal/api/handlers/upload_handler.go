@@ -274,7 +274,7 @@ func UploadChunked(c *gin.Context) {
 	case http.MethodPatch:
 		handleChunkedMerge(c)
 	default:
-		c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Method not allowed"})
+		api_response.Error(c, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 

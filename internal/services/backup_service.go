@@ -158,7 +158,7 @@ func (s *BackupService) runPgDump() ([]byte, error) {
 
 // generateFallbackData creates a fallback SQL script when pg_dump fails.
 func (s *BackupService) generateFallbackData(backupID string, backupErr error) []byte {
-	return []byte(fmt.Sprintf(`-- Thanawy Platform Database Backup Fallback
+	return fmt.Appendf(nil, `-- Thanawy Platform Database Backup Fallback
 -- Backup ID: %s
 -- Timestamp: %s
 -- Error during pg_dump: %v
@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS "BackupFallback" (
     created_at TIMESTAMP
 );
 INSERT INTO "BackupFallback" (id, created_at) VALUES ('%s', NOW());
-`, backupID, time.Now().Format(time.RFC3339), backupErr, backupID))
+`, backupID, time.Now().Format(time.RFC3339), backupErr, backupID)
 }
 
 // compressAndWriteBackup compresses the backup data using gzip and writes it to disk.

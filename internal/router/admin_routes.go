@@ -3,6 +3,7 @@ package router
 import (
 	"thanawy-backend/internal/api/handlers"
 	"thanawy-backend/internal/middleware"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,6 +30,9 @@ func SetupAdminRoutes(router *gin.Engine) {
 	admin.Use(middleware.Auth())
 	admin.Use(middleware.AdminOrModerator())
 	admin.Use(middleware.StrictRBAC())
+	// Bound all administrative traffic with the Redis-backed limiter.
+	// GlobalRateLimiter resolves the current Redis client per request and fails closed if unavailable.
+	admin.Use(middleware.GlobalRateLimiter(120, time.Minute))
 	// Keep an immutable, server-authoritative audit trail for every admin
 	// operation. This is deliberately registered after authentication so the
 	// logger can associate each event with the authenticated administrator.
@@ -40,6 +44,8 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.GET("/live-sessions", handlers.AdminListLiveSessions)
 		admin.POST("/live-sessions", handlers.AdminCreateLiveSession)
 		admin.GET("/analytics", handlers.GetAdminAnalytics)
+		admin.GET("/health/detailed", handlers.GetDetailedAdminHealth)
+		admin.GET("/health/export", handlers.ExportDetailedAdminHealth)
 		// Analytics sub-resources used by the admin analytics workspace.
 		admin.GET("/analytics/revenue", handlers.GetAdminRevenue)
 		admin.GET("/analytics/journeys", handlers.GetUserJourneys)
@@ -215,6 +221,7 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/ab-testing", handlers.AdminCreateABTest)
 		admin.PATCH("/ab-testing/:id", handlers.AdminUpdateABTest)
 		admin.DELETE("/ab-testing/:id", handlers.AdminDeleteABTest)
+		admin.GET("/ab-testing/:id/variant", handlers.AdminGetABVariant)
 		admin.POST("/ab-testing/:id/track", handlers.AdminTrackABEvent)
 
 		// Forum Categories
@@ -247,6 +254,8 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.GET(adminUserIDRoute, handlers.GetUserByID)
 		admin.PATCH(adminUserIDRoute, handlers.UpdateUser)
 		sensitive.DELETE(adminUserIDRoute, handlers.DeleteUser) // ADMIN-only
+		admin.GET("/users/analytics", handlers.AdminUsersAnalytics)
+		admin.GET("/users/filter-options", handlers.AdminUsersFilterOptions)
 		admin.GET("/users/:id/enrollments", handlers.GetUserEnrollments)
 		admin.POST("/users/:id/enrollments", handlers.AdminEnrollUser)
 		admin.GET("/users/:id/login-attempts", handlers.GetUserLoginAttempts)
@@ -254,15 +263,32 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.GET("/search/users", handlers.SearchUsers)
 		admin.POST("/users/search", handlers.SearchUsers)
 
+		// Bulk User Operations
+		admin.POST("/users/bulk-create", handlers.BulkCreateUsers)
+		admin.POST("/users/bulk-delete", handlers.BulkDeleteUsers)
+
+		// User Actions
+		admin.POST("/users/:id/ban", handlers.BanUser)
+		admin.POST("/users/:id/suspend", handlers.SuspendUser)
+		admin.POST("/users/:id/role", handlers.ChangeUserRole)
+		admin.POST("/users/:id/password-reset", handlers.SendPasswordReset)
+		admin.POST("/users/:id/activate", handlers.ActivateUser)
+		admin.POST("/users/reset-all-permissions", handlers.ResetAllPermissions)
+
+		// Parent Management
+		admin.GET("/parents/statistics", handlers.GetParentStatistics)
+		admin.GET("/users/:id/students", handlers.GetParentStudents)
+		admin.POST("/users/:id/students/link", handlers.LinkStudentToParent)
+		admin.DELETE("/users/:id/students/unlink", handlers.UnlinkStudentFromParent)
+
 		// Subject
 		admin.GET(adminSubjectsRoute, handlers.GetSubjects)
 		admin.POST(adminSubjectsRoute, handlers.CreateSubject)
 		admin.PATCH(adminSubjectsRoute, handlers.UpdateSubject)
 		admin.DELETE(adminSubjectsRoute, handlers.DeleteSubject)
 
-		// Course aliases for Admin panel compatibility
-		admin.GET("/courses", handlers.GetSubjects)
-		admin.POST("/courses", handlers.CreateSubject)
+		// Course aliases for Admin panel compatibility.
+		// GET and POST /courses are owned by CourseRESTHandler in hexagonal_routes.go.
 		admin.PATCH("/courses", handlers.UpdateSubject)
 		admin.DELETE("/courses", handlers.DeleteSubject)
 		admin.GET("/courses/:id/curriculum", handlers.GetSubjectCurriculum)
@@ -270,31 +296,7 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.PATCH("/courses/:id/curriculum", handlers.UpdateCourseCurriculum)
 		admin.POST("/courses/duplicate", handlers.DuplicateCourse)
 		admin.POST("/courses/batch", handlers.BatchCourseAction)
-
-		// Course lifecycle workflow (migration 0064) - TODO: implement missing handlers
-		// admin.POST("/courses/:id/submit-review", handlers.SubmitCourseForReview)
-		admin.POST("/courses/:id/reject", handlers.RejectCourse)
-		admin.POST("/courses/:id/archive", handlers.ArchiveCourse)
-		// admin.POST("/courses/:id/restore", handlers.RestoreCourse)
-		// admin.GET("/courses/review-queue", handlers.GetReviewQueue)
-		admin.GET("/courses/:id/changelog", handlers.GetCourseChangelog)
-
-		// Course tags CRUD
-		admin.GET("/course-tags", handlers.GetCourseTags)
-		admin.POST("/course-tags", handlers.CreateCourseTag)
-		admin.PATCH("/course-tags/:id", handlers.UpdateCourseTag)
-		admin.DELETE("/course-tags/:id", handlers.DeleteCourseTag)
-		admin.PUT("/courses/:id/tags", handlers.AssignTagsToCourse)
-
-		// Related / prerequisite courses
-		admin.GET("/courses/:id/related", handlers.GetRelatedCourses)
-		admin.POST("/courses/:id/related", handlers.AddRelatedCourse)
-		admin.DELETE("/courses/:id/related/:relatedId", handlers.RemoveRelatedCourse)
-
-		// Review workflow comments
-		admin.GET("/courses/:id/review-comments", handlers.GetReviewComments)
-		admin.POST("/courses/:id/review-comments", handlers.AddReviewComment)
-		admin.PATCH("/courses/:id/review-comments/:commentId", handlers.UpdateReviewComment)
+		admin.GET("/courses/:id/changelog", handlers.GetCourseVersions)
 
 		// Curriculum
 		admin.PATCH("/subjects/:id/curriculum", handlers.UpdateCourseCurriculum)
@@ -372,15 +374,15 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/notifications/read-all", handlers.AdminMarkAllNotificationsRead)
 		admin.DELETE("/notifications/:id", handlers.AdminDeleteNotification)
 
-		// Interactive Questions for Video Lessons - TODO: implement missing handlers
-		// admin.GET("/courses/lessons/:id/interactive-questions", handlers.GetInteractiveQuestions)
-		// admin.POST("/courses/lessons/:id/interactive-questions", handlers.CreateInteractiveQuestion)
-		// admin.GET("/interactive-questions/:id", handlers.GetInteractiveQuestion)
-		// admin.PATCH("/interactive-questions", handlers.UpdateInteractiveQuestion)
-		// admin.DELETE("/interactive-questions/:id", handlers.DeleteInteractiveQuestion)
+		// Interactive Questions for Video Lessons
+		admin.GET("/courses/lessons/:lessonId/interactive-questions", handlers.GetInteractiveQuestions)
+		admin.POST("/courses/lessons/:lessonId/interactive-questions", handlers.CreateInteractiveQuestion)
+		admin.GET("/interactive-questions/:id", handlers.GetInteractiveQuestion)
+		admin.PATCH("/interactive-questions", handlers.UpdateInteractiveQuestion)
+		admin.DELETE("/interactive-questions/:id", handlers.DeleteInteractiveQuestion)
 
-		// Phase 1: Course Pricing, Bundles & Workflow
-		// Course Pricing
+		// Course Pricing (using new CourseRESTHandler for single course pricing)
+		// Bundles are handled separately by course_pricing_handler.go
 		admin.GET("/courses/:id/pricing", handlers.GetCoursePricing)
 		admin.PUT("/courses/:id/pricing", handlers.UpdateCoursePricing)
 
@@ -399,10 +401,105 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/courses/:id/versions", handlers.CreateCourseVersion)
 		admin.POST("/courses/:id/versions/:versionId/restore", handlers.RestoreCourseVersion)
 
-		// Course Status Workflow
-		admin.POST("/courses/:id/submit-review", handlers.SubmitForReview)
-		admin.POST("/courses/:id/unarchive", handlers.UnarchiveCourse)
-		admin.GET("/courses/pending-review", handlers.GetCoursesPendingReview)
-		admin.POST("/courses/bulk-status", handlers.BulkStatusChange)
+		// -------------------------------
+		// Lessons Management
+		// -------------------------------
+		admin.GET("/lessons", handlers.AdminListLessons)
+		admin.GET("/lessons/:id", handlers.AdminGetLesson)
+		admin.POST("/lessons", handlers.AdminCreateLesson)
+		admin.PATCH("/lessons/:id", handlers.AdminUpdateLesson)
+		admin.DELETE("/lessons/:id", handlers.AdminDeleteLesson)
+
+		// -------------------------------
+		// Payments Management
+		// -------------------------------
+		admin.GET("/payments", handlers.GetAdminPayments)
+		admin.POST("/payments/refund", handlers.AdminRefundPayment)
+
+		// -------------------------------
+		// Exams Management
+		// -------------------------------
+		admin.GET("/exams", handlers.GetExams)
+		admin.POST("/exams", handlers.CreateExam)
+		admin.PATCH("/exams", handlers.UpdateExam)
+		admin.DELETE("/exams", handlers.DeleteExam)
+
+		// -------------------------------
+		// Refunds Management
+		// -------------------------------
+		admin.GET("/refunds", handlers.AdminListRefunds)
+		admin.GET("/refunds/:id", handlers.AdminGetRefund)
+		admin.POST("/refunds/:id/approve", handlers.AdminApproveRefund)
+		admin.POST("/refunds/:id/reject", handlers.AdminRejectRefund)
+		admin.POST("/refunds/:id/process", handlers.AdminProcessRefund)
+
+		// -------------------------------
+		// Tax Management
+		// -------------------------------
+		admin.GET("/taxes", handlers.AdminListTaxRates)
+		admin.GET("/taxes/:id", handlers.AdminGetTaxRate)
+		admin.POST("/taxes", handlers.AdminCreateTaxRate)
+		admin.PATCH("/taxes/:id", handlers.AdminUpdateTaxRate)
+		admin.DELETE("/taxes/:id", handlers.AdminDeleteTaxRate)
+
+		// -------------------------------
+		// Badges Management
+		// -------------------------------
+		admin.GET("/badges", handlers.AdminListBadges)
+		admin.GET("/badges/:id", handlers.AdminGetBadge)
+		admin.POST("/badges", handlers.AdminCreateBadge)
+		admin.PATCH("/badges/:id", handlers.AdminUpdateBadge)
+		admin.DELETE("/badges/:id", handlers.AdminDeleteBadge)
+
+		// -------------------------------
+		// Attendance Management
+		// -------------------------------
+		admin.GET("/attendance", handlers.AdminListAttendance)
+		admin.GET("/attendance/stats", handlers.AdminGetAttendanceStats)
+		admin.POST("/attendance", handlers.AdminCreateAttendance)
+		admin.PATCH("/attendance/:id", handlers.AdminUpdateAttendance)
+
+		// -------------------------------
+		// CMS Pages Management
+		// -------------------------------
+		admin.GET("/cms/pages", handlers.AdminListCMSPages)
+		admin.GET("/cms/pages/:id", handlers.AdminGetCMSPage)
+		admin.POST("/cms/pages", handlers.AdminCreateCMSPage)
+		admin.PATCH("/cms/pages/:id", handlers.AdminUpdateCMSPage)
+		admin.DELETE("/cms/pages/:id", handlers.AdminDeleteCMSPage)
+
+		// -------------------------------
+		// Integrations Management
+		// -------------------------------
+		admin.GET("/integrations", handlers.AdminListIntegrations)
+		admin.GET("/integrations/:id", handlers.AdminGetIntegration)
+		admin.POST("/integrations", handlers.AdminCreateIntegration)
+		admin.PATCH("/integrations/:id", handlers.AdminUpdateIntegration)
+		admin.DELETE("/integrations/:id", handlers.AdminDeleteIntegration)
+		admin.POST("/integrations/:id/test", handlers.AdminTestIntegration)
+
+		// -------------------------------
+		// Roles & Permissions Management
+		// -------------------------------
+		admin.GET("/roles", handlers.AdminListRoles)
+		admin.GET("/roles/:id", handlers.AdminGetRole)
+		admin.POST("/roles", handlers.AdminCreateRole)
+		admin.PATCH("/roles/:id", handlers.AdminUpdateRole)
+		admin.DELETE("/roles/:id", handlers.AdminDeleteRole)
+
+		// Permissions
+		admin.GET("/permissions", handlers.AdminListPermissions)
+		admin.GET("/permissions/groups", handlers.AdminGetPermissionGroups)
+
+		// Role Permissions
+		admin.GET("/roles/:id/permissions", handlers.AdminGetRolePermissions)
+		admin.POST("/roles/:id/permissions/assign", handlers.AdminAssignPermissionsToRole)
+		admin.POST("/roles/:id/permissions/remove", handlers.AdminRemovePermissionsFromRole)
+		admin.PUT("/roles/:id/permissions/replace", handlers.AdminReplaceRolePermissions)
+
+		// Role Users
+		admin.GET("/roles/:id/users", handlers.AdminGetUsersByRole)
+		admin.POST("/roles/:id/users/assign", handlers.AdminAssignUsersToRole)
+		admin.POST("/roles/:id/users/remove", handlers.AdminRemoveUsersFromRole)
 	}
 }

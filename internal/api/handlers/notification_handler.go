@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/worker"
@@ -36,7 +37,7 @@ const (
 func GetNotifications(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
@@ -69,7 +70,7 @@ func GetNotifications(c *gin.Context) {
 	// ── Populate caches for first-page results ──────────────────────
 	warmNotificationsCache(redisKey, l1Key, useL1, notifications)
 
-	c.JSON(http.StatusOK, notifications)
+	api_response.Success(c, notifications)
 }
 
 func parseNotificationsPagination(c *gin.Context) (int, int) {
@@ -93,7 +94,7 @@ func tryNotificationsL1Cache(c *gin.Context, l1Key string) bool {
 		if time.Now().Before(entry.expiresAt) {
 			var notifications []models.Notification
 			if json.Unmarshal(entry.data, &notifications) == nil {
-				c.JSON(http.StatusOK, notifications)
+				api_response.Success(c, notifications)
 				return true
 			}
 		}
@@ -115,7 +116,7 @@ func tryNotificationsRedisCache(c *gin.Context, redisKey, l1Key string, useL1 bo
 	if useL1 {
 		notificationsL1.Store(l1Key, &notifL1Entry{data: []byte(cachedVal), expiresAt: time.Now().Add(notificationsL1TTL)})
 	}
-	c.JSON(http.StatusOK, notifications)
+	api_response.Success(c, notifications)
 	return true
 }
 
@@ -131,7 +132,7 @@ func fetchNotifications(c *gin.Context, userId string, limit, offset int) []mode
 		Limit(limit).
 		Offset(offset).
 		Find(&notifications).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notifications"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch notifications")
 		return nil
 	}
 	return notifications
@@ -167,7 +168,7 @@ func warmNotificationsCache(redisKey, l1Key string, useL1 bool, notifications []
 func MarkNotificationRead(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
@@ -175,20 +176,20 @@ func MarkNotificationRead(c *gin.Context) {
 		ID string `json:"id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if req.ID != "" {
 		// Mark specific notification as read
 		if err := db.DB.Model(&models.Notification{}).Where("id = ? AND user_id = ?", req.ID, userId).Update("is_read", true).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update notification"})
+			api_response.Error(c, http.StatusInternalServerError, "Failed to update notification")
 			return
 		}
 	} else {
 		// Mark all as read
 		if err := db.DB.Model(&models.Notification{}).Where("user_id = ?", userId).Update("is_read", true).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update notifications"})
+			api_response.Error(c, http.StatusInternalServerError, "Failed to update notifications")
 			return
 		}
 	}
@@ -200,7 +201,7 @@ func MarkNotificationRead(c *gin.Context) {
 	refreshMsg, _ := json.Marshal(gin.H{"type": "refresh_notifications"})
 	GlobalHub.NotifyUser(userId.(string), refreshMsg)
 
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	api_response.Success(c, gin.H{"success": true})
 }
 
 func invalidateNotificationCaches(userID string) {
@@ -221,14 +222,14 @@ func invalidateNotificationCaches(userID string) {
 func CreateNotificationTask(c *gin.Context) {
 	var req worker.NotificationPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if err := worker.EnqueueNotification(req); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to enqueue notification"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to enqueue notification")
 		return
 	}
 
-	c.JSON(http.StatusAccepted, gin.H{"status": "Notification enqueued"})
+	api_response.Success(c, gin.H{"status": "Notification enqueued"})
 }

@@ -36,6 +36,10 @@ const (
 	authRequired           = "Authentication required"
 	errDBUnavailable       = "Database is temporarily unavailable"
 	errServiceUnavailable  = "Service temporarily unavailable"
+	msgIDRequired          = "ID is required"
+	msgUserNotAuthenticated = "User not authenticated"
+	msgSubjectNotFound     = "Subject not found"
+	msgInvalidInput        = "Invalid input"
 )
 
 // safeDB returns a non-nil *gorm.DB instance after checking db.DB.
@@ -141,4 +145,20 @@ func CreateOrAssign(db *gorm.DB, query interface{}, args []interface{}, value in
 		return db.Where(query, args...).First(value).Error
 	}
 	return err
+}
+
+// getAuthenticatedUserID extracts and validates the authenticated user ID from context.
+// Returns the user ID and true if successful, empty string and false if authentication fails.
+func getAuthenticatedUserID(c *gin.Context) (string, bool) {
+	userIdValue, exists := c.Get("userId")
+	if !exists || userIdValue == nil {
+		api_response.Error(c, http.StatusUnauthorized, msgUserNotAuthenticated)
+		return "", false
+	}
+	userId, ok := userIdValue.(string)
+	if !ok {
+		api_response.Error(c, http.StatusInternalServerError, "Invalid user ID type")
+		return "", false
+	}
+	return userId, true
 }

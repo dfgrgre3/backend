@@ -14,19 +14,22 @@ import (
 type UserSession struct {
 	ID                string         `gorm:"primaryKey;type:uuid;column:id" json:"id"`
 	UserID            string         `gorm:"not null;type:uuid;index;column:user_id" json:"userId"`
-	RefreshToken      string         `gorm:"uniqueIndex;not null;column:refresh_token" json:"-"`
+	RefreshToken      string         `gorm:"column:refresh_token;default:''" json:"-"`
 	RefreshTokenHash  string         `gorm:"uniqueIndex:idx_user_session_refresh_hash;not null;column:refresh_token_hash" json:"-"`
 	UserAgent         string         `gorm:"type:text;column:user_agent" json:"userAgent"`
 	IP                string         `gorm:"not null;column:ip" json:"ip"`
+	IPAddress         string         `gorm:"-" json:"ipAddress"`
 	Location          *string        `gorm:"column:location" json:"location"`
 	Browser           string         `gorm:"column:browser" json:"browser"`
 	OS                string         `gorm:"column:os" json:"os"`
 	Country           string         `gorm:"column:country" json:"country"`
+	Device            *string        `gorm:"-" json:"device"`
 	DeviceType        string         `gorm:"column:device_type" json:"deviceType"`
 	FingerprintHash   string         `gorm:"column:fingerprint_hash;type:varchar(64)" json:"-"`
 	RememberMe        bool           `gorm:"column:remember_me;default:false" json:"rememberMe"`
 	Status            string         `gorm:"default:'active';column:status" json:"status"` // active, expired, revoked
 	IsActive          bool           `gorm:"default:true;index;column:is_active" json:"isActive"`
+	LastActivity      time.Time      `gorm:"-" json:"lastActivity"`
 	LastAccessed      time.Time      `gorm:"column:last_accessed" json:"lastActive"`
 	ExpiresAt         time.Time      `gorm:"index;column:expires_at" json:"expiresAt"`
 	AbsoluteExpiresAt time.Time      `gorm:"column:absolute_expires_at" json:"absoluteExpiresAt"`
@@ -45,10 +48,17 @@ func (s *UserSession) BeforeCreate(tx *gorm.DB) (err error) {
 	if s.ID == "" {
 		s.ID = uuid.New().String()
 	}
-	// Auto-compute hash if refresh_token is set but hash is empty
+	// Auto-compute hash if refresh_token is set but hash is empty.
+	// We intentionally clear the raw token before persistence so the database
+	// only stores the hash and never a null/unsafe raw value.
 	if s.RefreshToken != "" && s.RefreshTokenHash == "" {
 		s.RefreshTokenHash = ComputeRefreshTokenHash(s.RefreshToken)
 	}
+	// Set a unique placeholder so the refresh_token column (which may have a
+	// unique constraint in the database) does not cause a duplicate-key error
+	// when a user creates a second session. The raw token is intentionally
+	// never persisted for security reasons.
+	s.RefreshToken = uuid.New().String()
 
 	// Limit active sessions to 5 per user to prevent session hijacking and resource bloating
 	var activeCount int64
@@ -76,13 +86,17 @@ func (s *UserSession) BeforeCreate(tx *gorm.DB) (err error) {
 }
 
 func (s *UserSession) BeforeUpdate(tx *gorm.DB) (err error) {
-	// Auto-update hash if refresh_token changed
+	// Auto-update hash if refresh_token changed.
+	// The raw token is never persisted; it is cleared before the update.
 	if s.RefreshToken != "" {
 		hash := ComputeRefreshTokenHash(s.RefreshToken)
 		if hash != s.RefreshTokenHash {
 			s.RefreshTokenHash = hash
 		}
 	}
+	// Use a unique placeholder to avoid violating any unique constraint on the
+	// refresh_token column when updating an existing row.
+	s.RefreshToken = uuid.New().String()
 	return
 }
 

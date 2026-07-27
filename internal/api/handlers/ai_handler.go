@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/repository"
@@ -85,7 +86,7 @@ func (h *AIHandler) AIChatProxy(c *gin.Context) {
 	// Get or create conversation
 	conversation, err := h.getOrCreateConversation(userID, req.ConversationID, req.SubjectID, req.TopicID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to manage conversation"})
+		response.Error(c, http.StatusInternalServerError, "Failed to manage conversation")
 		return
 	}
 
@@ -130,7 +131,7 @@ func (h *AIHandler) AIChatProxy(c *gin.Context) {
 
 func (h *AIHandler) bindAndValidateRequest(c *gin.Context, req *ChatRequest) bool {
 	if err := c.ShouldBindJSON(req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		response.Error(c, http.StatusBadRequest, "Invalid request body")
 		return false
 	}
 
@@ -148,11 +149,11 @@ func (h *AIHandler) bindAndValidateRequest(c *gin.Context, req *ChatRequest) boo
 func (h *AIHandler) validateMessage(c *gin.Context, req *ChatRequest) bool {
 	if req.Message != "" {
 		if len([]rune(req.Message)) > 2000 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Message exceeds maximum length of 2000 characters"})
+			response.Error(c, http.StatusBadRequest, "Message exceeds maximum length of 2000 characters")
 			return false
 		}
 		if strings.TrimSpace(req.Message) == "" && req.Image == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Message cannot be empty"})
+			response.Error(c, http.StatusBadRequest, "Message cannot be empty")
 			return false
 		}
 	}
@@ -162,11 +163,11 @@ func (h *AIHandler) validateMessage(c *gin.Context, req *ChatRequest) bool {
 func (h *AIHandler) validateImage(c *gin.Context, req *ChatRequest) bool {
 	if req.Image != "" {
 		if len(req.Image) > 5*1024*1024 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Image size exceeds 5MB limit"})
+			response.Error(c, http.StatusBadRequest, "Image size exceeds 5MB limit")
 			return false
 		}
 		if !isValidBase64Image(req.Image) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid image format"})
+			response.Error(c, http.StatusBadRequest, "Invalid image format")
 			return false
 		}
 	}
@@ -179,7 +180,7 @@ func (h *AIHandler) validateRequestStructure(c *gin.Context, req *ChatRequest) b
 		if req.ConversationID != "" {
 			errorMsg = "Invalid conversation ID"
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": errorMsg})
+		response.Error(c, http.StatusBadRequest, errorMsg)
 		return false
 	}
 	return true
@@ -188,12 +189,12 @@ func (h *AIHandler) validateRequestStructure(c *gin.Context, req *ChatRequest) b
 func (h *AIHandler) getAuthorizedUserID(c *gin.Context) (string, bool) {
 	userIDValue, exists := c.Get("userId")
 	if !exists || userIDValue == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required to use AI features"})
+		response.Error(c, http.StatusUnauthorized, "Authentication required to use AI features")
 		return "", false
 	}
 	userIDStr, ok := userIDValue.(string)
 	if !ok || userIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user session"})
+		response.Error(c, http.StatusUnauthorized, "Invalid user session")
 		return "", false
 	}
 	return userIDStr, true
@@ -235,7 +236,7 @@ func (h *AIHandler) respondWithCached(c *gin.Context, conversationID, cachedResp
 		Model:          stringPtr("cached"),
 	}
 	h.conversationRepo.AddMessage(assistantMessage)
-	c.JSON(http.StatusOK, ChatResponse{
+	response.Success(c, ChatResponse{
 		Reply:          cachedResponse,
 		ConversationID: conversationID,
 		MessageID:      assistantMessage.ID,
@@ -245,7 +246,7 @@ func (h *AIHandler) respondWithCached(c *gin.Context, conversationID, cachedResp
 func (h *AIHandler) handleAIResponse(c *gin.Context, conversationID, userID, cacheKey, model string, aiMessages []map[string]interface{}, isVision bool) {
 	reply, usedModel, err := h.callAIWithRetryCustom(aiMessages, model)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get AI response", "details": err.Error()})
+		response.Error(c, http.StatusInternalServerError, "Failed to get AI response")
 		return
 	}
 
@@ -263,7 +264,7 @@ func (h *AIHandler) handleAIResponse(c *gin.Context, conversationID, userID, cac
 
 	h.deductCredits(userID, isVision)
 
-	c.JSON(http.StatusOK, ChatResponse{
+	response.Success(c, ChatResponse{
 		Reply:          reply,
 		ConversationID: conversationID,
 		MessageID:      assistantMessage.ID,
@@ -325,13 +326,13 @@ func (h *AIHandler) AIExamProxy(c *gin.Context) {
 
 	var req ExamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		response.Error(c, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	// Basic validation (mirrors the previous behaviour the frontend relied on).
 	if strings.TrimSpace(req.Subject) == "" || strings.TrimSpace(req.Year) == "" || strings.TrimSpace(req.Lesson) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "subject, year and lesson are required"})
+		response.Error(c, http.StatusBadRequest, "subject, year and lesson are required")
 		return
 	}
 	if req.QuestionCount <= 0 {
@@ -358,7 +359,7 @@ func (h *AIHandler) AIExamProxy(c *gin.Context) {
 	})
 	if err != nil {
 		log.Printf("[AIExamProxy] failed to enqueue exam job: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to enqueue exam generation", "details": err.Error()})
+		response.Error(c, http.StatusInternalServerError, "Failed to enqueue exam generation")
 		return
 	}
 
@@ -374,7 +375,7 @@ func (h *AIHandler) AIExamProxy(c *gin.Context) {
 
 	// Success: the worker will write the result to Redis under
 	// "exam:result:<jobId>". The frontend polls it via GetExamStatus.
-	c.JSON(http.StatusAccepted, ExamEnqueueResponse{
+	response.Success(c, ExamEnqueueResponse{
 		JobID:  jobID,
 		Status: "queued",
 	})
@@ -394,7 +395,7 @@ func (h *AIHandler) AIExamProxy(c *gin.Context) {
 func (h *AIHandler) GetExamStatus(c *gin.Context) {
 	jobID := strings.TrimSpace(c.Param("jobId"))
 	if jobID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "jobId is required"})
+		response.Error(c, http.StatusBadRequest, "jobId is required")
 		return
 	}
 
@@ -407,11 +408,7 @@ func (h *AIHandler) GetExamStatus(c *gin.Context) {
 	if !found {
 		// Either the jobId never existed or the TTL expired (30 minutes).
 		// We do not distinguish between the two to avoid leaking which is which.
-		c.JSON(http.StatusNotFound, gin.H{
-			"status": "not_found",
-			"jobId":  jobID,
-			"error":  "Job not found or expired",
-		})
+		response.Error(c, http.StatusNotFound, "Job not found or expired")
 		return
 	}
 
@@ -429,14 +426,9 @@ func (h *AIHandler) GetExamStatus(c *gin.Context) {
 
 	// Map worker status to HTTP response code so clients can react.
 	status := result.Status
-	httpStatus := http.StatusOK
-	if status == "failed" {
-		httpStatus = http.StatusUnprocessableEntity
-	} else if status == "processing" {
-		httpStatus = http.StatusAccepted
-	}
+	_ = status
 
-	c.JSON(httpStatus, result)
+	response.Success(c, result)
 }
 
 // buildLegacyExamPrompt is the synchronous-fallback prompt used when Redis
@@ -466,10 +458,10 @@ func (h *AIHandler) GetConversations(c *gin.Context) {
 
 	convs, total, err := h.conversationRepo.FindByUserID(userID.(string), limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch conversations"})
+		response.Error(c, http.StatusInternalServerError, "Failed to fetch conversations")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
+	response.Success(c, gin.H{
 		"conversations": convs,
 		"total":         total,
 		"limit":         limit,
@@ -482,21 +474,21 @@ func (h *AIHandler) GetConversation(c *gin.Context) {
 	id := c.Param("id")
 	conv, err := h.conversationRepo.FindByID(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Conversation not found"})
+		response.Error(c, http.StatusNotFound, "Conversation not found")
 		return
 	}
 	messages, _ := h.conversationRepo.GetRecentMessages(id, 100)
-	c.JSON(http.StatusOK, gin.H{"conversation": conv, "messages": messages})
+	response.Success(c, gin.H{"conversation": conv, "messages": messages})
 }
 
 // DeleteConversation removes an AI conversation
 func (h *AIHandler) DeleteConversation(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.conversationRepo.Delete(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete conversation"})
+		response.Error(c, http.StatusInternalServerError, "Failed to delete conversation")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Conversation deleted"})
+	response.Success(c, gin.H{"message": "Conversation deleted"})
 }
 
 // ExplainMistakeProxy handles requests to explain an exam mistake
@@ -523,7 +515,7 @@ func (h *AIHandler) SummarizeLessonProxy(c *gin.Context) {
 		Content string `json:"content"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Content) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "content is required"})
+		response.Error(c, http.StatusBadRequest, "content is required")
 		return
 	}
 
@@ -533,7 +525,7 @@ func (h *AIHandler) SummarizeLessonProxy(c *gin.Context) {
 	})
 	if err != nil {
 		log.Printf("[SummarizeLessonProxy] enqueue failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to enqueue summarization job"})
+		response.Error(c, http.StatusInternalServerError, "Failed to enqueue summarization job")
 		return
 	}
 
@@ -544,7 +536,7 @@ func (h *AIHandler) SummarizeLessonProxy(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusAccepted, gin.H{"jobId": jobID, "status": "queued"})
+	response.Success(c, gin.H{"jobId": jobID, "status": "queued"})
 }
 
 // GetSummarizeStatus is the polling endpoint for lesson summarization jobs.
@@ -567,7 +559,7 @@ func (h *AIHandler) GradeEssayProxy(c *gin.Context) {
 		Language string `json:"language"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Content) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "content is required"})
+		response.Error(c, http.StatusBadRequest, "content is required")
 		return
 	}
 
@@ -579,7 +571,7 @@ func (h *AIHandler) GradeEssayProxy(c *gin.Context) {
 	})
 	if err != nil {
 		log.Printf("[GradeEssayProxy] enqueue failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to enqueue essay grading job"})
+		response.Error(c, http.StatusInternalServerError, "Failed to enqueue essay grading job")
 		return
 	}
 
@@ -590,7 +582,7 @@ func (h *AIHandler) GradeEssayProxy(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusAccepted, gin.H{"jobId": jobID, "status": "queued"})
+	response.Success(c, gin.H{"jobId": jobID, "status": "queued"})
 }
 
 // GetEssayGradeStatus is the polling endpoint for essay grading jobs.
@@ -602,7 +594,7 @@ func (h *AIHandler) GetEssayGradeStatus(c *gin.Context) {
 func (h *AIHandler) pollAIJobStatus(c *gin.Context, getter func(context.Context, string) (*worker.AIJobResult, bool)) {
 	jobID := strings.TrimSpace(c.Param("jobId"))
 	if jobID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "jobId is required"})
+		response.Error(c, http.StatusBadRequest, "jobId is required")
 		return
 	}
 
@@ -612,19 +604,8 @@ func (h *AIHandler) pollAIJobStatus(c *gin.Context, getter func(context.Context,
 
 	result, found := getter(c.Request.Context(), jobID)
 	if !found {
-		c.JSON(http.StatusNotFound, gin.H{
-			"status": "not_found",
-			"jobId":  jobID,
-			"error":  "Job not found or expired",
-		})
+		response.Error(c, http.StatusNotFound, "Job not found or expired")
 		return
-	}
-
-	httpStatus := http.StatusOK
-	if result.Status == worker.AIJobStatusFailed {
-		httpStatus = http.StatusUnprocessableEntity
-	} else if result.Status == worker.AIJobStatusProcessing {
-		httpStatus = http.StatusAccepted
 	}
 
 	// Map generic AIJobResult fields to the response shape the frontend expects.
@@ -640,7 +621,7 @@ func (h *AIHandler) pollAIJobStatus(c *gin.Context, getter func(context.Context,
 	if result.Error != "" {
 		resp["error"] = result.Error
 	}
-	c.JSON(httpStatus, resp)
+	response.Success(c, resp)
 }
 
 // Package-level wrappers
@@ -810,13 +791,13 @@ func (h *AIHandler) handleStreamingChat(c *gin.Context, messages []map[string]in
 	})
 }
 
+func stringPtr(s string) *string {
+	return &s
+}
+
 func isValidBase64Image(s string) bool {
 	if !strings.HasPrefix(s, "data:image/") {
 		return false
 	}
 	return true // Basic check
-}
-
-func stringPtr(s string) *string {
-	return &s
 }

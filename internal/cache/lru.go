@@ -98,3 +98,12 @@ func (c *LRUCache) evictOldest() {
 	c.keysList = c.keysList[1:]
 	delete(c.items, oldestKey)
 }
+
+// Clear removes all entries from the cache
+func (c *LRUCache) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.items = make(map[string]*cacheEntry)
+	c.keysList = nil
+}

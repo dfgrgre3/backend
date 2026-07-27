@@ -133,6 +133,57 @@ func GetAdminPayments(c *gin.Context) {
 	})
 }
 
+// AdminRefundPayment marks a completed payment as refunded.
+// Registered at POST /api/admin/payments/refund (admin panel refunds action).
+func AdminRefundPayment(c *gin.Context) {
+	var input struct {
+		PaymentID string  `json:"paymentId" binding:"required"`
+		Amount    float64 `json:"amount" binding:"required"`
+		Reason    string  `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if input.Amount <= 0 {
+		api_response.Error(c, http.StatusBadRequest, "Refund amount must be greater than zero")
+		return
+	}
+
+	var payment models.Payment
+	if err := db.DB.Where("id = ?", input.PaymentID).First(&payment).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Payment not found")
+		return
+	}
+
+	if payment.Status != models.PaymentCompleted {
+		api_response.Error(c, http.StatusConflict, "Only completed payments can be refunded")
+		return
+	}
+
+	if input.Amount > payment.Amount {
+		api_response.Error(c, http.StatusBadRequest, "Refund amount exceeds the original payment amount")
+		return
+	}
+
+	if err := db.DB.Model(&models.Payment{}).Where("id = ?", payment.ID).
+		Updates(map[string]interface{}{
+			"status":     models.PaymentRefunded,
+			"updated_at": time.Now(),
+		}).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to process refund")
+		return
+	}
+
+	api_response.Success(c, gin.H{
+		"message":   "Payment refunded successfully",
+		"paymentId": payment.ID,
+		"amount":    input.Amount,
+		"reason":    input.Reason,
+	})
+}
+
 // GetAdminRevenue returns revenue analytics data
 func GetAdminRevenue(c *gin.Context) {
 	// Summary
@@ -201,7 +252,7 @@ func getTopPlansData() []gin.H {
 	var topPlans []gin.H
 	rows, err := db.DB.Model(&models.Payment{}).
 		Select("subject_id, COUNT(*) as count").
-		Where("status = ? AND subject_id IS NOT NULL AND subject_id != ''", models.PaymentCompleted).
+		Where("status = ? AND subject_id IS NOT NULL", models.PaymentCompleted).
 		Group("subject_id").
 		Order("count DESC").
 		Limit(5).

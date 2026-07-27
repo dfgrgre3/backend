@@ -39,7 +39,7 @@ func (r *SessionRepository) FindByRefreshToken(token string) (*models.UserSessio
 func (r *SessionRepository) findByHash(hash string) (*models.UserSession, error) {
 	var session models.UserSession
 	err := r.db.
-		Select("id", "user_id", "refresh_token", "refresh_token_hash", "expires_at",
+		Select("id", "user_id", "refresh_token_hash", "expires_at",
 			"last_accessed", "status", "is_active", "user_agent", "ip", "location", "device_type",
 			"created_at", "updated_at").
 		Where("refresh_token_hash = ? AND is_active = ?", hash, true).
@@ -64,7 +64,6 @@ func (r *SessionRepository) RotateToken(id string, oldToken string, newToken str
 	result := r.db.Model(&models.UserSession{}).
 		Where("id = ? AND refresh_token_hash = ? AND is_active = ?", id, oldHash, true).
 		Updates(map[string]interface{}{
-			"refresh_token":      newToken,
 			"refresh_token_hash": newHash,
 			"last_accessed":      time.Now(),
 			"expires_at":         newExpiresAt,

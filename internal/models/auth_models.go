@@ -7,26 +7,6 @@ import (
 )
 
 // ─────────────────────────────────────────────
-//  Role Model
-// ─────────────────────────────────────────────
-
-type Role struct {
-	ID          string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
-	Name        string    `gorm:"type:varchar(50);unique;not null" json:"name"`
-	Description string    `gorm:"type:text" json:"description"`
-	Level       int       `gorm:"default:1" json:"level"` // Hierarchy: 1=Student → 7=SuperAdmin
-	IsSystem    bool      `gorm:"column:is_system;default:false" json:"isSystem"`
-	CreatedAt   time.Time `gorm:"column:created_at;default:now()" json:"createdAt"`
-	UpdatedAt   time.Time `gorm:"column:updated_at;default:now()" json:"updatedAt"`
-
-	Permissions []Permission `gorm:"many2many:role_permissions;" json:"permissions,omitempty"`
-}
-
-func (Role) TableName() string {
-	return "roles"
-}
-
-// ─────────────────────────────────────────────
 //  Permission Model
 // ─────────────────────────────────────────────
 

@@ -15,14 +15,14 @@ func (m *mockAuthRepo) GetSessionByToken(ctx context.Context, token string) (int
 }
 func (m *mockAuthRepo) RevokeSession(ctx context.Context, sessionID string) error      { return nil }
 func (m *mockAuthRepo) RevokeAllUserSessions(ctx context.Context, userID string) error { return nil }
-func (m *mockAuthRepo) LogLoginHistory(ctx context.Context, history interface{}) error  { return nil }
+func (m *mockAuthRepo) LogLoginHistory(ctx context.Context, history interface{}) error { return nil }
 func (m *mockAuthRepo) CreateVerificationCode(ctx context.Context, code interface{}) error {
 	return nil
 }
 func (m *mockAuthRepo) GetVerificationCode(ctx context.Context, userID, codeType, code string) (interface{}, error) {
 	return nil, nil
 }
-func (m *mockAuthRepo) MarkCodeAsUsed(ctx context.Context, codeID string) error            { return nil }
+func (m *mockAuthRepo) MarkCodeAsUsed(ctx context.Context, codeID string) error           { return nil }
 func (m *mockAuthRepo) CreateOAuthAccount(ctx context.Context, account interface{}) error { return nil }
 func (m *mockAuthRepo) GetOAuthAccount(ctx context.Context, provider, providerUserID string) (interface{}, error) {
 	return nil, nil
@@ -35,12 +35,16 @@ type recordingAuthRepo struct {
 	loggedHistory *models.LoginHistory
 }
 
-func (r *recordingAuthRepo) CreateSession(ctx context.Context, session *models.UserSession) error { return nil }
+func (r *recordingAuthRepo) CreateSession(ctx context.Context, session *models.UserSession) error {
+	return nil
+}
 func (r *recordingAuthRepo) GetSessionByToken(ctx context.Context, token string) (*models.UserSession, error) {
 	return nil, nil
 }
-func (r *recordingAuthRepo) RevokeSession(ctx context.Context, sessionID string) error      { return nil }
-func (r *recordingAuthRepo) RevokeAllUserSessions(ctx context.Context, userID string) error { return nil }
+func (r *recordingAuthRepo) RevokeSession(ctx context.Context, sessionID string) error { return nil }
+func (r *recordingAuthRepo) RevokeAllUserSessions(ctx context.Context, userID string) error {
+	return nil
+}
 func (r *recordingAuthRepo) LogLoginHistory(ctx context.Context, history *models.LoginHistory) error {
 	r.loggedHistory = history
 	return nil
@@ -66,7 +70,7 @@ func TestLogFailedLoginSkipsAnonymousUsers(t *testing.T) {
 	repo := &recordingAuthRepo{}
 	svc := &authService{authRepo: repo}
 
-	svc.logFailedLogin(context.Background(), "", "127.0.0.1", "test-agent", "Invalid credentials", nil)
+	svc.logFailedLogin(context.Background(), "", "127.0.0.1", "test-agent", "Invalid credentials")
 
 	if repo.loggedHistory != nil {
 		t.Fatalf("expected no login history to be recorded for anonymous users, got %#v", repo.loggedHistory)

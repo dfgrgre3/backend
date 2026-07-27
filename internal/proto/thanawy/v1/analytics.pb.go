@@ -38,9 +38,7 @@ func (x *GetProgressSummaryRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetProgressSummaryRequest) ProtoMessage() {
-	// ProtoMessage is a marker method for the proto.Message interface.
-}
+func (*GetProgressSummaryRequest) ProtoMessage() {}
 
 func (x *GetProgressSummaryRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_thanawy_v1_analytics_proto_msgTypes[0]
@@ -56,7 +54,7 @@ func (x *GetProgressSummaryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProgressSummaryRequest.ProtoReflect.Descriptor instead.
 func (*GetProgressSummaryRequest) Descriptor() ([]byte, []int) {
-	return fileThanawyV1AnalyticsProtoRawDescGZIP(), []int{0}
+	return file_thanawy_v1_analytics_proto_rawDescGZIP(), []int{0}
 }
 
 type GetProgressSummaryResponse struct {
@@ -80,9 +78,7 @@ func (x *GetProgressSummaryResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetProgressSummaryResponse) ProtoMessage() {
-	// ProtoMessage is a marker method for the proto.Message interface.
-}
+func (*GetProgressSummaryResponse) ProtoMessage() {}
 
 func (x *GetProgressSummaryResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_thanawy_v1_analytics_proto_msgTypes[1]
@@ -98,7 +94,7 @@ func (x *GetProgressSummaryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProgressSummaryResponse.ProtoReflect.Descriptor instead.
 func (*GetProgressSummaryResponse) Descriptor() ([]byte, []int) {
-	return fileThanawyV1AnalyticsProtoRawDescGZIP(), []int{1}
+	return file_thanawy_v1_analytics_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *GetProgressSummaryResponse) GetTotalMinutes() int32 {
@@ -146,9 +142,7 @@ func (x *GetWeeklyAnalyticsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetWeeklyAnalyticsRequest) ProtoMessage() {
-	// ProtoMessage is a marker method for the proto.Message interface.
-}
+func (*GetWeeklyAnalyticsRequest) ProtoMessage() {}
 
 func (x *GetWeeklyAnalyticsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_thanawy_v1_analytics_proto_msgTypes[2]
@@ -164,7 +158,7 @@ func (x *GetWeeklyAnalyticsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWeeklyAnalyticsRequest.ProtoReflect.Descriptor instead.
 func (*GetWeeklyAnalyticsRequest) Descriptor() ([]byte, []int) {
-	return fileThanawyV1AnalyticsProtoRawDescGZIP(), []int{2}
+	return file_thanawy_v1_analytics_proto_rawDescGZIP(), []int{2}
 }
 
 type DailyProgress struct {
@@ -186,9 +180,7 @@ func (x *DailyProgress) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DailyProgress) ProtoMessage() {
-	// ProtoMessage is a marker method for the proto.Message interface.
-}
+func (*DailyProgress) ProtoMessage() {}
 
 func (x *DailyProgress) ProtoReflect() protoreflect.Message {
 	mi := &file_thanawy_v1_analytics_proto_msgTypes[3]
@@ -204,7 +196,7 @@ func (x *DailyProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DailyProgress.ProtoReflect.Descriptor instead.
 func (*DailyProgress) Descriptor() ([]byte, []int) {
-	return fileThanawyV1AnalyticsProtoRawDescGZIP(), []int{3}
+	return file_thanawy_v1_analytics_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DailyProgress) GetDay() string {
@@ -242,9 +234,7 @@ func (x *GetWeeklyAnalyticsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetWeeklyAnalyticsResponse) ProtoMessage() {
-	// ProtoMessage is a marker method for the proto.Message interface.
-}
+func (*GetWeeklyAnalyticsResponse) ProtoMessage() {}
 
 func (x *GetWeeklyAnalyticsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_thanawy_v1_analytics_proto_msgTypes[4]
@@ -260,7 +250,7 @@ func (x *GetWeeklyAnalyticsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWeeklyAnalyticsResponse.ProtoReflect.Descriptor instead.
 func (*GetWeeklyAnalyticsResponse) Descriptor() ([]byte, []int) {
-	return fileThanawyV1AnalyticsProtoRawDescGZIP(), []int{4}
+	return file_thanawy_v1_analytics_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetWeeklyAnalyticsResponse) GetProgressRate() int32 {
@@ -323,7 +313,7 @@ var (
 	file_thanawy_v1_analytics_proto_rawDescData []byte
 )
 
-func fileThanawyV1AnalyticsProtoRawDescGZIP() []byte {
+func file_thanawy_v1_analytics_proto_rawDescGZIP() []byte {
 	file_thanawy_v1_analytics_proto_rawDescOnce.Do(func() {
 		file_thanawy_v1_analytics_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_thanawy_v1_analytics_proto_rawDesc), len(file_thanawy_v1_analytics_proto_rawDesc)))
 	})
@@ -351,8 +341,8 @@ var file_thanawy_v1_analytics_proto_depIdxs = []int32{
 	0, // [0:1] is the sub-list for field type_name
 }
 
-func init() { fileThanawyV1AnalyticsProtoInit() }
-func fileThanawyV1AnalyticsProtoInit() {
+func init() { file_thanawy_v1_analytics_proto_init() }
+func file_thanawy_v1_analytics_proto_init() {
 	if File_thanawy_v1_analytics_proto != nil {
 		return
 	}

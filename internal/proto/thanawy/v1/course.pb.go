@@ -21,14 +21,40 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Course Messages
 type Course struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	TeacherName   string                 `protobuf:"bytes,4,opt,name=teacher_name,json=teacherName,proto3" json:"teacher_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Id                    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title                 string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Slug                  string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	ShortDescription      string                 `protobuf:"bytes,4,opt,name=short_description,json=shortDescription,proto3" json:"short_description,omitempty"`
+	LongDescription       string                 `protobuf:"bytes,5,opt,name=long_description,json=longDescription,proto3" json:"long_description,omitempty"`
+	CoverImageUrl         string                 `protobuf:"bytes,6,opt,name=cover_image_url,json=coverImageUrl,proto3" json:"cover_image_url,omitempty"`
+	PromoVideoUrl         string                 `protobuf:"bytes,7,opt,name=promo_video_url,json=promoVideoUrl,proto3" json:"promo_video_url,omitempty"`
+	Status                string                 `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
+	Level                 string                 `protobuf:"bytes,9,opt,name=level,proto3" json:"level,omitempty"`
+	Language              string                 `protobuf:"bytes,10,opt,name=language,proto3" json:"language,omitempty"`
+	EstimatedDurationMins int32                  `protobuf:"varint,11,opt,name=estimated_duration_mins,json=estimatedDurationMins,proto3" json:"estimated_duration_mins,omitempty"`
+	HasCertificate        bool                   `protobuf:"varint,12,opt,name=has_certificate,json=hasCertificate,proto3" json:"has_certificate,omitempty"`
+	CertificateTemplate   string                 `protobuf:"bytes,13,opt,name=certificate_template,json=certificateTemplate,proto3" json:"certificate_template,omitempty"`
+	MaxStudents           int32                  `protobuf:"varint,14,opt,name=max_students,json=maxStudents,proto3" json:"max_students,omitempty"`
+	Version               int32                  `protobuf:"varint,15,opt,name=version,proto3" json:"version,omitempty"`
+	IsFeatured            bool                   `protobuf:"varint,16,opt,name=is_featured,json=isFeatured,proto3" json:"is_featured,omitempty"`
+	IsTrending            bool                   `protobuf:"varint,17,opt,name=is_trending,json=isTrending,proto3" json:"is_trending,omitempty"`
+	IsNew                 bool                   `protobuf:"varint,18,opt,name=is_new,json=isNew,proto3" json:"is_new,omitempty"`
+	SeoTitle              string                 `protobuf:"bytes,19,opt,name=seo_title,json=seoTitle,proto3" json:"seo_title,omitempty"`
+	SeoDescription        string                 `protobuf:"bytes,20,opt,name=seo_description,json=seoDescription,proto3" json:"seo_description,omitempty"`
+	SeoKeywords           []string               `protobuf:"bytes,21,rep,name=seo_keywords,json=seoKeywords,proto3" json:"seo_keywords,omitempty"`
+	PrerequisitesText     string                 `protobuf:"bytes,22,opt,name=prerequisites_text,json=prerequisitesText,proto3" json:"prerequisites_text,omitempty"`
+	TargetAudience        string                 `protobuf:"bytes,23,opt,name=target_audience,json=targetAudience,proto3" json:"target_audience,omitempty"`
+	LearningOutcomes      []string               `protobuf:"bytes,24,rep,name=learning_outcomes,json=learningOutcomes,proto3" json:"learning_outcomes,omitempty"`
+	PrimaryInstructorId   string                 `protobuf:"bytes,25,opt,name=primary_instructor_id,json=primaryInstructorId,proto3" json:"primary_instructor_id,omitempty"`
+	CreatedAt             int64                  `protobuf:"varint,26,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt             int64                  `protobuf:"varint,27,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Sections              []*Section             `protobuf:"bytes,28,rep,name=sections,proto3" json:"sections,omitempty"`
+	Pricings              []*Pricing             `protobuf:"bytes,29,rep,name=pricings,proto3" json:"pricings,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *Course) Reset() {
@@ -42,9 +68,7 @@ func (x *Course) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Course) ProtoMessage() {
-	// ProtoMessage is a marker method for the proto.Message interface.
-}
+func (*Course) ProtoMessage() {}
 
 func (x *Course) ProtoReflect() protoreflect.Message {
 	mi := &file_thanawy_v1_course_proto_msgTypes[0]
@@ -60,7 +84,7 @@ func (x *Course) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Course.ProtoReflect.Descriptor instead.
 func (*Course) Descriptor() ([]byte, []int) {
-	return fileThanawyV1CourseProtoRawDescGZIP(), []int{0}
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Course) GetId() string {
@@ -77,42 +101,235 @@ func (x *Course) GetTitle() string {
 	return ""
 }
 
-func (x *Course) GetDescription() string {
+func (x *Course) GetSlug() string {
 	if x != nil {
-		return x.Description
+		return x.Slug
 	}
 	return ""
 }
 
-func (x *Course) GetTeacherName() string {
+func (x *Course) GetShortDescription() string {
 	if x != nil {
-		return x.TeacherName
+		return x.ShortDescription
 	}
 	return ""
 }
 
-type GetCoursesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+func (x *Course) GetLongDescription() string {
+	if x != nil {
+		return x.LongDescription
+	}
+	return ""
 }
 
-func (x *GetCoursesRequest) Reset() {
-	*x = GetCoursesRequest{}
+func (x *Course) GetCoverImageUrl() string {
+	if x != nil {
+		return x.CoverImageUrl
+	}
+	return ""
+}
+
+func (x *Course) GetPromoVideoUrl() string {
+	if x != nil {
+		return x.PromoVideoUrl
+	}
+	return ""
+}
+
+func (x *Course) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *Course) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *Course) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *Course) GetEstimatedDurationMins() int32 {
+	if x != nil {
+		return x.EstimatedDurationMins
+	}
+	return 0
+}
+
+func (x *Course) GetHasCertificate() bool {
+	if x != nil {
+		return x.HasCertificate
+	}
+	return false
+}
+
+func (x *Course) GetCertificateTemplate() string {
+	if x != nil {
+		return x.CertificateTemplate
+	}
+	return ""
+}
+
+func (x *Course) GetMaxStudents() int32 {
+	if x != nil {
+		return x.MaxStudents
+	}
+	return 0
+}
+
+func (x *Course) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *Course) GetIsFeatured() bool {
+	if x != nil {
+		return x.IsFeatured
+	}
+	return false
+}
+
+func (x *Course) GetIsTrending() bool {
+	if x != nil {
+		return x.IsTrending
+	}
+	return false
+}
+
+func (x *Course) GetIsNew() bool {
+	if x != nil {
+		return x.IsNew
+	}
+	return false
+}
+
+func (x *Course) GetSeoTitle() string {
+	if x != nil {
+		return x.SeoTitle
+	}
+	return ""
+}
+
+func (x *Course) GetSeoDescription() string {
+	if x != nil {
+		return x.SeoDescription
+	}
+	return ""
+}
+
+func (x *Course) GetSeoKeywords() []string {
+	if x != nil {
+		return x.SeoKeywords
+	}
+	return nil
+}
+
+func (x *Course) GetPrerequisitesText() string {
+	if x != nil {
+		return x.PrerequisitesText
+	}
+	return ""
+}
+
+func (x *Course) GetTargetAudience() string {
+	if x != nil {
+		return x.TargetAudience
+	}
+	return ""
+}
+
+func (x *Course) GetLearningOutcomes() []string {
+	if x != nil {
+		return x.LearningOutcomes
+	}
+	return nil
+}
+
+func (x *Course) GetPrimaryInstructorId() string {
+	if x != nil {
+		return x.PrimaryInstructorId
+	}
+	return ""
+}
+
+func (x *Course) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *Course) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
+func (x *Course) GetSections() []*Section {
+	if x != nil {
+		return x.Sections
+	}
+	return nil
+}
+
+func (x *Course) GetPricings() []*Pricing {
+	if x != nil {
+		return x.Pricings
+	}
+	return nil
+}
+
+type CreateCourseRequest struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Title                 string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	Slug                  string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	ShortDescription      string                 `protobuf:"bytes,3,opt,name=short_description,json=shortDescription,proto3" json:"short_description,omitempty"`
+	LongDescription       string                 `protobuf:"bytes,4,opt,name=long_description,json=longDescription,proto3" json:"long_description,omitempty"`
+	CoverImageUrl         string                 `protobuf:"bytes,5,opt,name=cover_image_url,json=coverImageUrl,proto3" json:"cover_image_url,omitempty"`
+	PromoVideoUrl         string                 `protobuf:"bytes,6,opt,name=promo_video_url,json=promoVideoUrl,proto3" json:"promo_video_url,omitempty"`
+	Level                 string                 `protobuf:"bytes,7,opt,name=level,proto3" json:"level,omitempty"`
+	Language              string                 `protobuf:"bytes,8,opt,name=language,proto3" json:"language,omitempty"`
+	EstimatedDurationMins int32                  `protobuf:"varint,9,opt,name=estimated_duration_mins,json=estimatedDurationMins,proto3" json:"estimated_duration_mins,omitempty"`
+	HasCertificate        bool                   `protobuf:"varint,10,opt,name=has_certificate,json=hasCertificate,proto3" json:"has_certificate,omitempty"`
+	CertificateTemplate   string                 `protobuf:"bytes,11,opt,name=certificate_template,json=certificateTemplate,proto3" json:"certificate_template,omitempty"`
+	MaxStudents           int32                  `protobuf:"varint,12,opt,name=max_students,json=maxStudents,proto3" json:"max_students,omitempty"`
+	SeoTitle              string                 `protobuf:"bytes,13,opt,name=seo_title,json=seoTitle,proto3" json:"seo_title,omitempty"`
+	SeoDescription        string                 `protobuf:"bytes,14,opt,name=seo_description,json=seoDescription,proto3" json:"seo_description,omitempty"`
+	SeoKeywords           []string               `protobuf:"bytes,15,rep,name=seo_keywords,json=seoKeywords,proto3" json:"seo_keywords,omitempty"`
+	PrerequisitesText     string                 `protobuf:"bytes,16,opt,name=prerequisites_text,json=prerequisitesText,proto3" json:"prerequisites_text,omitempty"`
+	TargetAudience        string                 `protobuf:"bytes,17,opt,name=target_audience,json=targetAudience,proto3" json:"target_audience,omitempty"`
+	LearningOutcomes      []string               `protobuf:"bytes,18,rep,name=learning_outcomes,json=learningOutcomes,proto3" json:"learning_outcomes,omitempty"`
+	PrimaryInstructorId   string                 `protobuf:"bytes,19,opt,name=primary_instructor_id,json=primaryInstructorId,proto3" json:"primary_instructor_id,omitempty"`
+	CategoryIds           []string               `protobuf:"bytes,20,rep,name=category_ids,json=categoryIds,proto3" json:"category_ids,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *CreateCourseRequest) Reset() {
+	*x = CreateCourseRequest{}
 	mi := &file_thanawy_v1_course_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetCoursesRequest) String() string {
+func (x *CreateCourseRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetCoursesRequest) ProtoMessage() {
-	// ProtoMessage is a marker method for the proto.Message interface.
-}
+func (*CreateCourseRequest) ProtoMessage() {}
 
-func (x *GetCoursesRequest) ProtoReflect() protoreflect.Message {
+func (x *CreateCourseRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_thanawy_v1_course_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -124,34 +341,172 @@ func (x *GetCoursesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCoursesRequest.ProtoReflect.Descriptor instead.
-func (*GetCoursesRequest) Descriptor() ([]byte, []int) {
-	return fileThanawyV1CourseProtoRawDescGZIP(), []int{1}
+// Deprecated: Use CreateCourseRequest.ProtoReflect.Descriptor instead.
+func (*CreateCourseRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{1}
 }
 
-type GetCoursesResponse struct {
+func (x *CreateCourseRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetShortDescription() string {
+	if x != nil {
+		return x.ShortDescription
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetLongDescription() string {
+	if x != nil {
+		return x.LongDescription
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetCoverImageUrl() string {
+	if x != nil {
+		return x.CoverImageUrl
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetPromoVideoUrl() string {
+	if x != nil {
+		return x.PromoVideoUrl
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetEstimatedDurationMins() int32 {
+	if x != nil {
+		return x.EstimatedDurationMins
+	}
+	return 0
+}
+
+func (x *CreateCourseRequest) GetHasCertificate() bool {
+	if x != nil {
+		return x.HasCertificate
+	}
+	return false
+}
+
+func (x *CreateCourseRequest) GetCertificateTemplate() string {
+	if x != nil {
+		return x.CertificateTemplate
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetMaxStudents() int32 {
+	if x != nil {
+		return x.MaxStudents
+	}
+	return 0
+}
+
+func (x *CreateCourseRequest) GetSeoTitle() string {
+	if x != nil {
+		return x.SeoTitle
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetSeoDescription() string {
+	if x != nil {
+		return x.SeoDescription
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetSeoKeywords() []string {
+	if x != nil {
+		return x.SeoKeywords
+	}
+	return nil
+}
+
+func (x *CreateCourseRequest) GetPrerequisitesText() string {
+	if x != nil {
+		return x.PrerequisitesText
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetTargetAudience() string {
+	if x != nil {
+		return x.TargetAudience
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetLearningOutcomes() []string {
+	if x != nil {
+		return x.LearningOutcomes
+	}
+	return nil
+}
+
+func (x *CreateCourseRequest) GetPrimaryInstructorId() string {
+	if x != nil {
+		return x.PrimaryInstructorId
+	}
+	return ""
+}
+
+func (x *CreateCourseRequest) GetCategoryIds() []string {
+	if x != nil {
+		return x.CategoryIds
+	}
+	return nil
+}
+
+type CreateCourseResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Courses       []*Course              `protobuf:"bytes,1,rep,name=courses,proto3" json:"courses,omitempty"`
+	Course        *Course                `protobuf:"bytes,1,opt,name=course,proto3" json:"course,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetCoursesResponse) Reset() {
-	*x = GetCoursesResponse{}
+func (x *CreateCourseResponse) Reset() {
+	*x = CreateCourseResponse{}
 	mi := &file_thanawy_v1_course_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetCoursesResponse) String() string {
+func (x *CreateCourseResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetCoursesResponse) ProtoMessage() {
-	// ProtoMessage is a marker method for the proto.Message interface.
-}
+func (*CreateCourseResponse) ProtoMessage() {}
 
-func (x *GetCoursesResponse) ProtoReflect() protoreflect.Message {
+func (x *CreateCourseResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_thanawy_v1_course_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -163,14 +518,14 @@ func (x *GetCoursesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCoursesResponse.ProtoReflect.Descriptor instead.
-func (*GetCoursesResponse) Descriptor() ([]byte, []int) {
-	return fileThanawyV1CourseProtoRawDescGZIP(), []int{2}
+// Deprecated: Use CreateCourseResponse.ProtoReflect.Descriptor instead.
+func (*CreateCourseResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *GetCoursesResponse) GetCourses() []*Course {
+func (x *CreateCourseResponse) GetCourse() *Course {
 	if x != nil {
-		return x.Courses
+		return x.Course
 	}
 	return nil
 }
@@ -178,6 +533,7 @@ func (x *GetCoursesResponse) GetCourses() []*Course {
 type GetCourseRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -193,9 +549,7 @@ func (x *GetCourseRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetCourseRequest) ProtoMessage() {
-	// ProtoMessage is a marker method for the proto.Message interface.
-}
+func (*GetCourseRequest) ProtoMessage() {}
 
 func (x *GetCourseRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_thanawy_v1_course_proto_msgTypes[3]
@@ -211,12 +565,19 @@ func (x *GetCourseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCourseRequest.ProtoReflect.Descriptor instead.
 func (*GetCourseRequest) Descriptor() ([]byte, []int) {
-	return fileThanawyV1CourseProtoRawDescGZIP(), []int{3}
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetCourseRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *GetCourseRequest) GetSlug() string {
+	if x != nil {
+		return x.Slug
 	}
 	return ""
 }
@@ -239,9 +600,7 @@ func (x *GetCourseResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetCourseResponse) ProtoMessage() {
-	// ProtoMessage is a marker method for the proto.Message interface.
-}
+func (*GetCourseResponse) ProtoMessage() {}
 
 func (x *GetCourseResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_thanawy_v1_course_proto_msgTypes[4]
@@ -257,7 +616,7 @@ func (x *GetCourseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCourseResponse.ProtoReflect.Descriptor instead.
 func (*GetCourseResponse) Descriptor() ([]byte, []int) {
-	return fileThanawyV1CourseProtoRawDescGZIP(), []int{4}
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetCourseResponse) GetCourse() *Course {
@@ -267,65 +626,4039 @@ func (x *GetCourseResponse) GetCourse() *Course {
 	return nil
 }
 
+type UpdateCourseRequest struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Id                    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title                 string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Slug                  string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	ShortDescription      string                 `protobuf:"bytes,4,opt,name=short_description,json=shortDescription,proto3" json:"short_description,omitempty"`
+	LongDescription       string                 `protobuf:"bytes,5,opt,name=long_description,json=longDescription,proto3" json:"long_description,omitempty"`
+	CoverImageUrl         string                 `protobuf:"bytes,6,opt,name=cover_image_url,json=coverImageUrl,proto3" json:"cover_image_url,omitempty"`
+	PromoVideoUrl         string                 `protobuf:"bytes,7,opt,name=promo_video_url,json=promoVideoUrl,proto3" json:"promo_video_url,omitempty"`
+	Level                 string                 `protobuf:"bytes,8,opt,name=level,proto3" json:"level,omitempty"`
+	Language              string                 `protobuf:"bytes,9,opt,name=language,proto3" json:"language,omitempty"`
+	EstimatedDurationMins int32                  `protobuf:"varint,10,opt,name=estimated_duration_mins,json=estimatedDurationMins,proto3" json:"estimated_duration_mins,omitempty"`
+	HasCertificate        bool                   `protobuf:"varint,11,opt,name=has_certificate,json=hasCertificate,proto3" json:"has_certificate,omitempty"`
+	CertificateTemplate   string                 `protobuf:"bytes,12,opt,name=certificate_template,json=certificateTemplate,proto3" json:"certificate_template,omitempty"`
+	MaxStudents           int32                  `protobuf:"varint,13,opt,name=max_students,json=maxStudents,proto3" json:"max_students,omitempty"`
+	IsFeatured            bool                   `protobuf:"varint,14,opt,name=is_featured,json=isFeatured,proto3" json:"is_featured,omitempty"`
+	IsTrending            bool                   `protobuf:"varint,15,opt,name=is_trending,json=isTrending,proto3" json:"is_trending,omitempty"`
+	IsNew                 bool                   `protobuf:"varint,16,opt,name=is_new,json=isNew,proto3" json:"is_new,omitempty"`
+	SeoTitle              string                 `protobuf:"bytes,17,opt,name=seo_title,json=seoTitle,proto3" json:"seo_title,omitempty"`
+	SeoDescription        string                 `protobuf:"bytes,18,opt,name=seo_description,json=seoDescription,proto3" json:"seo_description,omitempty"`
+	SeoKeywords           []string               `protobuf:"bytes,19,rep,name=seo_keywords,json=seoKeywords,proto3" json:"seo_keywords,omitempty"`
+	PrerequisitesText     string                 `protobuf:"bytes,20,opt,name=prerequisites_text,json=prerequisitesText,proto3" json:"prerequisites_text,omitempty"`
+	TargetAudience        string                 `protobuf:"bytes,21,opt,name=target_audience,json=targetAudience,proto3" json:"target_audience,omitempty"`
+	LearningOutcomes      []string               `protobuf:"bytes,22,rep,name=learning_outcomes,json=learningOutcomes,proto3" json:"learning_outcomes,omitempty"`
+	PrimaryInstructorId   string                 `protobuf:"bytes,23,opt,name=primary_instructor_id,json=primaryInstructorId,proto3" json:"primary_instructor_id,omitempty"`
+	CategoryIds           []string               `protobuf:"bytes,24,rep,name=category_ids,json=categoryIds,proto3" json:"category_ids,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *UpdateCourseRequest) Reset() {
+	*x = UpdateCourseRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateCourseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateCourseRequest) ProtoMessage() {}
+
+func (x *UpdateCourseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateCourseRequest.ProtoReflect.Descriptor instead.
+func (*UpdateCourseRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *UpdateCourseRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetShortDescription() string {
+	if x != nil {
+		return x.ShortDescription
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetLongDescription() string {
+	if x != nil {
+		return x.LongDescription
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetCoverImageUrl() string {
+	if x != nil {
+		return x.CoverImageUrl
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetPromoVideoUrl() string {
+	if x != nil {
+		return x.PromoVideoUrl
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetEstimatedDurationMins() int32 {
+	if x != nil {
+		return x.EstimatedDurationMins
+	}
+	return 0
+}
+
+func (x *UpdateCourseRequest) GetHasCertificate() bool {
+	if x != nil {
+		return x.HasCertificate
+	}
+	return false
+}
+
+func (x *UpdateCourseRequest) GetCertificateTemplate() string {
+	if x != nil {
+		return x.CertificateTemplate
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetMaxStudents() int32 {
+	if x != nil {
+		return x.MaxStudents
+	}
+	return 0
+}
+
+func (x *UpdateCourseRequest) GetIsFeatured() bool {
+	if x != nil {
+		return x.IsFeatured
+	}
+	return false
+}
+
+func (x *UpdateCourseRequest) GetIsTrending() bool {
+	if x != nil {
+		return x.IsTrending
+	}
+	return false
+}
+
+func (x *UpdateCourseRequest) GetIsNew() bool {
+	if x != nil {
+		return x.IsNew
+	}
+	return false
+}
+
+func (x *UpdateCourseRequest) GetSeoTitle() string {
+	if x != nil {
+		return x.SeoTitle
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetSeoDescription() string {
+	if x != nil {
+		return x.SeoDescription
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetSeoKeywords() []string {
+	if x != nil {
+		return x.SeoKeywords
+	}
+	return nil
+}
+
+func (x *UpdateCourseRequest) GetPrerequisitesText() string {
+	if x != nil {
+		return x.PrerequisitesText
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetTargetAudience() string {
+	if x != nil {
+		return x.TargetAudience
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetLearningOutcomes() []string {
+	if x != nil {
+		return x.LearningOutcomes
+	}
+	return nil
+}
+
+func (x *UpdateCourseRequest) GetPrimaryInstructorId() string {
+	if x != nil {
+		return x.PrimaryInstructorId
+	}
+	return ""
+}
+
+func (x *UpdateCourseRequest) GetCategoryIds() []string {
+	if x != nil {
+		return x.CategoryIds
+	}
+	return nil
+}
+
+type UpdateCourseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Course        *Course                `protobuf:"bytes,1,opt,name=course,proto3" json:"course,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateCourseResponse) Reset() {
+	*x = UpdateCourseResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateCourseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateCourseResponse) ProtoMessage() {}
+
+func (x *UpdateCourseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateCourseResponse.ProtoReflect.Descriptor instead.
+func (*UpdateCourseResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *UpdateCourseResponse) GetCourse() *Course {
+	if x != nil {
+		return x.Course
+	}
+	return nil
+}
+
+type DeleteCourseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteCourseRequest) Reset() {
+	*x = DeleteCourseRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteCourseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteCourseRequest) ProtoMessage() {}
+
+func (x *DeleteCourseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteCourseRequest.ProtoReflect.Descriptor instead.
+func (*DeleteCourseRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *DeleteCourseRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type DeleteCourseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteCourseResponse) Reset() {
+	*x = DeleteCourseResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteCourseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteCourseResponse) ProtoMessage() {}
+
+func (x *DeleteCourseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteCourseResponse.ProtoReflect.Descriptor instead.
+func (*DeleteCourseResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *DeleteCourseResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type ListCoursesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Level         string                 `protobuf:"bytes,2,opt,name=level,proto3" json:"level,omitempty"`
+	Language      string                 `protobuf:"bytes,3,opt,name=language,proto3" json:"language,omitempty"`
+	CategoryId    string                 `protobuf:"bytes,4,opt,name=category_id,json=categoryId,proto3" json:"category_id,omitempty"`
+	InstructorId  string                 `protobuf:"bytes,5,opt,name=instructor_id,json=instructorId,proto3" json:"instructor_id,omitempty"`
+	IsFeatured    bool                   `protobuf:"varint,6,opt,name=is_featured,json=isFeatured,proto3" json:"is_featured,omitempty"`
+	IsTrending    bool                   `protobuf:"varint,7,opt,name=is_trending,json=isTrending,proto3" json:"is_trending,omitempty"`
+	IsNew         bool                   `protobuf:"varint,8,opt,name=is_new,json=isNew,proto3" json:"is_new,omitempty"`
+	SearchQuery   string                 `protobuf:"bytes,9,opt,name=search_query,json=searchQuery,proto3" json:"search_query,omitempty"`
+	Page          int32                  `protobuf:"varint,10,opt,name=page,proto3" json:"page,omitempty"`
+	Limit         int32                  `protobuf:"varint,11,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCoursesRequest) Reset() {
+	*x = ListCoursesRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCoursesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCoursesRequest) ProtoMessage() {}
+
+func (x *ListCoursesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCoursesRequest.ProtoReflect.Descriptor instead.
+func (*ListCoursesRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListCoursesRequest) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *ListCoursesRequest) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *ListCoursesRequest) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *ListCoursesRequest) GetCategoryId() string {
+	if x != nil {
+		return x.CategoryId
+	}
+	return ""
+}
+
+func (x *ListCoursesRequest) GetInstructorId() string {
+	if x != nil {
+		return x.InstructorId
+	}
+	return ""
+}
+
+func (x *ListCoursesRequest) GetIsFeatured() bool {
+	if x != nil {
+		return x.IsFeatured
+	}
+	return false
+}
+
+func (x *ListCoursesRequest) GetIsTrending() bool {
+	if x != nil {
+		return x.IsTrending
+	}
+	return false
+}
+
+func (x *ListCoursesRequest) GetIsNew() bool {
+	if x != nil {
+		return x.IsNew
+	}
+	return false
+}
+
+func (x *ListCoursesRequest) GetSearchQuery() string {
+	if x != nil {
+		return x.SearchQuery
+	}
+	return ""
+}
+
+func (x *ListCoursesRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *ListCoursesRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListCoursesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Courses       []*Course              `protobuf:"bytes,1,rep,name=courses,proto3" json:"courses,omitempty"`
+	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	Page          int32                  `protobuf:"varint,3,opt,name=page,proto3" json:"page,omitempty"`
+	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	TotalPages    int32                  `protobuf:"varint,5,opt,name=total_pages,json=totalPages,proto3" json:"total_pages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCoursesResponse) Reset() {
+	*x = ListCoursesResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCoursesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCoursesResponse) ProtoMessage() {}
+
+func (x *ListCoursesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCoursesResponse.ProtoReflect.Descriptor instead.
+func (*ListCoursesResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ListCoursesResponse) GetCourses() []*Course {
+	if x != nil {
+		return x.Courses
+	}
+	return nil
+}
+
+func (x *ListCoursesResponse) GetTotal() int32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+func (x *ListCoursesResponse) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *ListCoursesResponse) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListCoursesResponse) GetTotalPages() int32 {
+	if x != nil {
+		return x.TotalPages
+	}
+	return 0
+}
+
+// Workflow Messages
+type SubmitForReviewRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitForReviewRequest) Reset() {
+	*x = SubmitForReviewRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitForReviewRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitForReviewRequest) ProtoMessage() {}
+
+func (x *SubmitForReviewRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitForReviewRequest.ProtoReflect.Descriptor instead.
+func (*SubmitForReviewRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *SubmitForReviewRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type SubmitForReviewResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitForReviewResponse) Reset() {
+	*x = SubmitForReviewResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitForReviewResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitForReviewResponse) ProtoMessage() {}
+
+func (x *SubmitForReviewResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitForReviewResponse.ProtoReflect.Descriptor instead.
+func (*SubmitForReviewResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SubmitForReviewResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *SubmitForReviewResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+type ApproveCourseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ReviewerId    string                 `protobuf:"bytes,2,opt,name=reviewer_id,json=reviewerId,proto3" json:"reviewer_id,omitempty"`
+	Notes         string                 `protobuf:"bytes,3,opt,name=notes,proto3" json:"notes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApproveCourseRequest) Reset() {
+	*x = ApproveCourseRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApproveCourseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApproveCourseRequest) ProtoMessage() {}
+
+func (x *ApproveCourseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApproveCourseRequest.ProtoReflect.Descriptor instead.
+func (*ApproveCourseRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ApproveCourseRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ApproveCourseRequest) GetReviewerId() string {
+	if x != nil {
+		return x.ReviewerId
+	}
+	return ""
+}
+
+func (x *ApproveCourseRequest) GetNotes() string {
+	if x != nil {
+		return x.Notes
+	}
+	return ""
+}
+
+type ApproveCourseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApproveCourseResponse) Reset() {
+	*x = ApproveCourseResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApproveCourseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApproveCourseResponse) ProtoMessage() {}
+
+func (x *ApproveCourseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApproveCourseResponse.ProtoReflect.Descriptor instead.
+func (*ApproveCourseResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ApproveCourseResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ApproveCourseResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+type RejectCourseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ReviewerId    string                 `protobuf:"bytes,2,opt,name=reviewer_id,json=reviewerId,proto3" json:"reviewer_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RejectCourseRequest) Reset() {
+	*x = RejectCourseRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RejectCourseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RejectCourseRequest) ProtoMessage() {}
+
+func (x *RejectCourseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RejectCourseRequest.ProtoReflect.Descriptor instead.
+func (*RejectCourseRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *RejectCourseRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *RejectCourseRequest) GetReviewerId() string {
+	if x != nil {
+		return x.ReviewerId
+	}
+	return ""
+}
+
+func (x *RejectCourseRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type RejectCourseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RejectCourseResponse) Reset() {
+	*x = RejectCourseResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RejectCourseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RejectCourseResponse) ProtoMessage() {}
+
+func (x *RejectCourseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RejectCourseResponse.ProtoReflect.Descriptor instead.
+func (*RejectCourseResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *RejectCourseResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *RejectCourseResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+type ArchiveCourseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ArchiveCourseRequest) Reset() {
+	*x = ArchiveCourseRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArchiveCourseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArchiveCourseRequest) ProtoMessage() {}
+
+func (x *ArchiveCourseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArchiveCourseRequest.ProtoReflect.Descriptor instead.
+func (*ArchiveCourseRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ArchiveCourseRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type ArchiveCourseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ArchiveCourseResponse) Reset() {
+	*x = ArchiveCourseResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArchiveCourseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArchiveCourseResponse) ProtoMessage() {}
+
+func (x *ArchiveCourseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArchiveCourseResponse.ProtoReflect.Descriptor instead.
+func (*ArchiveCourseResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ArchiveCourseResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ArchiveCourseResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+type UnarchiveCourseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnarchiveCourseRequest) Reset() {
+	*x = UnarchiveCourseRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnarchiveCourseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnarchiveCourseRequest) ProtoMessage() {}
+
+func (x *UnarchiveCourseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnarchiveCourseRequest.ProtoReflect.Descriptor instead.
+func (*UnarchiveCourseRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *UnarchiveCourseRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type UnarchiveCourseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnarchiveCourseResponse) Reset() {
+	*x = UnarchiveCourseResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnarchiveCourseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnarchiveCourseResponse) ProtoMessage() {}
+
+func (x *UnarchiveCourseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnarchiveCourseResponse.ProtoReflect.Descriptor instead.
+func (*UnarchiveCourseResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *UnarchiveCourseResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *UnarchiveCourseResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+// Section Messages
+type Section struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	CourseId      string                 `protobuf:"bytes,2,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	OrderIndex    int32                  `protobuf:"varint,4,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
+	AvailableFrom int64                  `protobuf:"varint,5,opt,name=available_from,json=availableFrom,proto3" json:"available_from,omitempty"`
+	DripDelayDays int32                  `protobuf:"varint,6,opt,name=drip_delay_days,json=dripDelayDays,proto3" json:"drip_delay_days,omitempty"`
+	CreatedAt     int64                  `protobuf:"varint,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     int64                  `protobuf:"varint,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Lessons       []*Lesson              `protobuf:"bytes,9,rep,name=lessons,proto3" json:"lessons,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Section) Reset() {
+	*x = Section{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Section) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Section) ProtoMessage() {}
+
+func (x *Section) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Section.ProtoReflect.Descriptor instead.
+func (*Section) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *Section) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Section) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+func (x *Section) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Section) GetOrderIndex() int32 {
+	if x != nil {
+		return x.OrderIndex
+	}
+	return 0
+}
+
+func (x *Section) GetAvailableFrom() int64 {
+	if x != nil {
+		return x.AvailableFrom
+	}
+	return 0
+}
+
+func (x *Section) GetDripDelayDays() int32 {
+	if x != nil {
+		return x.DripDelayDays
+	}
+	return 0
+}
+
+func (x *Section) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *Section) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
+func (x *Section) GetLessons() []*Lesson {
+	if x != nil {
+		return x.Lessons
+	}
+	return nil
+}
+
+type CreateSectionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CourseId      string                 `protobuf:"bytes,1,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	OrderIndex    int32                  `protobuf:"varint,3,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
+	AvailableFrom int64                  `protobuf:"varint,4,opt,name=available_from,json=availableFrom,proto3" json:"available_from,omitempty"`
+	DripDelayDays int32                  `protobuf:"varint,5,opt,name=drip_delay_days,json=dripDelayDays,proto3" json:"drip_delay_days,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateSectionRequest) Reset() {
+	*x = CreateSectionRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateSectionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateSectionRequest) ProtoMessage() {}
+
+func (x *CreateSectionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateSectionRequest.ProtoReflect.Descriptor instead.
+func (*CreateSectionRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *CreateSectionRequest) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+func (x *CreateSectionRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *CreateSectionRequest) GetOrderIndex() int32 {
+	if x != nil {
+		return x.OrderIndex
+	}
+	return 0
+}
+
+func (x *CreateSectionRequest) GetAvailableFrom() int64 {
+	if x != nil {
+		return x.AvailableFrom
+	}
+	return 0
+}
+
+func (x *CreateSectionRequest) GetDripDelayDays() int32 {
+	if x != nil {
+		return x.DripDelayDays
+	}
+	return 0
+}
+
+type CreateSectionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Section       *Section               `protobuf:"bytes,1,opt,name=section,proto3" json:"section,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateSectionResponse) Reset() {
+	*x = CreateSectionResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateSectionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateSectionResponse) ProtoMessage() {}
+
+func (x *CreateSectionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateSectionResponse.ProtoReflect.Descriptor instead.
+func (*CreateSectionResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *CreateSectionResponse) GetSection() *Section {
+	if x != nil {
+		return x.Section
+	}
+	return nil
+}
+
+type UpdateSectionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	OrderIndex    int32                  `protobuf:"varint,3,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
+	AvailableFrom int64                  `protobuf:"varint,4,opt,name=available_from,json=availableFrom,proto3" json:"available_from,omitempty"`
+	DripDelayDays int32                  `protobuf:"varint,5,opt,name=drip_delay_days,json=dripDelayDays,proto3" json:"drip_delay_days,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateSectionRequest) Reset() {
+	*x = UpdateSectionRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateSectionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateSectionRequest) ProtoMessage() {}
+
+func (x *UpdateSectionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateSectionRequest.ProtoReflect.Descriptor instead.
+func (*UpdateSectionRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *UpdateSectionRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateSectionRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *UpdateSectionRequest) GetOrderIndex() int32 {
+	if x != nil {
+		return x.OrderIndex
+	}
+	return 0
+}
+
+func (x *UpdateSectionRequest) GetAvailableFrom() int64 {
+	if x != nil {
+		return x.AvailableFrom
+	}
+	return 0
+}
+
+func (x *UpdateSectionRequest) GetDripDelayDays() int32 {
+	if x != nil {
+		return x.DripDelayDays
+	}
+	return 0
+}
+
+type UpdateSectionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Section       *Section               `protobuf:"bytes,1,opt,name=section,proto3" json:"section,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateSectionResponse) Reset() {
+	*x = UpdateSectionResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateSectionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateSectionResponse) ProtoMessage() {}
+
+func (x *UpdateSectionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateSectionResponse.ProtoReflect.Descriptor instead.
+func (*UpdateSectionResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *UpdateSectionResponse) GetSection() *Section {
+	if x != nil {
+		return x.Section
+	}
+	return nil
+}
+
+type DeleteSectionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteSectionRequest) Reset() {
+	*x = DeleteSectionRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteSectionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteSectionRequest) ProtoMessage() {}
+
+func (x *DeleteSectionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteSectionRequest.ProtoReflect.Descriptor instead.
+func (*DeleteSectionRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *DeleteSectionRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type DeleteSectionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteSectionResponse) Reset() {
+	*x = DeleteSectionResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteSectionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteSectionResponse) ProtoMessage() {}
+
+func (x *DeleteSectionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteSectionResponse.ProtoReflect.Descriptor instead.
+func (*DeleteSectionResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *DeleteSectionResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type ListSectionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CourseId      string                 `protobuf:"bytes,1,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSectionsRequest) Reset() {
+	*x = ListSectionsRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSectionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSectionsRequest) ProtoMessage() {}
+
+func (x *ListSectionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSectionsRequest.ProtoReflect.Descriptor instead.
+func (*ListSectionsRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ListSectionsRequest) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+type ListSectionsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sections      []*Section             `protobuf:"bytes,1,rep,name=sections,proto3" json:"sections,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSectionsResponse) Reset() {
+	*x = ListSectionsResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSectionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSectionsResponse) ProtoMessage() {}
+
+func (x *ListSectionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSectionsResponse.ProtoReflect.Descriptor instead.
+func (*ListSectionsResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ListSectionsResponse) GetSections() []*Section {
+	if x != nil {
+		return x.Sections
+	}
+	return nil
+}
+
+type ReorderSectionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CourseId      string                 `protobuf:"bytes,1,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	SectionIds    []string               `protobuf:"bytes,2,rep,name=section_ids,json=sectionIds,proto3" json:"section_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReorderSectionsRequest) Reset() {
+	*x = ReorderSectionsRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReorderSectionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReorderSectionsRequest) ProtoMessage() {}
+
+func (x *ReorderSectionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReorderSectionsRequest.ProtoReflect.Descriptor instead.
+func (*ReorderSectionsRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ReorderSectionsRequest) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+func (x *ReorderSectionsRequest) GetSectionIds() []string {
+	if x != nil {
+		return x.SectionIds
+	}
+	return nil
+}
+
+type ReorderSectionsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sections      []*Section             `protobuf:"bytes,1,rep,name=sections,proto3" json:"sections,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReorderSectionsResponse) Reset() {
+	*x = ReorderSectionsResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReorderSectionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReorderSectionsResponse) ProtoMessage() {}
+
+func (x *ReorderSectionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReorderSectionsResponse.ProtoReflect.Descriptor instead.
+func (*ReorderSectionsResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ReorderSectionsResponse) GetSections() []*Section {
+	if x != nil {
+		return x.Sections
+	}
+	return nil
+}
+
+// Lesson Messages
+type Lesson struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	SectionId        string                 `protobuf:"bytes,2,opt,name=section_id,json=sectionId,proto3" json:"section_id,omitempty"`
+	Title            string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	Type             string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
+	Content          string                 `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
+	MediaUrl         string                 `protobuf:"bytes,6,opt,name=media_url,json=mediaUrl,proto3" json:"media_url,omitempty"`
+	DurationSeconds  int32                  `protobuf:"varint,7,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
+	IsFreePreview    bool                   `protobuf:"varint,8,opt,name=is_free_preview,json=isFreePreview,proto3" json:"is_free_preview,omitempty"`
+	OrderIndex       int32                  `protobuf:"varint,9,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
+	AvailabilityType string                 `protobuf:"bytes,10,opt,name=availability_type,json=availabilityType,proto3" json:"availability_type,omitempty"`
+	AvailableFrom    int64                  `protobuf:"varint,11,opt,name=available_from,json=availableFrom,proto3" json:"available_from,omitempty"`
+	DripDelayDays    int32                  `protobuf:"varint,12,opt,name=drip_delay_days,json=dripDelayDays,proto3" json:"drip_delay_days,omitempty"`
+	CreatedAt        int64                  `protobuf:"varint,13,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt        int64                  `protobuf:"varint,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Attachments      []*Attachment          `protobuf:"bytes,15,rep,name=attachments,proto3" json:"attachments,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *Lesson) Reset() {
+	*x = Lesson{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Lesson) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Lesson) ProtoMessage() {}
+
+func (x *Lesson) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Lesson.ProtoReflect.Descriptor instead.
+func (*Lesson) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *Lesson) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Lesson) GetSectionId() string {
+	if x != nil {
+		return x.SectionId
+	}
+	return ""
+}
+
+func (x *Lesson) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Lesson) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *Lesson) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *Lesson) GetMediaUrl() string {
+	if x != nil {
+		return x.MediaUrl
+	}
+	return ""
+}
+
+func (x *Lesson) GetDurationSeconds() int32 {
+	if x != nil {
+		return x.DurationSeconds
+	}
+	return 0
+}
+
+func (x *Lesson) GetIsFreePreview() bool {
+	if x != nil {
+		return x.IsFreePreview
+	}
+	return false
+}
+
+func (x *Lesson) GetOrderIndex() int32 {
+	if x != nil {
+		return x.OrderIndex
+	}
+	return 0
+}
+
+func (x *Lesson) GetAvailabilityType() string {
+	if x != nil {
+		return x.AvailabilityType
+	}
+	return ""
+}
+
+func (x *Lesson) GetAvailableFrom() int64 {
+	if x != nil {
+		return x.AvailableFrom
+	}
+	return 0
+}
+
+func (x *Lesson) GetDripDelayDays() int32 {
+	if x != nil {
+		return x.DripDelayDays
+	}
+	return 0
+}
+
+func (x *Lesson) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *Lesson) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
+func (x *Lesson) GetAttachments() []*Attachment {
+	if x != nil {
+		return x.Attachments
+	}
+	return nil
+}
+
+type CreateLessonRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	SectionId        string                 `protobuf:"bytes,1,opt,name=section_id,json=sectionId,proto3" json:"section_id,omitempty"`
+	Title            string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Type             string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Content          string                 `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
+	MediaUrl         string                 `protobuf:"bytes,5,opt,name=media_url,json=mediaUrl,proto3" json:"media_url,omitempty"`
+	DurationSeconds  int32                  `protobuf:"varint,6,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
+	IsFreePreview    bool                   `protobuf:"varint,7,opt,name=is_free_preview,json=isFreePreview,proto3" json:"is_free_preview,omitempty"`
+	OrderIndex       int32                  `protobuf:"varint,8,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
+	AvailabilityType string                 `protobuf:"bytes,9,opt,name=availability_type,json=availabilityType,proto3" json:"availability_type,omitempty"`
+	AvailableFrom    int64                  `protobuf:"varint,10,opt,name=available_from,json=availableFrom,proto3" json:"available_from,omitempty"`
+	DripDelayDays    int32                  `protobuf:"varint,11,opt,name=drip_delay_days,json=dripDelayDays,proto3" json:"drip_delay_days,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CreateLessonRequest) Reset() {
+	*x = CreateLessonRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateLessonRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateLessonRequest) ProtoMessage() {}
+
+func (x *CreateLessonRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateLessonRequest.ProtoReflect.Descriptor instead.
+func (*CreateLessonRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *CreateLessonRequest) GetSectionId() string {
+	if x != nil {
+		return x.SectionId
+	}
+	return ""
+}
+
+func (x *CreateLessonRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *CreateLessonRequest) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *CreateLessonRequest) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *CreateLessonRequest) GetMediaUrl() string {
+	if x != nil {
+		return x.MediaUrl
+	}
+	return ""
+}
+
+func (x *CreateLessonRequest) GetDurationSeconds() int32 {
+	if x != nil {
+		return x.DurationSeconds
+	}
+	return 0
+}
+
+func (x *CreateLessonRequest) GetIsFreePreview() bool {
+	if x != nil {
+		return x.IsFreePreview
+	}
+	return false
+}
+
+func (x *CreateLessonRequest) GetOrderIndex() int32 {
+	if x != nil {
+		return x.OrderIndex
+	}
+	return 0
+}
+
+func (x *CreateLessonRequest) GetAvailabilityType() string {
+	if x != nil {
+		return x.AvailabilityType
+	}
+	return ""
+}
+
+func (x *CreateLessonRequest) GetAvailableFrom() int64 {
+	if x != nil {
+		return x.AvailableFrom
+	}
+	return 0
+}
+
+func (x *CreateLessonRequest) GetDripDelayDays() int32 {
+	if x != nil {
+		return x.DripDelayDays
+	}
+	return 0
+}
+
+type CreateLessonResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lesson        *Lesson                `protobuf:"bytes,1,opt,name=lesson,proto3" json:"lesson,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateLessonResponse) Reset() {
+	*x = CreateLessonResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateLessonResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateLessonResponse) ProtoMessage() {}
+
+func (x *CreateLessonResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateLessonResponse.ProtoReflect.Descriptor instead.
+func (*CreateLessonResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *CreateLessonResponse) GetLesson() *Lesson {
+	if x != nil {
+		return x.Lesson
+	}
+	return nil
+}
+
+type UpdateLessonRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title            string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Type             string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Content          string                 `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
+	MediaUrl         string                 `protobuf:"bytes,5,opt,name=media_url,json=mediaUrl,proto3" json:"media_url,omitempty"`
+	DurationSeconds  int32                  `protobuf:"varint,6,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
+	IsFreePreview    bool                   `protobuf:"varint,7,opt,name=is_free_preview,json=isFreePreview,proto3" json:"is_free_preview,omitempty"`
+	OrderIndex       int32                  `protobuf:"varint,8,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
+	AvailabilityType string                 `protobuf:"bytes,9,opt,name=availability_type,json=availabilityType,proto3" json:"availability_type,omitempty"`
+	AvailableFrom    int64                  `protobuf:"varint,10,opt,name=available_from,json=availableFrom,proto3" json:"available_from,omitempty"`
+	DripDelayDays    int32                  `protobuf:"varint,11,opt,name=drip_delay_days,json=dripDelayDays,proto3" json:"drip_delay_days,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *UpdateLessonRequest) Reset() {
+	*x = UpdateLessonRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateLessonRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateLessonRequest) ProtoMessage() {}
+
+func (x *UpdateLessonRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateLessonRequest.ProtoReflect.Descriptor instead.
+func (*UpdateLessonRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *UpdateLessonRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateLessonRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *UpdateLessonRequest) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *UpdateLessonRequest) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *UpdateLessonRequest) GetMediaUrl() string {
+	if x != nil {
+		return x.MediaUrl
+	}
+	return ""
+}
+
+func (x *UpdateLessonRequest) GetDurationSeconds() int32 {
+	if x != nil {
+		return x.DurationSeconds
+	}
+	return 0
+}
+
+func (x *UpdateLessonRequest) GetIsFreePreview() bool {
+	if x != nil {
+		return x.IsFreePreview
+	}
+	return false
+}
+
+func (x *UpdateLessonRequest) GetOrderIndex() int32 {
+	if x != nil {
+		return x.OrderIndex
+	}
+	return 0
+}
+
+func (x *UpdateLessonRequest) GetAvailabilityType() string {
+	if x != nil {
+		return x.AvailabilityType
+	}
+	return ""
+}
+
+func (x *UpdateLessonRequest) GetAvailableFrom() int64 {
+	if x != nil {
+		return x.AvailableFrom
+	}
+	return 0
+}
+
+func (x *UpdateLessonRequest) GetDripDelayDays() int32 {
+	if x != nil {
+		return x.DripDelayDays
+	}
+	return 0
+}
+
+type UpdateLessonResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lesson        *Lesson                `protobuf:"bytes,1,opt,name=lesson,proto3" json:"lesson,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateLessonResponse) Reset() {
+	*x = UpdateLessonResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateLessonResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateLessonResponse) ProtoMessage() {}
+
+func (x *UpdateLessonResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateLessonResponse.ProtoReflect.Descriptor instead.
+func (*UpdateLessonResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *UpdateLessonResponse) GetLesson() *Lesson {
+	if x != nil {
+		return x.Lesson
+	}
+	return nil
+}
+
+type DeleteLessonRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteLessonRequest) Reset() {
+	*x = DeleteLessonRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteLessonRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteLessonRequest) ProtoMessage() {}
+
+func (x *DeleteLessonRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteLessonRequest.ProtoReflect.Descriptor instead.
+func (*DeleteLessonRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *DeleteLessonRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type DeleteLessonResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteLessonResponse) Reset() {
+	*x = DeleteLessonResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteLessonResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteLessonResponse) ProtoMessage() {}
+
+func (x *DeleteLessonResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteLessonResponse.ProtoReflect.Descriptor instead.
+func (*DeleteLessonResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *DeleteLessonResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type ListLessonsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SectionId     string                 `protobuf:"bytes,1,opt,name=section_id,json=sectionId,proto3" json:"section_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLessonsRequest) Reset() {
+	*x = ListLessonsRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLessonsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLessonsRequest) ProtoMessage() {}
+
+func (x *ListLessonsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLessonsRequest.ProtoReflect.Descriptor instead.
+func (*ListLessonsRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *ListLessonsRequest) GetSectionId() string {
+	if x != nil {
+		return x.SectionId
+	}
+	return ""
+}
+
+type ListLessonsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lessons       []*Lesson              `protobuf:"bytes,1,rep,name=lessons,proto3" json:"lessons,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLessonsResponse) Reset() {
+	*x = ListLessonsResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLessonsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLessonsResponse) ProtoMessage() {}
+
+func (x *ListLessonsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLessonsResponse.ProtoReflect.Descriptor instead.
+func (*ListLessonsResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *ListLessonsResponse) GetLessons() []*Lesson {
+	if x != nil {
+		return x.Lessons
+	}
+	return nil
+}
+
+type ReorderLessonsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SectionId     string                 `protobuf:"bytes,1,opt,name=section_id,json=sectionId,proto3" json:"section_id,omitempty"`
+	LessonIds     []string               `protobuf:"bytes,2,rep,name=lesson_ids,json=lessonIds,proto3" json:"lesson_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReorderLessonsRequest) Reset() {
+	*x = ReorderLessonsRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReorderLessonsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReorderLessonsRequest) ProtoMessage() {}
+
+func (x *ReorderLessonsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReorderLessonsRequest.ProtoReflect.Descriptor instead.
+func (*ReorderLessonsRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *ReorderLessonsRequest) GetSectionId() string {
+	if x != nil {
+		return x.SectionId
+	}
+	return ""
+}
+
+func (x *ReorderLessonsRequest) GetLessonIds() []string {
+	if x != nil {
+		return x.LessonIds
+	}
+	return nil
+}
+
+type ReorderLessonsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lessons       []*Lesson              `protobuf:"bytes,1,rep,name=lessons,proto3" json:"lessons,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReorderLessonsResponse) Reset() {
+	*x = ReorderLessonsResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReorderLessonsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReorderLessonsResponse) ProtoMessage() {}
+
+func (x *ReorderLessonsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReorderLessonsResponse.ProtoReflect.Descriptor instead.
+func (*ReorderLessonsResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *ReorderLessonsResponse) GetLessons() []*Lesson {
+	if x != nil {
+		return x.Lessons
+	}
+	return nil
+}
+
+// Attachment Messages
+type Attachment struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	LessonId      string                 `protobuf:"bytes,2,opt,name=lesson_id,json=lessonId,proto3" json:"lesson_id,omitempty"`
+	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	FileUrl       string                 `protobuf:"bytes,4,opt,name=file_url,json=fileUrl,proto3" json:"file_url,omitempty"`
+	FileType      string                 `protobuf:"bytes,5,opt,name=file_type,json=fileType,proto3" json:"file_type,omitempty"`
+	FileSize      int64                  `protobuf:"varint,6,opt,name=file_size,json=fileSize,proto3" json:"file_size,omitempty"`
+	CreatedAt     int64                  `protobuf:"varint,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Attachment) Reset() {
+	*x = Attachment{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Attachment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Attachment) ProtoMessage() {}
+
+func (x *Attachment) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Attachment.ProtoReflect.Descriptor instead.
+func (*Attachment) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *Attachment) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Attachment) GetLessonId() string {
+	if x != nil {
+		return x.LessonId
+	}
+	return ""
+}
+
+func (x *Attachment) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Attachment) GetFileUrl() string {
+	if x != nil {
+		return x.FileUrl
+	}
+	return ""
+}
+
+func (x *Attachment) GetFileType() string {
+	if x != nil {
+		return x.FileType
+	}
+	return ""
+}
+
+func (x *Attachment) GetFileSize() int64 {
+	if x != nil {
+		return x.FileSize
+	}
+	return 0
+}
+
+func (x *Attachment) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+// Enrollment Messages
+type Enrollment struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	CourseId      string                 `protobuf:"bytes,2,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Progress      float64                `protobuf:"fixed64,4,opt,name=progress,proto3" json:"progress,omitempty"`
+	EnrolledAt    int64                  `protobuf:"varint,5,opt,name=enrolled_at,json=enrolledAt,proto3" json:"enrolled_at,omitempty"`
+	CompletedAt   int64                  `protobuf:"varint,6,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
+	BundleId      string                 `protobuf:"bytes,7,opt,name=bundle_id,json=bundleId,proto3" json:"bundle_id,omitempty"`
+	CreatedAt     int64                  `protobuf:"varint,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     int64                  `protobuf:"varint,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Enrollment) Reset() {
+	*x = Enrollment{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Enrollment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Enrollment) ProtoMessage() {}
+
+func (x *Enrollment) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Enrollment.ProtoReflect.Descriptor instead.
+func (*Enrollment) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *Enrollment) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Enrollment) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+func (x *Enrollment) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *Enrollment) GetProgress() float64 {
+	if x != nil {
+		return x.Progress
+	}
+	return 0
+}
+
+func (x *Enrollment) GetEnrolledAt() int64 {
+	if x != nil {
+		return x.EnrolledAt
+	}
+	return 0
+}
+
+func (x *Enrollment) GetCompletedAt() int64 {
+	if x != nil {
+		return x.CompletedAt
+	}
+	return 0
+}
+
+func (x *Enrollment) GetBundleId() string {
+	if x != nil {
+		return x.BundleId
+	}
+	return ""
+}
+
+func (x *Enrollment) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *Enrollment) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
+type EnrollUserRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CourseId      string                 `protobuf:"bytes,1,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnrollUserRequest) Reset() {
+	*x = EnrollUserRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnrollUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnrollUserRequest) ProtoMessage() {}
+
+func (x *EnrollUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnrollUserRequest.ProtoReflect.Descriptor instead.
+func (*EnrollUserRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *EnrollUserRequest) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+func (x *EnrollUserRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type EnrollUserResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enrollment    *Enrollment            `protobuf:"bytes,1,opt,name=enrollment,proto3" json:"enrollment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnrollUserResponse) Reset() {
+	*x = EnrollUserResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnrollUserResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnrollUserResponse) ProtoMessage() {}
+
+func (x *EnrollUserResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnrollUserResponse.ProtoReflect.Descriptor instead.
+func (*EnrollUserResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *EnrollUserResponse) GetEnrollment() *Enrollment {
+	if x != nil {
+		return x.Enrollment
+	}
+	return nil
+}
+
+type GetEnrollmentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CourseId      string                 `protobuf:"bytes,1,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEnrollmentRequest) Reset() {
+	*x = GetEnrollmentRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEnrollmentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEnrollmentRequest) ProtoMessage() {}
+
+func (x *GetEnrollmentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEnrollmentRequest.ProtoReflect.Descriptor instead.
+func (*GetEnrollmentRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *GetEnrollmentRequest) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+func (x *GetEnrollmentRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type GetEnrollmentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enrollment    *Enrollment            `protobuf:"bytes,1,opt,name=enrollment,proto3" json:"enrollment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEnrollmentResponse) Reset() {
+	*x = GetEnrollmentResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEnrollmentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEnrollmentResponse) ProtoMessage() {}
+
+func (x *GetEnrollmentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEnrollmentResponse.ProtoReflect.Descriptor instead.
+func (*GetEnrollmentResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *GetEnrollmentResponse) GetEnrollment() *Enrollment {
+	if x != nil {
+		return x.Enrollment
+	}
+	return nil
+}
+
+type UpdateProgressRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CourseId      string                 `protobuf:"bytes,1,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Progress      float64                `protobuf:"fixed64,3,opt,name=progress,proto3" json:"progress,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateProgressRequest) Reset() {
+	*x = UpdateProgressRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateProgressRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateProgressRequest) ProtoMessage() {}
+
+func (x *UpdateProgressRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateProgressRequest.ProtoReflect.Descriptor instead.
+func (*UpdateProgressRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *UpdateProgressRequest) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+func (x *UpdateProgressRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *UpdateProgressRequest) GetProgress() float64 {
+	if x != nil {
+		return x.Progress
+	}
+	return 0
+}
+
+type UpdateProgressResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enrollment    *Enrollment            `protobuf:"bytes,1,opt,name=enrollment,proto3" json:"enrollment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateProgressResponse) Reset() {
+	*x = UpdateProgressResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateProgressResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateProgressResponse) ProtoMessage() {}
+
+func (x *UpdateProgressResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateProgressResponse.ProtoReflect.Descriptor instead.
+func (*UpdateProgressResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *UpdateProgressResponse) GetEnrollment() *Enrollment {
+	if x != nil {
+		return x.Enrollment
+	}
+	return nil
+}
+
+type ListEnrollmentsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CourseId      string                 `protobuf:"bytes,1,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Status        string                 `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	Page          int32                  `protobuf:"varint,4,opt,name=page,proto3" json:"page,omitempty"`
+	Limit         int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListEnrollmentsRequest) Reset() {
+	*x = ListEnrollmentsRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListEnrollmentsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListEnrollmentsRequest) ProtoMessage() {}
+
+func (x *ListEnrollmentsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListEnrollmentsRequest.ProtoReflect.Descriptor instead.
+func (*ListEnrollmentsRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *ListEnrollmentsRequest) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+func (x *ListEnrollmentsRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ListEnrollmentsRequest) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *ListEnrollmentsRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *ListEnrollmentsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListEnrollmentsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enrollments   []*Enrollment          `protobuf:"bytes,1,rep,name=enrollments,proto3" json:"enrollments,omitempty"`
+	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	Page          int32                  `protobuf:"varint,3,opt,name=page,proto3" json:"page,omitempty"`
+	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListEnrollmentsResponse) Reset() {
+	*x = ListEnrollmentsResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListEnrollmentsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListEnrollmentsResponse) ProtoMessage() {}
+
+func (x *ListEnrollmentsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListEnrollmentsResponse.ProtoReflect.Descriptor instead.
+func (*ListEnrollmentsResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *ListEnrollmentsResponse) GetEnrollments() []*Enrollment {
+	if x != nil {
+		return x.Enrollments
+	}
+	return nil
+}
+
+func (x *ListEnrollmentsResponse) GetTotal() int32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+func (x *ListEnrollmentsResponse) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *ListEnrollmentsResponse) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+// Pricing Messages
+type Pricing struct {
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	Id                       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	CourseId                 string                 `protobuf:"bytes,2,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	Type                     string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Amount                   float64                `protobuf:"fixed64,4,opt,name=amount,proto3" json:"amount,omitempty"`
+	CurrencyCode             string                 `protobuf:"bytes,5,opt,name=currency_code,json=currencyCode,proto3" json:"currency_code,omitempty"`
+	SubscriptionDurationDays int32                  `protobuf:"varint,6,opt,name=subscription_duration_days,json=subscriptionDurationDays,proto3" json:"subscription_duration_days,omitempty"`
+	DiscountPrice            float64                `protobuf:"fixed64,7,opt,name=discount_price,json=discountPrice,proto3" json:"discount_price,omitempty"`
+	DiscountStartAt          int64                  `protobuf:"varint,8,opt,name=discount_start_at,json=discountStartAt,proto3" json:"discount_start_at,omitempty"`
+	DiscountEndAt            int64                  `protobuf:"varint,9,opt,name=discount_end_at,json=discountEndAt,proto3" json:"discount_end_at,omitempty"`
+	SubscriptionPlanId       string                 `protobuf:"bytes,10,opt,name=subscription_plan_id,json=subscriptionPlanId,proto3" json:"subscription_plan_id,omitempty"`
+	IsActive                 bool                   `protobuf:"varint,11,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	CreatedAt                int64                  `protobuf:"varint,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt                int64                  `protobuf:"varint,13,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *Pricing) Reset() {
+	*x = Pricing{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Pricing) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Pricing) ProtoMessage() {}
+
+func (x *Pricing) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Pricing.ProtoReflect.Descriptor instead.
+func (*Pricing) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *Pricing) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Pricing) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+func (x *Pricing) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *Pricing) GetAmount() float64 {
+	if x != nil {
+		return x.Amount
+	}
+	return 0
+}
+
+func (x *Pricing) GetCurrencyCode() string {
+	if x != nil {
+		return x.CurrencyCode
+	}
+	return ""
+}
+
+func (x *Pricing) GetSubscriptionDurationDays() int32 {
+	if x != nil {
+		return x.SubscriptionDurationDays
+	}
+	return 0
+}
+
+func (x *Pricing) GetDiscountPrice() float64 {
+	if x != nil {
+		return x.DiscountPrice
+	}
+	return 0
+}
+
+func (x *Pricing) GetDiscountStartAt() int64 {
+	if x != nil {
+		return x.DiscountStartAt
+	}
+	return 0
+}
+
+func (x *Pricing) GetDiscountEndAt() int64 {
+	if x != nil {
+		return x.DiscountEndAt
+	}
+	return 0
+}
+
+func (x *Pricing) GetSubscriptionPlanId() string {
+	if x != nil {
+		return x.SubscriptionPlanId
+	}
+	return ""
+}
+
+func (x *Pricing) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *Pricing) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *Pricing) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
+type SetPricingRequest struct {
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	CourseId                 string                 `protobuf:"bytes,1,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	Type                     string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Amount                   float64                `protobuf:"fixed64,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	CurrencyCode             string                 `protobuf:"bytes,4,opt,name=currency_code,json=currencyCode,proto3" json:"currency_code,omitempty"`
+	SubscriptionDurationDays int32                  `protobuf:"varint,5,opt,name=subscription_duration_days,json=subscriptionDurationDays,proto3" json:"subscription_duration_days,omitempty"`
+	DiscountPrice            float64                `protobuf:"fixed64,6,opt,name=discount_price,json=discountPrice,proto3" json:"discount_price,omitempty"`
+	DiscountStartAt          int64                  `protobuf:"varint,7,opt,name=discount_start_at,json=discountStartAt,proto3" json:"discount_start_at,omitempty"`
+	DiscountEndAt            int64                  `protobuf:"varint,8,opt,name=discount_end_at,json=discountEndAt,proto3" json:"discount_end_at,omitempty"`
+	SubscriptionPlanId       string                 `protobuf:"bytes,9,opt,name=subscription_plan_id,json=subscriptionPlanId,proto3" json:"subscription_plan_id,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *SetPricingRequest) Reset() {
+	*x = SetPricingRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetPricingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetPricingRequest) ProtoMessage() {}
+
+func (x *SetPricingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetPricingRequest.ProtoReflect.Descriptor instead.
+func (*SetPricingRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *SetPricingRequest) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+func (x *SetPricingRequest) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *SetPricingRequest) GetAmount() float64 {
+	if x != nil {
+		return x.Amount
+	}
+	return 0
+}
+
+func (x *SetPricingRequest) GetCurrencyCode() string {
+	if x != nil {
+		return x.CurrencyCode
+	}
+	return ""
+}
+
+func (x *SetPricingRequest) GetSubscriptionDurationDays() int32 {
+	if x != nil {
+		return x.SubscriptionDurationDays
+	}
+	return 0
+}
+
+func (x *SetPricingRequest) GetDiscountPrice() float64 {
+	if x != nil {
+		return x.DiscountPrice
+	}
+	return 0
+}
+
+func (x *SetPricingRequest) GetDiscountStartAt() int64 {
+	if x != nil {
+		return x.DiscountStartAt
+	}
+	return 0
+}
+
+func (x *SetPricingRequest) GetDiscountEndAt() int64 {
+	if x != nil {
+		return x.DiscountEndAt
+	}
+	return 0
+}
+
+func (x *SetPricingRequest) GetSubscriptionPlanId() string {
+	if x != nil {
+		return x.SubscriptionPlanId
+	}
+	return ""
+}
+
+type SetPricingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pricing       *Pricing               `protobuf:"bytes,1,opt,name=pricing,proto3" json:"pricing,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetPricingResponse) Reset() {
+	*x = SetPricingResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetPricingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetPricingResponse) ProtoMessage() {}
+
+func (x *SetPricingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetPricingResponse.ProtoReflect.Descriptor instead.
+func (*SetPricingResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *SetPricingResponse) GetPricing() *Pricing {
+	if x != nil {
+		return x.Pricing
+	}
+	return nil
+}
+
+type GetPricingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CourseId      string                 `protobuf:"bytes,1,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPricingRequest) Reset() {
+	*x = GetPricingRequest{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPricingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPricingRequest) ProtoMessage() {}
+
+func (x *GetPricingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPricingRequest.ProtoReflect.Descriptor instead.
+func (*GetPricingRequest) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *GetPricingRequest) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+type GetPricingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pricing       *Pricing               `protobuf:"bytes,1,opt,name=pricing,proto3" json:"pricing,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPricingResponse) Reset() {
+	*x = GetPricingResponse{}
+	mi := &file_thanawy_v1_course_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPricingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPricingResponse) ProtoMessage() {}
+
+func (x *GetPricingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_thanawy_v1_course_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPricingResponse.ProtoReflect.Descriptor instead.
+func (*GetPricingResponse) Descriptor() ([]byte, []int) {
+	return file_thanawy_v1_course_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *GetPricingResponse) GetPricing() *Pricing {
+	if x != nil {
+		return x.Pricing
+	}
+	return nil
+}
+
 var File_thanawy_v1_course_proto protoreflect.FileDescriptor
 
 const file_thanawy_v1_course_proto_rawDesc = "" +
 	"\n" +
 	"\x17thanawy/v1/course.proto\x12\n" +
-	"thanawy.v1\"s\n" +
+	"thanawy.v1\"\xa0\b\n" +
 	"\x06Course\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
-	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\x12!\n" +
-	"\fteacher_name\x18\x04 \x01(\tR\vteacherName\"\x13\n" +
-	"\x11GetCoursesRequest\"B\n" +
-	"\x12GetCoursesResponse\x12,\n" +
-	"\acourses\x18\x01 \x03(\v2\x12.thanawy.v1.CourseR\acourses\"\"\n" +
-	"\x10GetCourseRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"?\n" +
-	"\x11GetCourseResponse\x12*\n" +
-	"\x06course\x18\x01 \x01(\v2\x12.thanawy.v1.CourseR\x06course2\xa6\x01\n" +
-	"\rCourseService\x12K\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12+\n" +
+	"\x11short_description\x18\x04 \x01(\tR\x10shortDescription\x12)\n" +
+	"\x10long_description\x18\x05 \x01(\tR\x0flongDescription\x12&\n" +
+	"\x0fcover_image_url\x18\x06 \x01(\tR\rcoverImageUrl\x12&\n" +
+	"\x0fpromo_video_url\x18\a \x01(\tR\rpromoVideoUrl\x12\x16\n" +
+	"\x06status\x18\b \x01(\tR\x06status\x12\x14\n" +
+	"\x05level\x18\t \x01(\tR\x05level\x12\x1a\n" +
+	"\blanguage\x18\n" +
+	" \x01(\tR\blanguage\x126\n" +
+	"\x17estimated_duration_mins\x18\v \x01(\x05R\x15estimatedDurationMins\x12'\n" +
+	"\x0fhas_certificate\x18\f \x01(\bR\x0ehasCertificate\x121\n" +
+	"\x14certificate_template\x18\r \x01(\tR\x13certificateTemplate\x12!\n" +
+	"\fmax_students\x18\x0e \x01(\x05R\vmaxStudents\x12\x18\n" +
+	"\aversion\x18\x0f \x01(\x05R\aversion\x12\x1f\n" +
+	"\vis_featured\x18\x10 \x01(\bR\n" +
+	"isFeatured\x12\x1f\n" +
+	"\vis_trending\x18\x11 \x01(\bR\n" +
+	"isTrending\x12\x15\n" +
+	"\x06is_new\x18\x12 \x01(\bR\x05isNew\x12\x1b\n" +
+	"\tseo_title\x18\x13 \x01(\tR\bseoTitle\x12'\n" +
+	"\x0fseo_description\x18\x14 \x01(\tR\x0eseoDescription\x12!\n" +
+	"\fseo_keywords\x18\x15 \x03(\tR\vseoKeywords\x12-\n" +
+	"\x12prerequisites_text\x18\x16 \x01(\tR\x11prerequisitesText\x12'\n" +
+	"\x0ftarget_audience\x18\x17 \x01(\tR\x0etargetAudience\x12+\n" +
+	"\x11learning_outcomes\x18\x18 \x03(\tR\x10learningOutcomes\x122\n" +
+	"\x15primary_instructor_id\x18\x19 \x01(\tR\x13primaryInstructorId\x12\x1d\n" +
 	"\n" +
-	"GetCourses\x12\x1d.thanawy.v1.GetCoursesRequest\x1a\x1e.thanawy.v1.GetCoursesResponse\x12H\n" +
-	"\tGetCourse\x12\x1c.thanawy.v1.GetCourseRequest\x1a\x1d.thanawy.v1.GetCourseResponseB5Z3thanawy-backend/internal/proto/thanawy/v1;thanawyv1b\x06proto3"
+	"created_at\x18\x1a \x01(\x03R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x1b \x01(\x03R\tupdatedAt\x12/\n" +
+	"\bsections\x18\x1c \x03(\v2\x13.thanawy.v1.SectionR\bsections\x12/\n" +
+	"\bpricings\x18\x1d \x03(\v2\x13.thanawy.v1.PricingR\bpricings\"\x95\x06\n" +
+	"\x13CreateCourseRequest\x12\x14\n" +
+	"\x05title\x18\x01 \x01(\tR\x05title\x12\x12\n" +
+	"\x04slug\x18\x02 \x01(\tR\x04slug\x12+\n" +
+	"\x11short_description\x18\x03 \x01(\tR\x10shortDescription\x12)\n" +
+	"\x10long_description\x18\x04 \x01(\tR\x0flongDescription\x12&\n" +
+	"\x0fcover_image_url\x18\x05 \x01(\tR\rcoverImageUrl\x12&\n" +
+	"\x0fpromo_video_url\x18\x06 \x01(\tR\rpromoVideoUrl\x12\x14\n" +
+	"\x05level\x18\a \x01(\tR\x05level\x12\x1a\n" +
+	"\blanguage\x18\b \x01(\tR\blanguage\x126\n" +
+	"\x17estimated_duration_mins\x18\t \x01(\x05R\x15estimatedDurationMins\x12'\n" +
+	"\x0fhas_certificate\x18\n" +
+	" \x01(\bR\x0ehasCertificate\x121\n" +
+	"\x14certificate_template\x18\v \x01(\tR\x13certificateTemplate\x12!\n" +
+	"\fmax_students\x18\f \x01(\x05R\vmaxStudents\x12\x1b\n" +
+	"\tseo_title\x18\r \x01(\tR\bseoTitle\x12'\n" +
+	"\x0fseo_description\x18\x0e \x01(\tR\x0eseoDescription\x12!\n" +
+	"\fseo_keywords\x18\x0f \x03(\tR\vseoKeywords\x12-\n" +
+	"\x12prerequisites_text\x18\x10 \x01(\tR\x11prerequisitesText\x12'\n" +
+	"\x0ftarget_audience\x18\x11 \x01(\tR\x0etargetAudience\x12+\n" +
+	"\x11learning_outcomes\x18\x12 \x03(\tR\x10learningOutcomes\x122\n" +
+	"\x15primary_instructor_id\x18\x13 \x01(\tR\x13primaryInstructorId\x12!\n" +
+	"\fcategory_ids\x18\x14 \x03(\tR\vcategoryIds\"B\n" +
+	"\x14CreateCourseResponse\x12*\n" +
+	"\x06course\x18\x01 \x01(\v2\x12.thanawy.v1.CourseR\x06course\"6\n" +
+	"\x10GetCourseRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04slug\x18\x02 \x01(\tR\x04slug\"?\n" +
+	"\x11GetCourseResponse\x12*\n" +
+	"\x06course\x18\x01 \x01(\v2\x12.thanawy.v1.CourseR\x06course\"\xfe\x06\n" +
+	"\x13UpdateCourseRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12+\n" +
+	"\x11short_description\x18\x04 \x01(\tR\x10shortDescription\x12)\n" +
+	"\x10long_description\x18\x05 \x01(\tR\x0flongDescription\x12&\n" +
+	"\x0fcover_image_url\x18\x06 \x01(\tR\rcoverImageUrl\x12&\n" +
+	"\x0fpromo_video_url\x18\a \x01(\tR\rpromoVideoUrl\x12\x14\n" +
+	"\x05level\x18\b \x01(\tR\x05level\x12\x1a\n" +
+	"\blanguage\x18\t \x01(\tR\blanguage\x126\n" +
+	"\x17estimated_duration_mins\x18\n" +
+	" \x01(\x05R\x15estimatedDurationMins\x12'\n" +
+	"\x0fhas_certificate\x18\v \x01(\bR\x0ehasCertificate\x121\n" +
+	"\x14certificate_template\x18\f \x01(\tR\x13certificateTemplate\x12!\n" +
+	"\fmax_students\x18\r \x01(\x05R\vmaxStudents\x12\x1f\n" +
+	"\vis_featured\x18\x0e \x01(\bR\n" +
+	"isFeatured\x12\x1f\n" +
+	"\vis_trending\x18\x0f \x01(\bR\n" +
+	"isTrending\x12\x15\n" +
+	"\x06is_new\x18\x10 \x01(\bR\x05isNew\x12\x1b\n" +
+	"\tseo_title\x18\x11 \x01(\tR\bseoTitle\x12'\n" +
+	"\x0fseo_description\x18\x12 \x01(\tR\x0eseoDescription\x12!\n" +
+	"\fseo_keywords\x18\x13 \x03(\tR\vseoKeywords\x12-\n" +
+	"\x12prerequisites_text\x18\x14 \x01(\tR\x11prerequisitesText\x12'\n" +
+	"\x0ftarget_audience\x18\x15 \x01(\tR\x0etargetAudience\x12+\n" +
+	"\x11learning_outcomes\x18\x16 \x03(\tR\x10learningOutcomes\x122\n" +
+	"\x15primary_instructor_id\x18\x17 \x01(\tR\x13primaryInstructorId\x12!\n" +
+	"\fcategory_ids\x18\x18 \x03(\tR\vcategoryIds\"B\n" +
+	"\x14UpdateCourseResponse\x12*\n" +
+	"\x06course\x18\x01 \x01(\v2\x12.thanawy.v1.CourseR\x06course\"%\n" +
+	"\x13DeleteCourseRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"0\n" +
+	"\x14DeleteCourseResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xca\x02\n" +
+	"\x12ListCoursesRequest\x12\x16\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12\x14\n" +
+	"\x05level\x18\x02 \x01(\tR\x05level\x12\x1a\n" +
+	"\blanguage\x18\x03 \x01(\tR\blanguage\x12\x1f\n" +
+	"\vcategory_id\x18\x04 \x01(\tR\n" +
+	"categoryId\x12#\n" +
+	"\rinstructor_id\x18\x05 \x01(\tR\finstructorId\x12\x1f\n" +
+	"\vis_featured\x18\x06 \x01(\bR\n" +
+	"isFeatured\x12\x1f\n" +
+	"\vis_trending\x18\a \x01(\bR\n" +
+	"isTrending\x12\x15\n" +
+	"\x06is_new\x18\b \x01(\bR\x05isNew\x12!\n" +
+	"\fsearch_query\x18\t \x01(\tR\vsearchQuery\x12\x12\n" +
+	"\x04page\x18\n" +
+	" \x01(\x05R\x04page\x12\x14\n" +
+	"\x05limit\x18\v \x01(\x05R\x05limit\"\xa4\x01\n" +
+	"\x13ListCoursesResponse\x12,\n" +
+	"\acourses\x18\x01 \x03(\v2\x12.thanawy.v1.CourseR\acourses\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\x12\x12\n" +
+	"\x04page\x18\x03 \x01(\x05R\x04page\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\x1f\n" +
+	"\vtotal_pages\x18\x05 \x01(\x05R\n" +
+	"totalPages\"(\n" +
+	"\x16SubmitForReviewRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"K\n" +
+	"\x17SubmitForReviewResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\"]\n" +
+	"\x14ApproveCourseRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
+	"\vreviewer_id\x18\x02 \x01(\tR\n" +
+	"reviewerId\x12\x14\n" +
+	"\x05notes\x18\x03 \x01(\tR\x05notes\"I\n" +
+	"\x15ApproveCourseResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\"^\n" +
+	"\x13RejectCourseRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
+	"\vreviewer_id\x18\x02 \x01(\tR\n" +
+	"reviewerId\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"H\n" +
+	"\x14RejectCourseResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\"&\n" +
+	"\x14ArchiveCourseRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"I\n" +
+	"\x15ArchiveCourseResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\"(\n" +
+	"\x16UnarchiveCourseRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"K\n" +
+	"\x17UnarchiveCourseResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\"\xa8\x02\n" +
+	"\aSection\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\tcourse_id\x18\x02 \x01(\tR\bcourseId\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x1f\n" +
+	"\vorder_index\x18\x04 \x01(\x05R\n" +
+	"orderIndex\x12%\n" +
+	"\x0eavailable_from\x18\x05 \x01(\x03R\ravailableFrom\x12&\n" +
+	"\x0fdrip_delay_days\x18\x06 \x01(\x05R\rdripDelayDays\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\a \x01(\x03R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\b \x01(\x03R\tupdatedAt\x12,\n" +
+	"\alessons\x18\t \x03(\v2\x12.thanawy.v1.LessonR\alessons\"\xb9\x01\n" +
+	"\x14CreateSectionRequest\x12\x1b\n" +
+	"\tcourse_id\x18\x01 \x01(\tR\bcourseId\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x1f\n" +
+	"\vorder_index\x18\x03 \x01(\x05R\n" +
+	"orderIndex\x12%\n" +
+	"\x0eavailable_from\x18\x04 \x01(\x03R\ravailableFrom\x12&\n" +
+	"\x0fdrip_delay_days\x18\x05 \x01(\x05R\rdripDelayDays\"F\n" +
+	"\x15CreateSectionResponse\x12-\n" +
+	"\asection\x18\x01 \x01(\v2\x13.thanawy.v1.SectionR\asection\"\xac\x01\n" +
+	"\x14UpdateSectionRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x1f\n" +
+	"\vorder_index\x18\x03 \x01(\x05R\n" +
+	"orderIndex\x12%\n" +
+	"\x0eavailable_from\x18\x04 \x01(\x03R\ravailableFrom\x12&\n" +
+	"\x0fdrip_delay_days\x18\x05 \x01(\x05R\rdripDelayDays\"F\n" +
+	"\x15UpdateSectionResponse\x12-\n" +
+	"\asection\x18\x01 \x01(\v2\x13.thanawy.v1.SectionR\asection\"&\n" +
+	"\x14DeleteSectionRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"1\n" +
+	"\x15DeleteSectionResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"2\n" +
+	"\x13ListSectionsRequest\x12\x1b\n" +
+	"\tcourse_id\x18\x01 \x01(\tR\bcourseId\"G\n" +
+	"\x14ListSectionsResponse\x12/\n" +
+	"\bsections\x18\x01 \x03(\v2\x13.thanawy.v1.SectionR\bsections\"V\n" +
+	"\x16ReorderSectionsRequest\x12\x1b\n" +
+	"\tcourse_id\x18\x01 \x01(\tR\bcourseId\x12\x1f\n" +
+	"\vsection_ids\x18\x02 \x03(\tR\n" +
+	"sectionIds\"J\n" +
+	"\x17ReorderSectionsResponse\x12/\n" +
+	"\bsections\x18\x01 \x03(\v2\x13.thanawy.v1.SectionR\bsections\"\x80\x04\n" +
+	"\x06Lesson\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
+	"\n" +
+	"section_id\x18\x02 \x01(\tR\tsectionId\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x12\n" +
+	"\x04type\x18\x04 \x01(\tR\x04type\x12\x18\n" +
+	"\acontent\x18\x05 \x01(\tR\acontent\x12\x1b\n" +
+	"\tmedia_url\x18\x06 \x01(\tR\bmediaUrl\x12)\n" +
+	"\x10duration_seconds\x18\a \x01(\x05R\x0fdurationSeconds\x12&\n" +
+	"\x0fis_free_preview\x18\b \x01(\bR\risFreePreview\x12\x1f\n" +
+	"\vorder_index\x18\t \x01(\x05R\n" +
+	"orderIndex\x12+\n" +
+	"\x11availability_type\x18\n" +
+	" \x01(\tR\x10availabilityType\x12%\n" +
+	"\x0eavailable_from\x18\v \x01(\x03R\ravailableFrom\x12&\n" +
+	"\x0fdrip_delay_days\x18\f \x01(\x05R\rdripDelayDays\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\r \x01(\x03R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x0e \x01(\x03R\tupdatedAt\x128\n" +
+	"\vattachments\x18\x0f \x03(\v2\x16.thanawy.v1.AttachmentR\vattachments\"\x85\x03\n" +
+	"\x13CreateLessonRequest\x12\x1d\n" +
+	"\n" +
+	"section_id\x18\x01 \x01(\tR\tsectionId\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x18\n" +
+	"\acontent\x18\x04 \x01(\tR\acontent\x12\x1b\n" +
+	"\tmedia_url\x18\x05 \x01(\tR\bmediaUrl\x12)\n" +
+	"\x10duration_seconds\x18\x06 \x01(\x05R\x0fdurationSeconds\x12&\n" +
+	"\x0fis_free_preview\x18\a \x01(\bR\risFreePreview\x12\x1f\n" +
+	"\vorder_index\x18\b \x01(\x05R\n" +
+	"orderIndex\x12+\n" +
+	"\x11availability_type\x18\t \x01(\tR\x10availabilityType\x12%\n" +
+	"\x0eavailable_from\x18\n" +
+	" \x01(\x03R\ravailableFrom\x12&\n" +
+	"\x0fdrip_delay_days\x18\v \x01(\x05R\rdripDelayDays\"B\n" +
+	"\x14CreateLessonResponse\x12*\n" +
+	"\x06lesson\x18\x01 \x01(\v2\x12.thanawy.v1.LessonR\x06lesson\"\xf6\x02\n" +
+	"\x13UpdateLessonRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x18\n" +
+	"\acontent\x18\x04 \x01(\tR\acontent\x12\x1b\n" +
+	"\tmedia_url\x18\x05 \x01(\tR\bmediaUrl\x12)\n" +
+	"\x10duration_seconds\x18\x06 \x01(\x05R\x0fdurationSeconds\x12&\n" +
+	"\x0fis_free_preview\x18\a \x01(\bR\risFreePreview\x12\x1f\n" +
+	"\vorder_index\x18\b \x01(\x05R\n" +
+	"orderIndex\x12+\n" +
+	"\x11availability_type\x18\t \x01(\tR\x10availabilityType\x12%\n" +
+	"\x0eavailable_from\x18\n" +
+	" \x01(\x03R\ravailableFrom\x12&\n" +
+	"\x0fdrip_delay_days\x18\v \x01(\x05R\rdripDelayDays\"B\n" +
+	"\x14UpdateLessonResponse\x12*\n" +
+	"\x06lesson\x18\x01 \x01(\v2\x12.thanawy.v1.LessonR\x06lesson\"%\n" +
+	"\x13DeleteLessonRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"0\n" +
+	"\x14DeleteLessonResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"3\n" +
+	"\x12ListLessonsRequest\x12\x1d\n" +
+	"\n" +
+	"section_id\x18\x01 \x01(\tR\tsectionId\"C\n" +
+	"\x13ListLessonsResponse\x12,\n" +
+	"\alessons\x18\x01 \x03(\v2\x12.thanawy.v1.LessonR\alessons\"U\n" +
+	"\x15ReorderLessonsRequest\x12\x1d\n" +
+	"\n" +
+	"section_id\x18\x01 \x01(\tR\tsectionId\x12\x1d\n" +
+	"\n" +
+	"lesson_ids\x18\x02 \x03(\tR\tlessonIds\"F\n" +
+	"\x16ReorderLessonsResponse\x12,\n" +
+	"\alessons\x18\x01 \x03(\v2\x12.thanawy.v1.LessonR\alessons\"\xc3\x01\n" +
+	"\n" +
+	"Attachment\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\tlesson_id\x18\x02 \x01(\tR\blessonId\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x19\n" +
+	"\bfile_url\x18\x04 \x01(\tR\afileUrl\x12\x1b\n" +
+	"\tfile_type\x18\x05 \x01(\tR\bfileType\x12\x1b\n" +
+	"\tfile_size\x18\x06 \x01(\x03R\bfileSize\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\a \x01(\x03R\tcreatedAt\"\x8d\x02\n" +
+	"\n" +
+	"Enrollment\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\tcourse_id\x18\x02 \x01(\tR\bcourseId\x12\x17\n" +
+	"\auser_id\x18\x03 \x01(\tR\x06userId\x12\x1a\n" +
+	"\bprogress\x18\x04 \x01(\x01R\bprogress\x12\x1f\n" +
+	"\venrolled_at\x18\x05 \x01(\x03R\n" +
+	"enrolledAt\x12!\n" +
+	"\fcompleted_at\x18\x06 \x01(\x03R\vcompletedAt\x12\x1b\n" +
+	"\tbundle_id\x18\a \x01(\tR\bbundleId\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\b \x01(\x03R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\t \x01(\x03R\tupdatedAt\"I\n" +
+	"\x11EnrollUserRequest\x12\x1b\n" +
+	"\tcourse_id\x18\x01 \x01(\tR\bcourseId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"L\n" +
+	"\x12EnrollUserResponse\x126\n" +
+	"\n" +
+	"enrollment\x18\x01 \x01(\v2\x16.thanawy.v1.EnrollmentR\n" +
+	"enrollment\"L\n" +
+	"\x14GetEnrollmentRequest\x12\x1b\n" +
+	"\tcourse_id\x18\x01 \x01(\tR\bcourseId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"O\n" +
+	"\x15GetEnrollmentResponse\x126\n" +
+	"\n" +
+	"enrollment\x18\x01 \x01(\v2\x16.thanawy.v1.EnrollmentR\n" +
+	"enrollment\"i\n" +
+	"\x15UpdateProgressRequest\x12\x1b\n" +
+	"\tcourse_id\x18\x01 \x01(\tR\bcourseId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1a\n" +
+	"\bprogress\x18\x03 \x01(\x01R\bprogress\"P\n" +
+	"\x16UpdateProgressResponse\x126\n" +
+	"\n" +
+	"enrollment\x18\x01 \x01(\v2\x16.thanawy.v1.EnrollmentR\n" +
+	"enrollment\"\x90\x01\n" +
+	"\x16ListEnrollmentsRequest\x12\x1b\n" +
+	"\tcourse_id\x18\x01 \x01(\tR\bcourseId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x16\n" +
+	"\x06status\x18\x03 \x01(\tR\x06status\x12\x12\n" +
+	"\x04page\x18\x04 \x01(\x05R\x04page\x12\x14\n" +
+	"\x05limit\x18\x05 \x01(\x05R\x05limit\"\x93\x01\n" +
+	"\x17ListEnrollmentsResponse\x128\n" +
+	"\venrollments\x18\x01 \x03(\v2\x16.thanawy.v1.EnrollmentR\venrollments\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\x12\x12\n" +
+	"\x04page\x18\x03 \x01(\x05R\x04page\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\"\xcd\x03\n" +
+	"\aPricing\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\tcourse_id\x18\x02 \x01(\tR\bcourseId\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x16\n" +
+	"\x06amount\x18\x04 \x01(\x01R\x06amount\x12#\n" +
+	"\rcurrency_code\x18\x05 \x01(\tR\fcurrencyCode\x12<\n" +
+	"\x1asubscription_duration_days\x18\x06 \x01(\x05R\x18subscriptionDurationDays\x12%\n" +
+	"\x0ediscount_price\x18\a \x01(\x01R\rdiscountPrice\x12*\n" +
+	"\x11discount_start_at\x18\b \x01(\x03R\x0fdiscountStartAt\x12&\n" +
+	"\x0fdiscount_end_at\x18\t \x01(\x03R\rdiscountEndAt\x120\n" +
+	"\x14subscription_plan_id\x18\n" +
+	" \x01(\tR\x12subscriptionPlanId\x12\x1b\n" +
+	"\tis_active\x18\v \x01(\bR\bisActive\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\f \x01(\x03R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\r \x01(\x03R\tupdatedAt\"\xec\x02\n" +
+	"\x11SetPricingRequest\x12\x1b\n" +
+	"\tcourse_id\x18\x01 \x01(\tR\bcourseId\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x16\n" +
+	"\x06amount\x18\x03 \x01(\x01R\x06amount\x12#\n" +
+	"\rcurrency_code\x18\x04 \x01(\tR\fcurrencyCode\x12<\n" +
+	"\x1asubscription_duration_days\x18\x05 \x01(\x05R\x18subscriptionDurationDays\x12%\n" +
+	"\x0ediscount_price\x18\x06 \x01(\x01R\rdiscountPrice\x12*\n" +
+	"\x11discount_start_at\x18\a \x01(\x03R\x0fdiscountStartAt\x12&\n" +
+	"\x0fdiscount_end_at\x18\b \x01(\x03R\rdiscountEndAt\x120\n" +
+	"\x14subscription_plan_id\x18\t \x01(\tR\x12subscriptionPlanId\"C\n" +
+	"\x12SetPricingResponse\x12-\n" +
+	"\apricing\x18\x01 \x01(\v2\x13.thanawy.v1.PricingR\apricing\"0\n" +
+	"\x11GetPricingRequest\x12\x1b\n" +
+	"\tcourse_id\x18\x01 \x01(\tR\bcourseId\"C\n" +
+	"\x12GetPricingResponse\x12-\n" +
+	"\apricing\x18\x01 \x01(\v2\x13.thanawy.v1.PricingR\apricing2\x9e\x11\n" +
+	"\rCourseService\x12Q\n" +
+	"\fCreateCourse\x12\x1f.thanawy.v1.CreateCourseRequest\x1a .thanawy.v1.CreateCourseResponse\x12H\n" +
+	"\tGetCourse\x12\x1c.thanawy.v1.GetCourseRequest\x1a\x1d.thanawy.v1.GetCourseResponse\x12Q\n" +
+	"\fUpdateCourse\x12\x1f.thanawy.v1.UpdateCourseRequest\x1a .thanawy.v1.UpdateCourseResponse\x12Q\n" +
+	"\fDeleteCourse\x12\x1f.thanawy.v1.DeleteCourseRequest\x1a .thanawy.v1.DeleteCourseResponse\x12N\n" +
+	"\vListCourses\x12\x1e.thanawy.v1.ListCoursesRequest\x1a\x1f.thanawy.v1.ListCoursesResponse\x12Z\n" +
+	"\x0fSubmitForReview\x12\".thanawy.v1.SubmitForReviewRequest\x1a#.thanawy.v1.SubmitForReviewResponse\x12T\n" +
+	"\rApproveCourse\x12 .thanawy.v1.ApproveCourseRequest\x1a!.thanawy.v1.ApproveCourseResponse\x12Q\n" +
+	"\fRejectCourse\x12\x1f.thanawy.v1.RejectCourseRequest\x1a .thanawy.v1.RejectCourseResponse\x12T\n" +
+	"\rArchiveCourse\x12 .thanawy.v1.ArchiveCourseRequest\x1a!.thanawy.v1.ArchiveCourseResponse\x12Z\n" +
+	"\x0fUnarchiveCourse\x12\".thanawy.v1.UnarchiveCourseRequest\x1a#.thanawy.v1.UnarchiveCourseResponse\x12T\n" +
+	"\rCreateSection\x12 .thanawy.v1.CreateSectionRequest\x1a!.thanawy.v1.CreateSectionResponse\x12T\n" +
+	"\rUpdateSection\x12 .thanawy.v1.UpdateSectionRequest\x1a!.thanawy.v1.UpdateSectionResponse\x12T\n" +
+	"\rDeleteSection\x12 .thanawy.v1.DeleteSectionRequest\x1a!.thanawy.v1.DeleteSectionResponse\x12Q\n" +
+	"\fListSections\x12\x1f.thanawy.v1.ListSectionsRequest\x1a .thanawy.v1.ListSectionsResponse\x12Z\n" +
+	"\x0fReorderSections\x12\".thanawy.v1.ReorderSectionsRequest\x1a#.thanawy.v1.ReorderSectionsResponse\x12Q\n" +
+	"\fCreateLesson\x12\x1f.thanawy.v1.CreateLessonRequest\x1a .thanawy.v1.CreateLessonResponse\x12Q\n" +
+	"\fUpdateLesson\x12\x1f.thanawy.v1.UpdateLessonRequest\x1a .thanawy.v1.UpdateLessonResponse\x12Q\n" +
+	"\fDeleteLesson\x12\x1f.thanawy.v1.DeleteLessonRequest\x1a .thanawy.v1.DeleteLessonResponse\x12N\n" +
+	"\vListLessons\x12\x1e.thanawy.v1.ListLessonsRequest\x1a\x1f.thanawy.v1.ListLessonsResponse\x12W\n" +
+	"\x0eReorderLessons\x12!.thanawy.v1.ReorderLessonsRequest\x1a\".thanawy.v1.ReorderLessonsResponse\x12K\n" +
+	"\n" +
+	"EnrollUser\x12\x1d.thanawy.v1.EnrollUserRequest\x1a\x1e.thanawy.v1.EnrollUserResponse\x12T\n" +
+	"\rGetEnrollment\x12 .thanawy.v1.GetEnrollmentRequest\x1a!.thanawy.v1.GetEnrollmentResponse\x12W\n" +
+	"\x0eUpdateProgress\x12!.thanawy.v1.UpdateProgressRequest\x1a\".thanawy.v1.UpdateProgressResponse\x12Z\n" +
+	"\x0fListEnrollments\x12\".thanawy.v1.ListEnrollmentsRequest\x1a#.thanawy.v1.ListEnrollmentsResponse\x12K\n" +
+	"\n" +
+	"SetPricing\x12\x1d.thanawy.v1.SetPricingRequest\x1a\x1e.thanawy.v1.SetPricingResponse\x12K\n" +
+	"\n" +
+	"GetPricing\x12\x1d.thanawy.v1.GetPricingRequest\x1a\x1e.thanawy.v1.GetPricingResponseB5Z3thanawy-backend/internal/proto/thanawy/v1;thanawyv1b\x06proto3"
 
 var (
 	file_thanawy_v1_course_proto_rawDescOnce sync.Once
 	file_thanawy_v1_course_proto_rawDescData []byte
 )
 
-func fileThanawyV1CourseProtoRawDescGZIP() []byte {
+func file_thanawy_v1_course_proto_rawDescGZIP() []byte {
 	file_thanawy_v1_course_proto_rawDescOnce.Do(func() {
 		file_thanawy_v1_course_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_thanawy_v1_course_proto_rawDesc), len(file_thanawy_v1_course_proto_rawDesc)))
 	})
 	return file_thanawy_v1_course_proto_rawDescData
 }
 
-var file_thanawy_v1_course_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_thanawy_v1_course_proto_msgTypes = make([]protoimpl.MessageInfo, 58)
 var file_thanawy_v1_course_proto_goTypes = []any{
-	(*Course)(nil),             // 0: thanawy.v1.Course
-	(*GetCoursesRequest)(nil),  // 1: thanawy.v1.GetCoursesRequest
-	(*GetCoursesResponse)(nil), // 2: thanawy.v1.GetCoursesResponse
-	(*GetCourseRequest)(nil),   // 3: thanawy.v1.GetCourseRequest
-	(*GetCourseResponse)(nil),  // 4: thanawy.v1.GetCourseResponse
+	(*Course)(nil),                  // 0: thanawy.v1.Course
+	(*CreateCourseRequest)(nil),     // 1: thanawy.v1.CreateCourseRequest
+	(*CreateCourseResponse)(nil),    // 2: thanawy.v1.CreateCourseResponse
+	(*GetCourseRequest)(nil),        // 3: thanawy.v1.GetCourseRequest
+	(*GetCourseResponse)(nil),       // 4: thanawy.v1.GetCourseResponse
+	(*UpdateCourseRequest)(nil),     // 5: thanawy.v1.UpdateCourseRequest
+	(*UpdateCourseResponse)(nil),    // 6: thanawy.v1.UpdateCourseResponse
+	(*DeleteCourseRequest)(nil),     // 7: thanawy.v1.DeleteCourseRequest
+	(*DeleteCourseResponse)(nil),    // 8: thanawy.v1.DeleteCourseResponse
+	(*ListCoursesRequest)(nil),      // 9: thanawy.v1.ListCoursesRequest
+	(*ListCoursesResponse)(nil),     // 10: thanawy.v1.ListCoursesResponse
+	(*SubmitForReviewRequest)(nil),  // 11: thanawy.v1.SubmitForReviewRequest
+	(*SubmitForReviewResponse)(nil), // 12: thanawy.v1.SubmitForReviewResponse
+	(*ApproveCourseRequest)(nil),    // 13: thanawy.v1.ApproveCourseRequest
+	(*ApproveCourseResponse)(nil),   // 14: thanawy.v1.ApproveCourseResponse
+	(*RejectCourseRequest)(nil),     // 15: thanawy.v1.RejectCourseRequest
+	(*RejectCourseResponse)(nil),    // 16: thanawy.v1.RejectCourseResponse
+	(*ArchiveCourseRequest)(nil),    // 17: thanawy.v1.ArchiveCourseRequest
+	(*ArchiveCourseResponse)(nil),   // 18: thanawy.v1.ArchiveCourseResponse
+	(*UnarchiveCourseRequest)(nil),  // 19: thanawy.v1.UnarchiveCourseRequest
+	(*UnarchiveCourseResponse)(nil), // 20: thanawy.v1.UnarchiveCourseResponse
+	(*Section)(nil),                 // 21: thanawy.v1.Section
+	(*CreateSectionRequest)(nil),    // 22: thanawy.v1.CreateSectionRequest
+	(*CreateSectionResponse)(nil),   // 23: thanawy.v1.CreateSectionResponse
+	(*UpdateSectionRequest)(nil),    // 24: thanawy.v1.UpdateSectionRequest
+	(*UpdateSectionResponse)(nil),   // 25: thanawy.v1.UpdateSectionResponse
+	(*DeleteSectionRequest)(nil),    // 26: thanawy.v1.DeleteSectionRequest
+	(*DeleteSectionResponse)(nil),   // 27: thanawy.v1.DeleteSectionResponse
+	(*ListSectionsRequest)(nil),     // 28: thanawy.v1.ListSectionsRequest
+	(*ListSectionsResponse)(nil),    // 29: thanawy.v1.ListSectionsResponse
+	(*ReorderSectionsRequest)(nil),  // 30: thanawy.v1.ReorderSectionsRequest
+	(*ReorderSectionsResponse)(nil), // 31: thanawy.v1.ReorderSectionsResponse
+	(*Lesson)(nil),                  // 32: thanawy.v1.Lesson
+	(*CreateLessonRequest)(nil),     // 33: thanawy.v1.CreateLessonRequest
+	(*CreateLessonResponse)(nil),    // 34: thanawy.v1.CreateLessonResponse
+	(*UpdateLessonRequest)(nil),     // 35: thanawy.v1.UpdateLessonRequest
+	(*UpdateLessonResponse)(nil),    // 36: thanawy.v1.UpdateLessonResponse
+	(*DeleteLessonRequest)(nil),     // 37: thanawy.v1.DeleteLessonRequest
+	(*DeleteLessonResponse)(nil),    // 38: thanawy.v1.DeleteLessonResponse
+	(*ListLessonsRequest)(nil),      // 39: thanawy.v1.ListLessonsRequest
+	(*ListLessonsResponse)(nil),     // 40: thanawy.v1.ListLessonsResponse
+	(*ReorderLessonsRequest)(nil),   // 41: thanawy.v1.ReorderLessonsRequest
+	(*ReorderLessonsResponse)(nil),  // 42: thanawy.v1.ReorderLessonsResponse
+	(*Attachment)(nil),              // 43: thanawy.v1.Attachment
+	(*Enrollment)(nil),              // 44: thanawy.v1.Enrollment
+	(*EnrollUserRequest)(nil),       // 45: thanawy.v1.EnrollUserRequest
+	(*EnrollUserResponse)(nil),      // 46: thanawy.v1.EnrollUserResponse
+	(*GetEnrollmentRequest)(nil),    // 47: thanawy.v1.GetEnrollmentRequest
+	(*GetEnrollmentResponse)(nil),   // 48: thanawy.v1.GetEnrollmentResponse
+	(*UpdateProgressRequest)(nil),   // 49: thanawy.v1.UpdateProgressRequest
+	(*UpdateProgressResponse)(nil),  // 50: thanawy.v1.UpdateProgressResponse
+	(*ListEnrollmentsRequest)(nil),  // 51: thanawy.v1.ListEnrollmentsRequest
+	(*ListEnrollmentsResponse)(nil), // 52: thanawy.v1.ListEnrollmentsResponse
+	(*Pricing)(nil),                 // 53: thanawy.v1.Pricing
+	(*SetPricingRequest)(nil),       // 54: thanawy.v1.SetPricingRequest
+	(*SetPricingResponse)(nil),      // 55: thanawy.v1.SetPricingResponse
+	(*GetPricingRequest)(nil),       // 56: thanawy.v1.GetPricingRequest
+	(*GetPricingResponse)(nil),      // 57: thanawy.v1.GetPricingResponse
 }
 var file_thanawy_v1_course_proto_depIdxs = []int32{
-	0, // 0: thanawy.v1.GetCoursesResponse.courses:type_name -> thanawy.v1.Course
-	0, // 1: thanawy.v1.GetCourseResponse.course:type_name -> thanawy.v1.Course
-	1, // 2: thanawy.v1.CourseService.GetCourses:input_type -> thanawy.v1.GetCoursesRequest
-	3, // 3: thanawy.v1.CourseService.GetCourse:input_type -> thanawy.v1.GetCourseRequest
-	2, // 4: thanawy.v1.CourseService.GetCourses:output_type -> thanawy.v1.GetCoursesResponse
-	4, // 5: thanawy.v1.CourseService.GetCourse:output_type -> thanawy.v1.GetCourseResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	21, // 0: thanawy.v1.Course.sections:type_name -> thanawy.v1.Section
+	53, // 1: thanawy.v1.Course.pricings:type_name -> thanawy.v1.Pricing
+	0,  // 2: thanawy.v1.CreateCourseResponse.course:type_name -> thanawy.v1.Course
+	0,  // 3: thanawy.v1.GetCourseResponse.course:type_name -> thanawy.v1.Course
+	0,  // 4: thanawy.v1.UpdateCourseResponse.course:type_name -> thanawy.v1.Course
+	0,  // 5: thanawy.v1.ListCoursesResponse.courses:type_name -> thanawy.v1.Course
+	32, // 6: thanawy.v1.Section.lessons:type_name -> thanawy.v1.Lesson
+	21, // 7: thanawy.v1.CreateSectionResponse.section:type_name -> thanawy.v1.Section
+	21, // 8: thanawy.v1.UpdateSectionResponse.section:type_name -> thanawy.v1.Section
+	21, // 9: thanawy.v1.ListSectionsResponse.sections:type_name -> thanawy.v1.Section
+	21, // 10: thanawy.v1.ReorderSectionsResponse.sections:type_name -> thanawy.v1.Section
+	43, // 11: thanawy.v1.Lesson.attachments:type_name -> thanawy.v1.Attachment
+	32, // 12: thanawy.v1.CreateLessonResponse.lesson:type_name -> thanawy.v1.Lesson
+	32, // 13: thanawy.v1.UpdateLessonResponse.lesson:type_name -> thanawy.v1.Lesson
+	32, // 14: thanawy.v1.ListLessonsResponse.lessons:type_name -> thanawy.v1.Lesson
+	32, // 15: thanawy.v1.ReorderLessonsResponse.lessons:type_name -> thanawy.v1.Lesson
+	44, // 16: thanawy.v1.EnrollUserResponse.enrollment:type_name -> thanawy.v1.Enrollment
+	44, // 17: thanawy.v1.GetEnrollmentResponse.enrollment:type_name -> thanawy.v1.Enrollment
+	44, // 18: thanawy.v1.UpdateProgressResponse.enrollment:type_name -> thanawy.v1.Enrollment
+	44, // 19: thanawy.v1.ListEnrollmentsResponse.enrollments:type_name -> thanawy.v1.Enrollment
+	53, // 20: thanawy.v1.SetPricingResponse.pricing:type_name -> thanawy.v1.Pricing
+	53, // 21: thanawy.v1.GetPricingResponse.pricing:type_name -> thanawy.v1.Pricing
+	1,  // 22: thanawy.v1.CourseService.CreateCourse:input_type -> thanawy.v1.CreateCourseRequest
+	3,  // 23: thanawy.v1.CourseService.GetCourse:input_type -> thanawy.v1.GetCourseRequest
+	5,  // 24: thanawy.v1.CourseService.UpdateCourse:input_type -> thanawy.v1.UpdateCourseRequest
+	7,  // 25: thanawy.v1.CourseService.DeleteCourse:input_type -> thanawy.v1.DeleteCourseRequest
+	9,  // 26: thanawy.v1.CourseService.ListCourses:input_type -> thanawy.v1.ListCoursesRequest
+	11, // 27: thanawy.v1.CourseService.SubmitForReview:input_type -> thanawy.v1.SubmitForReviewRequest
+	13, // 28: thanawy.v1.CourseService.ApproveCourse:input_type -> thanawy.v1.ApproveCourseRequest
+	15, // 29: thanawy.v1.CourseService.RejectCourse:input_type -> thanawy.v1.RejectCourseRequest
+	17, // 30: thanawy.v1.CourseService.ArchiveCourse:input_type -> thanawy.v1.ArchiveCourseRequest
+	19, // 31: thanawy.v1.CourseService.UnarchiveCourse:input_type -> thanawy.v1.UnarchiveCourseRequest
+	22, // 32: thanawy.v1.CourseService.CreateSection:input_type -> thanawy.v1.CreateSectionRequest
+	24, // 33: thanawy.v1.CourseService.UpdateSection:input_type -> thanawy.v1.UpdateSectionRequest
+	26, // 34: thanawy.v1.CourseService.DeleteSection:input_type -> thanawy.v1.DeleteSectionRequest
+	28, // 35: thanawy.v1.CourseService.ListSections:input_type -> thanawy.v1.ListSectionsRequest
+	30, // 36: thanawy.v1.CourseService.ReorderSections:input_type -> thanawy.v1.ReorderSectionsRequest
+	33, // 37: thanawy.v1.CourseService.CreateLesson:input_type -> thanawy.v1.CreateLessonRequest
+	35, // 38: thanawy.v1.CourseService.UpdateLesson:input_type -> thanawy.v1.UpdateLessonRequest
+	37, // 39: thanawy.v1.CourseService.DeleteLesson:input_type -> thanawy.v1.DeleteLessonRequest
+	39, // 40: thanawy.v1.CourseService.ListLessons:input_type -> thanawy.v1.ListLessonsRequest
+	41, // 41: thanawy.v1.CourseService.ReorderLessons:input_type -> thanawy.v1.ReorderLessonsRequest
+	45, // 42: thanawy.v1.CourseService.EnrollUser:input_type -> thanawy.v1.EnrollUserRequest
+	47, // 43: thanawy.v1.CourseService.GetEnrollment:input_type -> thanawy.v1.GetEnrollmentRequest
+	49, // 44: thanawy.v1.CourseService.UpdateProgress:input_type -> thanawy.v1.UpdateProgressRequest
+	51, // 45: thanawy.v1.CourseService.ListEnrollments:input_type -> thanawy.v1.ListEnrollmentsRequest
+	54, // 46: thanawy.v1.CourseService.SetPricing:input_type -> thanawy.v1.SetPricingRequest
+	56, // 47: thanawy.v1.CourseService.GetPricing:input_type -> thanawy.v1.GetPricingRequest
+	2,  // 48: thanawy.v1.CourseService.CreateCourse:output_type -> thanawy.v1.CreateCourseResponse
+	4,  // 49: thanawy.v1.CourseService.GetCourse:output_type -> thanawy.v1.GetCourseResponse
+	6,  // 50: thanawy.v1.CourseService.UpdateCourse:output_type -> thanawy.v1.UpdateCourseResponse
+	8,  // 51: thanawy.v1.CourseService.DeleteCourse:output_type -> thanawy.v1.DeleteCourseResponse
+	10, // 52: thanawy.v1.CourseService.ListCourses:output_type -> thanawy.v1.ListCoursesResponse
+	12, // 53: thanawy.v1.CourseService.SubmitForReview:output_type -> thanawy.v1.SubmitForReviewResponse
+	14, // 54: thanawy.v1.CourseService.ApproveCourse:output_type -> thanawy.v1.ApproveCourseResponse
+	16, // 55: thanawy.v1.CourseService.RejectCourse:output_type -> thanawy.v1.RejectCourseResponse
+	18, // 56: thanawy.v1.CourseService.ArchiveCourse:output_type -> thanawy.v1.ArchiveCourseResponse
+	20, // 57: thanawy.v1.CourseService.UnarchiveCourse:output_type -> thanawy.v1.UnarchiveCourseResponse
+	23, // 58: thanawy.v1.CourseService.CreateSection:output_type -> thanawy.v1.CreateSectionResponse
+	25, // 59: thanawy.v1.CourseService.UpdateSection:output_type -> thanawy.v1.UpdateSectionResponse
+	27, // 60: thanawy.v1.CourseService.DeleteSection:output_type -> thanawy.v1.DeleteSectionResponse
+	29, // 61: thanawy.v1.CourseService.ListSections:output_type -> thanawy.v1.ListSectionsResponse
+	31, // 62: thanawy.v1.CourseService.ReorderSections:output_type -> thanawy.v1.ReorderSectionsResponse
+	34, // 63: thanawy.v1.CourseService.CreateLesson:output_type -> thanawy.v1.CreateLessonResponse
+	36, // 64: thanawy.v1.CourseService.UpdateLesson:output_type -> thanawy.v1.UpdateLessonResponse
+	38, // 65: thanawy.v1.CourseService.DeleteLesson:output_type -> thanawy.v1.DeleteLessonResponse
+	40, // 66: thanawy.v1.CourseService.ListLessons:output_type -> thanawy.v1.ListLessonsResponse
+	42, // 67: thanawy.v1.CourseService.ReorderLessons:output_type -> thanawy.v1.ReorderLessonsResponse
+	46, // 68: thanawy.v1.CourseService.EnrollUser:output_type -> thanawy.v1.EnrollUserResponse
+	48, // 69: thanawy.v1.CourseService.GetEnrollment:output_type -> thanawy.v1.GetEnrollmentResponse
+	50, // 70: thanawy.v1.CourseService.UpdateProgress:output_type -> thanawy.v1.UpdateProgressResponse
+	52, // 71: thanawy.v1.CourseService.ListEnrollments:output_type -> thanawy.v1.ListEnrollmentsResponse
+	55, // 72: thanawy.v1.CourseService.SetPricing:output_type -> thanawy.v1.SetPricingResponse
+	57, // 73: thanawy.v1.CourseService.GetPricing:output_type -> thanawy.v1.GetPricingResponse
+	48, // [48:74] is the sub-list for method output_type
+	22, // [22:48] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
-func init() { fileThanawyV1CourseProtoInit() }
-func fileThanawyV1CourseProtoInit() {
+func init() { file_thanawy_v1_course_proto_init() }
+func file_thanawy_v1_course_proto_init() {
 	if File_thanawy_v1_course_proto != nil {
 		return
 	}
@@ -335,7 +4668,7 @@ func fileThanawyV1CourseProtoInit() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_thanawy_v1_course_proto_rawDesc), len(file_thanawy_v1_course_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   58,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

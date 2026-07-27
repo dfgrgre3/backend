@@ -1,12 +1,12 @@
 package handlers
 
 import (
-	"net/http"
+	api_response "thanawy-backend/internal/api/response"
 
 	"github.com/gin-gonic/gin"
 )
 
 func GetBlogCategories(c *gin.Context) {
 	var categories []gin.H
-	c.JSON(http.StatusOK, categories)
+	api_response.Success(c, categories)
 }

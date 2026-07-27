@@ -1,46 +1,25 @@
 # Build stage
 FROM golang:1.25-alpine AS builder
 
-# Install build dependencies
 RUN apk add --no-cache git
-
 WORKDIR /app
-
-# Cache dependencies
 COPY go.mod go.sum ./
 RUN go mod download
-
-# Copy the source code selectively to avoid copying sensitive or unnecessary files
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY pkg/ ./pkg/
 COPY docs/ ./docs/
-
-# Build with optimizations
-# -ldflags="-s -w" reduces binary size by removing symbol table and debug info
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o main ./cmd/api/main.go
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o migrate ./cmd/migrate/main.go
 
-# Final stage: Use alpine for small size and healthcheck tools
 FROM alpine:3.20
-
-
-# Install CA certificates and wget for healthchecks
 RUN apk add --no-cache ca-certificates wget
-
 WORKDIR /app
-
-# Copy the binaries from builder
 COPY --from=builder /app/main .
 COPY --from=builder /app/migrate .
-
-# Use non-root user for security
-RUN adduser -D nonroot
+RUN adduser -D nonroot && mkdir -p /app/uploads && chown -R nonroot:nonroot /app
 USER nonroot
-
 EXPOSE 8082
-
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:8082/health || exit 1
-
 CMD ["sh", "-c", "./migrate && ./main"]

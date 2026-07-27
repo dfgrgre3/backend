@@ -4,11 +4,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/services"
+
+	"github.com/gin-gonic/gin"
 )
 
 const channelInApp = "in-app"
@@ -53,7 +55,7 @@ type UpdateTicketPriorityRequest struct {
 func CreateSupportTicket(c *gin.Context) {
 	var req CreateTicketRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -74,7 +76,7 @@ func CreateSupportTicket(c *gin.Context) {
 	// Get user info
 	var user models.User
 	if err := db.DB.First(&user, idQuery, req.UserID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		api_response.Error(c, http.StatusNotFound, "User not found")
 		return
 	}
 
@@ -96,7 +98,7 @@ func CreateSupportTicket(c *gin.Context) {
 	}
 
 	if err := SafeCreate(db.DB, &ticket); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create ticket"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create ticket")
 		return
 	}
 
@@ -128,11 +130,9 @@ func CreateSupportTicket(c *gin.Context) {
 		Channels: []string{channelInApp, "email"},
 	})
 
-	c.JSON(http.StatusCreated, gin.H{
+	api_response.Success(c, gin.H{
 		"message": "Ticket created successfully",
-		"data": gin.H{
-			"ticket": ticket,
-		},
+		"ticket":  ticket,
 	})
 }
 
@@ -188,15 +188,13 @@ func GetSupportTickets(c *gin.Context) {
 
 	var tickets []models.SupportTicket
 	if err := query.Find(&tickets).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tickets"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch tickets")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"tickets": tickets,
-			"count":   len(tickets),
-		},
+	api_response.Success(c, gin.H{
+		"tickets": tickets,
+		"count":   len(tickets),
 	})
 }
 
@@ -214,14 +212,12 @@ func GetSupportTicket(c *gin.Context) {
 
 	var ticket models.SupportTicket
 	if err := db.DB.Preload("Messages").First(&ticket, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errTicketNotFound})
+		api_response.Error(c, http.StatusNotFound, errTicketNotFound)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"ticket": ticket,
-		},
+	api_response.Success(c, gin.H{
+		"ticket": ticket,
 	})
 }
 
@@ -247,13 +243,13 @@ func SendTicketMessage(c *gin.Context) {
 
 	var req SendMessageRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var ticket models.SupportTicket
 	if err := db.DB.First(&ticket, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errTicketNotFound})
+		api_response.Error(c, http.StatusNotFound, errTicketNotFound)
 		return
 	}
 
@@ -272,7 +268,7 @@ func SendTicketMessage(c *gin.Context) {
 	}
 
 	if err := SafeCreate(db.DB, &message); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send message"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to send message")
 		return
 	}
 
@@ -281,11 +277,9 @@ func SendTicketMessage(c *gin.Context) {
 		notifyUserOfTicketResponse(ticket)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Message sent successfully",
-		"data": gin.H{
-			"message": message,
-		},
+	api_response.Success(c, gin.H{
+		"message":       "Message sent successfully",
+		"ticketMessage": message,
 	})
 }
 
@@ -342,13 +336,13 @@ func UpdateTicketStatus(c *gin.Context) {
 
 	var req UpdateTicketStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var ticket models.SupportTicket
 	if err := db.DB.First(&ticket, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errTicketNotFound})
+		api_response.Error(c, http.StatusNotFound, errTicketNotFound)
 		return
 	}
 
@@ -375,7 +369,7 @@ func UpdateTicketStatus(c *gin.Context) {
 
 	if err := db.DB.Model(&models.SupportTicket{}).Where(idQuery, ticket.ID).
 		Updates(&updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update status"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to update status")
 		return
 	}
 
@@ -388,7 +382,7 @@ func UpdateTicketStatus(c *gin.Context) {
 		Channels: []string{channelInApp},
 	})
 
-	c.JSON(http.StatusOK, gin.H{"message": "Status updated successfully"})
+	api_response.Success(c, gin.H{"message": "Status updated successfully"})
 }
 
 // UpdateTicketPriority updates the priority of a ticket
@@ -406,7 +400,7 @@ func UpdateTicketPriority(c *gin.Context) {
 
 	var req UpdateTicketPriorityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -416,11 +410,11 @@ func UpdateTicketPriority(c *gin.Context) {
 			"priority":   req.Priority,
 			"updated_at": time.Now(),
 		}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update priority"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to update priority")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Priority updated successfully"})
+	api_response.Success(c, gin.H{"message": "Priority updated successfully"})
 }
 
 // AssignTicket assigns a ticket to an admin
@@ -440,14 +434,14 @@ func AssignTicket(c *gin.Context) {
 		AdminID string `json:"adminId" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Get admin name
 	var admin models.User
 	if err := db.DB.First(&admin, idQuery, req.AdminID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Admin not found"})
+		api_response.Error(c, http.StatusNotFound, "Admin not found")
 		return
 	}
 
@@ -458,11 +452,11 @@ func AssignTicket(c *gin.Context) {
 			"assigned_to_name": admin.GetName(),
 			"updated_at":       time.Now(),
 		}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to assign ticket"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to assign ticket")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Ticket assigned successfully"})
+	api_response.Success(c, gin.H{"message": "Ticket assigned successfully"})
 }
 
 // CloseTicket closes a support ticket
@@ -484,11 +478,11 @@ func CloseTicket(c *gin.Context) {
 			"closed_at":  time.Now(),
 			"updated_at": time.Now(),
 		}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to close ticket"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to close ticket")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Ticket closed successfully"})
+	api_response.Success(c, gin.H{"message": "Ticket closed successfully"})
 }
 
 // GetTicketStats returns ticket statistics
@@ -527,10 +521,8 @@ func GetTicketStats(c *gin.Context) {
 		AND resolved_at >= NOW() - INTERVAL '30 days'
 	`).Scan(&avgResolutionTime)
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"overview":          stats,
-			"avgResolutionTime": avgResolutionTime,
-		},
+	api_response.Success(c, gin.H{
+		"overview":          stats,
+		"avgResolutionTime": avgResolutionTime,
 	})
 }

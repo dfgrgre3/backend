@@ -267,13 +267,13 @@ func CreateExam(c *gin.Context) {
 	}
 
 	if err := db.WriteDB().Create(&exam).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create exam"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create exam")
 		return
 	}
 
 	services.GetAuditService().LogAsync("", services.AuditEventAdminAction, "exam", exam.ID, map[string]interface{}{"action": "create", "title": exam.Title}, c.ClientIP(), c.Request.UserAgent())
 
-	c.JSON(http.StatusCreated, gin.H{"success": true, "exam": exam})
+	api_response.Success(c, gin.H{"success": true, "exam": exam})
 }
 
 func UpdateExam(c *gin.Context) {
@@ -290,7 +290,7 @@ func UpdateExam(c *gin.Context) {
 
 	var exam models.Exam
 	if err := db.ReadDB().Take(&exam, idQuery, input.ID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Exam not found"})
+		api_response.Error(c, http.StatusNotFound, "Exam not found")
 		return
 	}
 
@@ -313,13 +313,13 @@ func UpdateExam(c *gin.Context) {
 
 	if err := db.WriteDB().Model(&models.Exam{}).Where(idQuery, exam.ID).
 		Updates(&updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update exam"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to update exam")
 		return
 	}
 
 	services.GetAuditService().LogAsync("", services.AuditEventAdminAction, "exam", exam.ID, map[string]interface{}{"action": "update", "updates": updates}, c.ClientIP(), c.Request.UserAgent())
 
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	api_response.Success(c, gin.H{"success": true})
 }
 
 func DeleteExam(c *gin.Context) {
@@ -327,18 +327,18 @@ func DeleteExam(c *gin.Context) {
 		ID string `json:"id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if err := db.WriteDB().Delete(&models.Exam{}, idQuery, input.ID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete exam"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to delete exam")
 		return
 	}
 
 	services.GetAuditService().LogAsync("", services.AuditEventDataDeletion, "exam", input.ID, map[string]interface{}{"action": "delete"}, c.ClientIP(), c.Request.UserAgent())
 
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	api_response.Success(c, gin.H{"success": true})
 }
 
 func SubmitExam(c *gin.Context) {
@@ -350,7 +350,7 @@ func SubmitExam(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&submission); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid submission"})
+		api_response.Error(c, http.StatusBadRequest, "Invalid submission")
 		return
 	}
 
@@ -359,7 +359,7 @@ func SubmitExam(c *gin.Context) {
 	if err := db.ReadDB().Preload("Questions", func(d *gorm.DB) *gorm.DB {
 		return d.Select("id", "answer")
 	}).Take(&exam, idQuery, examID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Exam not found"})
+		api_response.Error(c, http.StatusNotFound, "Exam not found")
 		return
 	}
 
@@ -396,7 +396,7 @@ func SubmitExam(c *gin.Context) {
 	if err := db.WithWriteTx(func(tx *gorm.DB) error {
 		return tx.Create(&result).Error
 	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save result"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to save result")
 		return
 	}
 
@@ -410,7 +410,7 @@ func SubmitExam(c *gin.Context) {
 	GlobalNotifyAdmins("اكتمال اختبار",
 		fmt.Sprintf("أكمل المستخدم اختبار %s بنتيجة %.1f (%s)", exam.Title, score, statusStr), "info")
 
-	c.JSON(http.StatusOK, result)
+	api_response.Success(c, result)
 }
 
 func GetExamResults(c *gin.Context) {
@@ -418,7 +418,7 @@ func GetExamResults(c *gin.Context) {
 	if userId == "" {
 		val, exists := c.Get("userId")
 		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 		userId = val.(string)
@@ -442,9 +442,9 @@ func GetExamResults(c *gin.Context) {
 		Limit(limit).
 		Offset(offset).
 		Find(&results).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch results"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch results")
 		return
 	}
 
-	c.JSON(http.StatusOK, results)
+	api_response.Success(c, results)
 }

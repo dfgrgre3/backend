@@ -80,9 +80,9 @@ func (r *SubjectCachedRepository) Create(ctx context.Context, s *subject.Subject
 		return err
 	}
 	// Cache the new subject
-	r.setCache(ctx, r.cacheKey("id", s.ID), s, cache.CacheTTLSubject)
+	r.setCache(ctx, r.cacheKey("id", s.ID), s, cache.TTLSubjectDetail)
 	if s.Slug != nil && *s.Slug != "" {
-		r.setCache(ctx, r.cacheKey("slug", *s.Slug), s, cache.CacheTTLSubject)
+		r.setCache(ctx, r.cacheKey("slug", *s.Slug), s, cache.TTLSubjectDetail)
 	}
 	r.invalid.InvalidateAllLists(ctx)
 	return nil
@@ -102,9 +102,9 @@ func (r *SubjectCachedRepository) FindByID(ctx context.Context, id string) (*sub
 	}
 
 	// Populate cache (async-safe, ignore errors)
-	r.setCache(ctx, r.cacheKey("id", id), s, cache.CacheTTLSubject)
+	r.setCache(ctx, r.cacheKey("id", id), s, cache.TTLSubjectDetail)
 	if s.Slug != nil && *s.Slug != "" {
-		r.setCache(ctx, r.cacheKey("slug", *s.Slug), s, cache.CacheTTLSubject)
+		r.setCache(ctx, r.cacheKey("slug", *s.Slug), s, cache.TTLSubjectDetail)
 	}
 
 	return s, nil
@@ -124,8 +124,8 @@ func (r *SubjectCachedRepository) FindBySlug(ctx context.Context, slug string) (
 	}
 
 	// Populate cache
-	r.setCache(ctx, r.cacheKey("slug", slug), s, cache.CacheTTLSubject)
-	r.setCache(ctx, r.cacheKey("id", s.ID), s, cache.CacheTTLSubject)
+	r.setCache(ctx, r.cacheKey("slug", slug), s, cache.TTLSubjectDetail)
+	r.setCache(ctx, r.cacheKey("id", s.ID), s, cache.TTLSubjectDetail)
 
 	return s, nil
 }
@@ -137,9 +137,9 @@ func (r *SubjectCachedRepository) Update(ctx context.Context, s *subject.Subject
 
 	// Invalidate cache
 	r.invalid.InvalidateSubject(ctx, s.ID)
-	r.setCache(ctx, r.cacheKey("id", s.ID), s, cache.CacheTTLSubject)
+	r.setCache(ctx, r.cacheKey("id", s.ID), s, cache.TTLSubjectDetail)
 	if s.Slug != nil && *s.Slug != "" {
-		r.setCache(ctx, r.cacheKey("slug", *s.Slug), s, cache.CacheTTLSubject)
+		r.setCache(ctx, r.cacheKey("slug", *s.Slug), s, cache.TTLSubjectDetail)
 	}
 	r.invalid.InvalidateAllLists(ctx)
 	return nil

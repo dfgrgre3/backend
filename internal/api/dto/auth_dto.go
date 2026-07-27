@@ -61,6 +61,16 @@ type ForgotPasswordRequest struct {
 	Email string `json:"email" binding:"required,email"`
 }
 
+type VerifyForgotPasswordCodeRequest struct {
+	Email string `json:"email" binding:"required,email"`
+	Code  string `json:"code" binding:"required,len=6"`
+}
+
+type VerifyForgotPasswordCodeResponse struct {
+	ResetToken string `json:"resetToken,omitempty"`
+	Message    string `json:"message"`
+}
+
 type ResetPasswordRequest struct {
 	Token       string `json:"token" binding:"required"`
 	NewPassword string `json:"newPassword" binding:"required,min=8,max=128"`

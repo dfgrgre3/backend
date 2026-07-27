@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -26,7 +27,7 @@ const (
 func CSRFProtection() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if isSafeMethod(c.Request.Method) {
-			ensureCSRFToken(c)
+			EnsureCSRFToken(c)
 			c.Next()
 			return
 		}
@@ -47,9 +48,9 @@ func CSRFProtection() gin.HandlerFunc {
 	}
 }
 
-// ensureCSRFToken creates a CSRF token if one doesn't exist
-// Cookie is NOT HttpOnly to allow JavaScript to read it for the header
-func ensureCSRFToken(c *gin.Context) {
+// EnsureCSRFToken creates a CSRF token if one doesn't exist.
+// Cookie is NOT HttpOnly to allow JavaScript to read it for the header.
+func EnsureCSRFToken(c *gin.Context) {
 	// Check if cookie exists
 	cookie, err := c.Cookie(csrfCookieName)
 	if err == nil && cookie != "" {
@@ -107,23 +108,37 @@ func generateCSRFToken() string {
 // NOT HttpOnly - this is intentional for Double Submit Cookie pattern
 // JavaScript needs to read this cookie and set it as the X-CSRF-Token header
 func setCSRFCookie(c *gin.Context, token string) {
-	// Check environment consistently with config
-	// Prefer secure cookies when the request is over TLS. This allows
-	// local development over HTTP to receive the cookie (so JS can read it)
-	// while still ensuring production deployments using HTTPS get Secure cookies.
-	secure := c.Request.TLS != nil
+	// Prefer secure cookies when the request is over TLS. Behind a reverse
+	// proxy, however, Gin may see an internal HTTP hop, so TLS alone is not a
+	// reliable production signal. Allow the deployment to enforce Secure via
+	// COOKIE_SECURE or the production environment while keeping local HTTP
+	// development usable by default.
+	secure := c.Request.TLS != nil ||
+		strings.EqualFold(strings.TrimSpace(os.Getenv("COOKIE_SECURE")), "true") ||
+		strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production") ||
+		strings.EqualFold(strings.TrimSpace(os.Getenv("NODE_ENV")), "production")
 
-	// Explicitly set SameSite to Lax for cross-site request forgery protection.
-	// Honor a configured COOKIE_DOMAIN so the cookie is correctly scoped in
-	// subdomain deployments (e.g. api.example.com vs app.example.com).
+	// Domain cookies are valid only when the configured domain matches the request host.
+	// In local development, "localhost" and IP hosts must use host-only cookies.
+	requestHost := c.Request.Host
+	if host, _, err := net.SplitHostPort(requestHost); err == nil {
+		requestHost = host
+	}
+	requestHost = strings.Trim(requestHost, "[]")
+
+	domain := strings.TrimPrefix(strings.TrimSpace(os.Getenv("COOKIE_DOMAIN")), ".")
+	if domain == "localhost" || net.ParseIP(requestHost) != nil ||
+		(domain != "" && requestHost != domain && !strings.HasSuffix(requestHost, "."+domain)) {
+		domain = ""
+	}
+
 	c.SetSameSite(http.SameSiteLaxMode)
-	cookieDomain := os.Getenv("COOKIE_DOMAIN")
 	c.SetCookie(
 		csrfCookieName,
 		token,
 		int(24*time.Hour.Seconds()), // 24 hours
 		"/",
-		cookieDomain,
+		domain,
 		secure, // Secure in production
 		false,  // NOSONAR: NOT HttpOnly - allows JS to read for Double Submit Cookie pattern
 	)
@@ -225,7 +240,7 @@ func CSRFMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Skip CSRF for safe methods
 		if isSafeMethod(c.Request.Method) {
-			ensureCSRFToken(c)
+			EnsureCSRFToken(c)
 			c.Next()
 			return
 		}

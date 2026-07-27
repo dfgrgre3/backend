@@ -5,11 +5,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/services"
+
+	"github.com/gin-gonic/gin"
 )
 
 const errBackupNotFound = "Backup not found"
@@ -53,7 +55,7 @@ type ScheduleBackupRequest struct {
 func CreateBackup(c *gin.Context) {
 	var req CreateBackupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -83,7 +85,7 @@ func CreateBackup(c *gin.Context) {
 	}
 
 	if err := SafeCreate(db.DB, &backup); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create backup"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create backup")
 		return
 	}
 
@@ -96,7 +98,7 @@ func CreateBackup(c *gin.Context) {
 	// Start backup process asynchronously
 	go services.GetBackupService().PerformBackup(backup.ID)
 
-	c.JSON(http.StatusCreated, gin.H{
+	api_response.Success(c, gin.H{
 		"message": "Backup started successfully",
 		"data": gin.H{
 			"backup": backup,
@@ -117,11 +119,11 @@ func GetBackups(c *gin.Context) {
 
 	var backups []models.Backup
 	if err := query.Find(&backups).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch backups"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch backups")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"data": gin.H{
 			"backups": backups,
 			"count":   len(backups),
@@ -145,19 +147,19 @@ func RestoreBackup(c *gin.Context) {
 
 	var req RestoreBackupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var backup models.Backup
 	if err := db.DB.First(&backup, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errBackupNotFound})
+		api_response.Error(c, http.StatusNotFound, errBackupNotFound)
 		return
 	}
 
 	// Can only restore completed backups
 	if backup.Status != "completed" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Can only restore completed backups"})
+		api_response.Error(c, http.StatusBadRequest, "Can only restore completed backups")
 		return
 	}
 
@@ -187,7 +189,7 @@ func RestoreBackup(c *gin.Context) {
 		db.DB.Save(&backup)
 	}()
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"message": "Restore started. This may take several minutes.",
 	})
 }
@@ -206,7 +208,7 @@ func DeleteBackup(c *gin.Context) {
 
 	var backup models.Backup
 	if err := db.DB.First(&backup, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errBackupNotFound})
+		api_response.Error(c, http.StatusNotFound, errBackupNotFound)
 		return
 	}
 
@@ -217,11 +219,11 @@ func DeleteBackup(c *gin.Context) {
 
 	// Delete from database
 	if err := db.DB.Delete(&backup).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete backup"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to delete backup")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Backup deleted successfully"})
+	api_response.Success(c, gin.H{"message": "Backup deleted successfully"})
 }
 
 // DownloadBackup downloads a backup file
@@ -238,19 +240,19 @@ func DownloadBackup(c *gin.Context) {
 
 	var backup models.Backup
 	if err := db.DB.First(&backup, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errBackupNotFound})
+		api_response.Error(c, http.StatusNotFound, errBackupNotFound)
 		return
 	}
 
 	if backup.Status != "completed" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Backup not ready for download"})
+		api_response.Error(c, http.StatusBadRequest, "Backup not ready for download")
 		return
 	}
 
 	// Generate signed URL or serve file directly
 	filePath, err := services.GetBackupService().GetBackupFilePath(backup.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to locate backup file"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to locate backup file")
 		return
 	}
 
@@ -271,26 +273,18 @@ func VerifyBackup(c *gin.Context) {
 
 	var backup models.Backup
 	if err := db.DB.First(&backup, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errBackupNotFound})
+		api_response.Error(c, http.StatusNotFound, errBackupNotFound)
 		return
 	}
 
 	isValid, err := services.GetBackupService().VerifyBackup(backup.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Verification failed",
-			"data": gin.H{
-				"valid": false,
-				"error": err.Error(),
-			},
-		})
+		api_response.Error(c, http.StatusInternalServerError, "Verification failed")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"valid": isValid,
-		},
+	api_response.Success(c, gin.H{
+		"valid": isValid,
 	})
 }
 
@@ -323,13 +317,11 @@ func GetBackupStats(c *gin.Context) {
 	storageUsed := stats.TotalSize
 	storageLimit := int64(10 * 1024 * 1024 * 1024) // 10 GB
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"overview":          stats,
-			"storageUsed":       storageUsed,
-			"storageLimit":      storageLimit,
-			"storagePercentage": float64(storageUsed) / float64(storageLimit) * 100,
-		},
+	api_response.Success(c, gin.H{
+		"overview":          stats,
+		"storageUsed":       storageUsed,
+		"storageLimit":      storageLimit,
+		"storagePercentage": float64(storageUsed) / float64(storageLimit) * 100,
 	})
 }
 
@@ -344,14 +336,12 @@ func GetBackupStats(c *gin.Context) {
 func GetDatabaseTables(c *gin.Context) {
 	tables, err := services.GetBackupService().GetDatabaseTables()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tables"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch tables")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"tables": tables,
-		},
+	api_response.Success(c, gin.H{
+		"tables": tables,
 	})
 }
 
@@ -367,29 +357,27 @@ func GetDatabaseTables(c *gin.Context) {
 func ScheduleBackup(c *gin.Context) {
 	var req ScheduleBackupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Validate day of week/month based on frequency
 	if req.Frequency == "weekly" && (req.DayOfWeek < 0 || req.DayOfWeek > 6) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Day of week must be 0-6"})
+		api_response.Error(c, http.StatusBadRequest, "Day of week must be 0-6")
 		return
 	}
 	if req.Frequency == "monthly" && (req.DayOfMonth < 1 || req.DayOfMonth > 31) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Day of month must be 1-31"})
+		api_response.Error(c, http.StatusBadRequest, "Day of month must be 1-31")
 		return
 	}
 
 	// Create schedule (would be stored in a schedules table or config)
 	// For now, just return success
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"message": "Backup scheduled successfully",
-		"data": gin.H{
-			"frequency": req.Frequency,
-			"time":      req.Time,
-		},
+		"frequency": req.Frequency,
+		"time":      req.Time,
 	})
 }
 
@@ -407,7 +395,7 @@ func GetBackupProgress(c *gin.Context) {
 
 	var backup models.Backup
 	if err := db.DB.First(&backup, idQuery, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errBackupNotFound})
+		api_response.Error(c, http.StatusNotFound, errBackupNotFound)
 		return
 	}
 
@@ -440,13 +428,11 @@ func GetBackupProgress(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"backupId": id,
-			"status":   backup.Status,
-			"percent":  percent,
-			"message":  message,
-			"eta":      eta,
-		},
+	api_response.Success(c, gin.H{
+		"backupId": id,
+		"status":   backup.Status,
+		"percent":  percent,
+		"message":  message,
+		"eta":      eta,
 	})
 }

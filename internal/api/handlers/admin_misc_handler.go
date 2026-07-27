@@ -15,8 +15,8 @@ import (
 
 	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
-	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/middleware"
+	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/services"
 	"thanawy-backend/internal/storage"
 
@@ -26,6 +26,17 @@ import (
 )
 
 const coalesceSumDuration = "COALESCE(SUM(duration_min), 0)"
+
+// GetCourseChangelog returns the workflow history for a course.
+func GetCourseChangelog(c *gin.Context) {
+	history, err := services.NewWorkflowService().GetCourseWorkflowHistory(c.Param("id"))
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch course changelog")
+		return
+	}
+
+	api_response.Success(c, gin.H{"changelog": history})
+}
 
 // AdminAI handles all AI-related admin operations
 func AdminAIGet(c *gin.Context) {
@@ -385,7 +396,7 @@ func AdminExamsBulkUpload(c *gin.Context) {
 func MarkActivityRead(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
@@ -415,7 +426,7 @@ func MarkActivityRead(c *gin.Context) {
 func MarkAllActivitiesRead(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
@@ -905,6 +916,134 @@ func GetAdminDashboard(c *gin.Context) {
 		})
 	}
 
+	// Fetch additional data for dashboard
+	var (
+		totalTeachers     int64
+		activeStudents    int64
+		publishedCourses  int64
+		draftCourses      int64
+		reviewCourses     int64
+		totalLessons      int64
+		totalEnrollments  int64
+		dailyRevenue      float64
+		monthlyRevenue    float64
+		yearlyRevenue     float64
+		pendingRevenue    float64
+		recentUsers       []models.User
+		recentTeachers    []models.User
+		recentCourses     []models.LmsCourse
+		recentOrders      []models.UserSubscription
+		recentPayments    []models.Payment
+		recentExams       []models.Exam
+		recentAssignments []models.Task
+		announcements     []models.Notification
+		liveClasses       []models.LiveSession
+		securityAlerts    []models.SecurityLog
+	)
+
+	// Fetch teachers count (users with TEACHER role)
+	db.DB.Model(&models.User{}).Where("deleted_at IS NULL AND role = ?", models.RoleTeacher).Count(&totalTeachers)
+
+	// Fetch active students (users with recent activity)
+	monthAgo := now.AddDate(0, -1, 0)
+	db.DB.Model(&models.User{}).Where("deleted_at IS NULL AND updated_at >= ?", monthAgo).Count(&activeStudents)
+
+	// Fetch course statistics
+	db.DB.Model(&models.LmsCourse{}).Where("deleted_at IS NULL AND status = ?", "PUBLISHED").Count(&publishedCourses)
+	db.DB.Model(&models.LmsCourse{}).Where("deleted_at IS NULL AND status = ?", "DRAFT").Count(&draftCourses)
+	db.DB.Model(&models.LmsCourse{}).Where("deleted_at IS NULL AND status = ?", "REVIEW").Count(&reviewCourses)
+	db.DB.Model(&models.Lesson{}).Where("deleted_at IS NULL").Count(&totalLessons)
+	db.DB.Model(&models.Enrollment{}).Where("deleted_at IS NULL").Count(&totalEnrollments)
+
+	// Fetch revenue data
+	db.DB.Model(&models.Payment{}).
+		Select("COALESCE(SUM(amount), 0)").
+		Where("deleted_at IS NULL AND created_at >= ?", todayStart).
+		Scan(&dailyRevenue)
+
+	db.DB.Model(&models.Payment{}).
+		Select("COALESCE(SUM(amount), 0)").
+		Where("deleted_at IS NULL AND created_at >= ?", weekAgo).
+		Scan(&monthlyRevenue)
+
+	db.DB.Model(&models.Payment{}).
+		Select("COALESCE(SUM(amount), 0)").
+		Where("deleted_at IS NULL AND created_at >= ?", sixMonthsAgo).
+		Scan(&yearlyRevenue)
+
+	db.DB.Model(&models.UserSubscription{}).
+		Select("COALESCE(SUM(sp.price), 0)").
+		Joins("LEFT JOIN \"SubscriptionPlan\" sp ON \"UserSubscription\".plan_id = sp.id").
+		Where("\"UserSubscription\".deleted_at IS NULL AND \"UserSubscription\".status = ?", "PENDING").
+		Scan(&pendingRevenue)
+
+	// Fetch recent items
+	wg.Add(8)
+	go func() {
+		defer wg.Done()
+		db.DB.Order(createdAtDescSort).Limit(5).Find(&recentUsers)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Where("deleted_at IS NULL AND role = ?", models.RoleTeacher).Order(createdAtDescSort).Limit(5).Find(&recentTeachers)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Order(createdAtDescSort).Limit(5).Find(&recentCourses)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Order(createdAtDescSort).Limit(5).Find(&recentOrders)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Order(createdAtDescSort).Limit(5).Find(&recentPayments)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Order(createdAtDescSort).Limit(5).Find(&recentExams)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Order(createdAtDescSort).Limit(5).Find(&recentAssignments)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Order(createdAtDescSort).Limit(5).Find(&announcements)
+	}()
+	wg.Wait()
+
+	// Fetch live classes and security alerts
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		db.DB.Where("deleted_at IS NULL AND status = ?", "LIVE").Order(createdAtDescSort).Limit(5).Find(&liveClasses)
+	}()
+	go func() {
+		defer wg.Done()
+		db.DB.Order(createdAtDescSort).Limit(5).Find(&securityAlerts)
+	}()
+	wg.Wait()
+
+	// Calculate growth rates
+	var newUsersThisMonth int64
+	db.DB.Model(&models.User{}).Where("deleted_at IS NULL AND created_at >= ?", monthAgo).Count(&newUsersThisMonth)
+
+	studentGrowthRate := float64(0)
+	if totalUsers > 0 {
+		studentGrowthRate = float64(newUsersThisWeek) / float64(totalUsers) * 100
+	}
+
+	var newTeachersToday int64
+	var newTeachersThisWeek int64
+	db.DB.Model(&models.User{}).Where("deleted_at IS NULL AND role = ? AND created_at >= ?", models.RoleTeacher, todayStart).Count(&newTeachersToday)
+	db.DB.Model(&models.User{}).Where("deleted_at IS NULL AND role = ? AND created_at >= ?", models.RoleTeacher, weekAgo).Count(&newTeachersThisWeek)
+
+	teacherGrowthRate := float64(0)
+	if totalTeachers > 0 {
+		teacherGrowthRate = float64(newTeachersThisWeek) / float64(totalTeachers) * 100
+	}
+
 	responsePayload := gin.H{
 		"stats": gin.H{
 			"totalUsers":       totalUsers,
@@ -931,6 +1070,62 @@ func GetAdminDashboard(c *gin.Context) {
 		},
 		"recentActivity": recentActivityItems,
 		"upcomingEvents": upcomingEvents,
+		// New data structure for frontend
+		"revenue": gin.H{
+			"dailyRevenue":   dailyRevenue,
+			"monthlyRevenue": monthlyRevenue,
+			"yearlyRevenue":  yearlyRevenue,
+			"pendingRevenue": pendingRevenue,
+			"dailyTrend":     calculateUserGrowthTrend(),
+			"monthlyTrend":   calculateUserGrowthTrend(),
+			"yearlyTrend":    calculateUserGrowthTrend(),
+		},
+		"users": gin.H{
+			"totalUsers":        totalUsers,
+			"activeStudents":    activeStudents,
+			"newUsersToday":     newUsersToday,
+			"newUsersThisWeek":  newUsersThisWeek,
+			"newUsersThisMonth": newUsersThisMonth,
+			"studentGrowthRate": studentGrowthRate,
+			"recentStudents":    recentUsers,
+		},
+		"teachers": gin.H{
+			"totalTeachers":       totalTeachers,
+			"activeTeachers":      totalTeachers,
+			"newTeachersToday":    newTeachersToday,
+			"newTeachersThisWeek": newTeachersThisWeek,
+			"teacherGrowthRate":   teacherGrowthRate,
+			"recentTeachers":      recentTeachers,
+		},
+		"courses": gin.H{
+			"totalCourses":      totalSubjects,
+			"publishedCourses":  publishedCourses,
+			"draftCourses":      draftCourses,
+			"reviewCourses":     reviewCourses,
+			"totalLessons":      totalLessons,
+			"totalEnrollments":  totalEnrollments,
+			"activeEnrollments": totalEnrollments,
+			"recentCourses":     recentCourses,
+		},
+		"payments": gin.H{
+			"recentOrders":   recentOrders,
+			"recentPayments": recentPayments,
+		},
+		"exams": gin.H{
+			"exams": recentExams,
+		},
+		"assignments": gin.H{
+			"assignments": recentAssignments,
+		},
+		"announcements": gin.H{
+			"announcements": announcements,
+		},
+		"live": gin.H{
+			"classes": liveClasses,
+		},
+		"security": gin.H{
+			"alerts": securityAlerts,
+		},
 	}
 
 	if db.Redis != nil {
@@ -1587,16 +1782,16 @@ func GetAdminInfrastructureStats(c *gin.Context) {
 	metrics := runtimeMetrics()
 
 	c.JSON(http.StatusOK, gin.H{
-		"goroutines":          numGoroutines,
-		"memoryMiB":           memoryMiB,
-		"totalAllocatedMiB":   totalAllocatedMiB,
-		"gcPauseTotalMs":      gcPauseTotalMs,
-		"dbStatus":            dbStatus,
-		"dbConnections":       dbConnections,
-		"redisLatency":        redisLatency,
-		"redisConnected":      redisConnected,
-		"queues":              queues,
-		"requestMetrics":      metrics,
+		"goroutines":        numGoroutines,
+		"memoryMiB":         memoryMiB,
+		"totalAllocatedMiB": totalAllocatedMiB,
+		"gcPauseTotalMs":    gcPauseTotalMs,
+		"dbStatus":          dbStatus,
+		"dbConnections":     dbConnections,
+		"redisLatency":      redisLatency,
+		"redisConnected":    redisConnected,
+		"queues":            queues,
+		"requestMetrics":    metrics,
 	})
 }
 

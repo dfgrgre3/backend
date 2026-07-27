@@ -119,7 +119,7 @@ func tryL1ResourcesCache(c *gin.Context, cacheKey string) bool {
 	if val, ok := l1ResourceCache.Load(cacheKey); ok {
 		entry := val.(*l1ResourceEntry)
 		if time.Now().Before(entry.expiresAt) {
-			c.JSON(http.StatusOK, entry.items)
+			api_response.Success(c, entry.items)
 			return true
 		}
 		l1ResourceCache.Delete(cacheKey)
@@ -142,7 +142,7 @@ func tryRedisResourcesCache(c *gin.Context, cacheKey string) bool {
 		items:     cachedItems,
 		expiresAt: time.Now().Add(l1ResourceTTL),
 	})
-	c.JSON(http.StatusOK, cachedItems)
+	api_response.Success(c, cachedItems)
 	return true
 }
 
@@ -208,7 +208,7 @@ func sendAdminResourcesResponse(c *gin.Context, items []gin.H, total int64, para
 		"page": params.page, "limit": params.limit, "total": total,
 		"totalPages": (total + int64(params.limit) - 1) / int64(params.limit),
 	}
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"success":    true,
 		"resources":  items,
 		"items":      items,
@@ -236,7 +236,7 @@ func sendPublicResourcesResponse(c *gin.Context, items []gin.H, params listResou
 			}(params.cacheKey, items)
 		}
 	}
-	c.JSON(http.StatusOK, items)
+	api_response.Success(c, items)
 }
 
 func formatResourceItem(resource models.Resource, admin bool) gin.H {

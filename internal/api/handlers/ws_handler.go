@@ -8,11 +8,13 @@ import (
 	"sync"
 	"time"
 
+	api_response "thanawy-backend/internal/api/response"
+	"thanawy-backend/internal/config"
+	"thanawy-backend/internal/db"
+
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
-	"thanawy-backend/internal/config"
-	"thanawy-backend/internal/db"
 )
 
 const redisBroadcastChannel = "websocket:broadcast"
@@ -267,7 +269,7 @@ func (c *Client) writePump() {
 func WSHandler(c *gin.Context) {
 	userIdValue, exists := c.Get("userId")
 	if !exists || userIdValue == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 	userID := userIdValue.(string)

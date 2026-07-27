@@ -25,7 +25,7 @@ type BackupCronWorker struct {
 
 var (
 	backupCronInstance *BackupCronWorker
-	backupCronOnce    sync.Once
+	backupCronOnce     sync.Once
 )
 
 // GetBackupCronWorker returns the singleton backup cron worker.
@@ -121,7 +121,7 @@ func runScheduledBackup() error {
 	defer os.Remove(localPath) // always clean up
 
 	// ── 4. Upload to S3 / Supabase Storage ─────────────────────────────────────
-	if err := uploadBackupToS3(backupID, localPath, compressedBuf.Bytes()); err != nil {
+	if err := uploadBackupToS3(backupID, compressedBuf.Bytes()); err != nil {
 		// Log but don't fail – the local copy is still useful for debugging.
 		log.Printf("[BackupCron] S3 upload failed for %s: %v", backupID, err)
 	}
@@ -130,7 +130,7 @@ func runScheduledBackup() error {
 }
 
 // uploadBackupToS3 uploads a gzipped SQL file to the configured S3-compatible bucket.
-func uploadBackupToS3(backupID, localPath string, data []byte) error {
+func uploadBackupToS3(backupID string, data []byte) error {
 	endpoint := os.Getenv("S3_ENDPOINT")
 	accessKey := os.Getenv("S3_ACCESS_KEY")
 	secretKey := os.Getenv("S3_SECRET_KEY")

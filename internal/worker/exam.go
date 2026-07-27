@@ -397,5 +397,9 @@ func (h *ExamGenerationHandler) persistExamStub(ctx context.Context, p ExamGener
 // endpoint reuses this to verify that the caller owns the job. Exposed for
 // handlers (handlers package) to call without a circular import.
 func JWTSecret() []byte {
-	return []byte(strings.TrimSpace(os.Getenv("JWT_SECRET")))
+	secret := strings.TrimSpace(os.Getenv("JWT_SECRET_KEY"))
+	if secret == "" {
+		secret = strings.TrimSpace(os.Getenv("JWT_SECRET"))
+	}
+	return []byte(secret)
 }

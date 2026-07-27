@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/cqrs/queries"
 
 	"github.com/gin-gonic/gin"
@@ -14,18 +15,18 @@ var (
 func GetTimeAnalytics(c *gin.Context) {
 	userIdValue, exists := c.Get("userId")
 	if !exists || userIdValue == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 	userId := userIdValue.(string)
 
 	result, err := analyticsQuery.GetTimeAnalytics(userId)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch time analytics"})
+		response.Error(c, http.StatusInternalServerError, "Failed to fetch time analytics")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.Success(c, gin.H{
 		"totalStudyMinutes": result.TotalStudyMinutes,
 		"totalSessions":     result.TotalSessions,
 		"totalTasks":        result.TotalTasks,

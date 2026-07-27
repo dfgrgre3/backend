@@ -253,7 +253,30 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{
-		"message": "If an account with this email exists, a password reset link has been sent.",
+		"message": "If an account with this email exists, a verification code has been sent.",
+	})
+}
+
+// ─────────────────────────────────────────────
+//  Verify Forgot Password Code
+// ─────────────────────────────────────────────
+
+func (h *AuthHandler) VerifyForgotPasswordCode(c *gin.Context) {
+	var req dto.VerifyForgotPasswordCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
+		return
+	}
+
+	resetToken, err := h.authService.VerifyForgotPasswordCode(c.Request.Context(), req.Email, req.Code)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	response.Success(c, dto.VerifyForgotPasswordCodeResponse{
+		ResetToken: resetToken,
+		Message:    "Code verified successfully. You can now reset your password.",
 	})
 }
 

@@ -27,11 +27,8 @@ import (
 )
 
 const (
-	msgSubjectNotFound      = "Subject not found"
 	preloadTopicsSubTopics  = "Topics.SubTopics"
 	preloadAdvanced         = "Topics.SubTopics.Attachments"
-	msgUserNotAuthenticated = "User not authenticated"
-	msgInvalidInput         = "Invalid input"
 	subjectIDQuery          = "subject_id = ?"
 	subjectIDQuotedQuery    = "subject_id = ?"
 )
@@ -501,20 +498,6 @@ func EnrollCourse(c *gin.Context) {
 	cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), subject.ID)
 
 	api_response.Success(c, gin.H{"success": true, "message": "Enrolled successfully"})
-}
-
-func getAuthenticatedUserID(c *gin.Context) (string, bool) {
-	userIdValue, exists := c.Get("userId")
-	if !exists || userIdValue == nil {
-		api_response.Error(c, http.StatusUnauthorized, msgUserNotAuthenticated)
-		return "", false
-	}
-	userId, ok := userIdValue.(string)
-	if !ok {
-		api_response.Error(c, http.StatusInternalServerError, "Invalid user ID type")
-		return "", false
-	}
-	return userId, true
 }
 
 func handleSubjectError(c *gin.Context, id string, err error, contextMsg string) {
@@ -1198,7 +1181,7 @@ func GetUserSubjects(c *gin.Context) {
 		Limit(limit).
 		Offset(offset).
 		Find(&enrollments).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch enrollments"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch enrollments")
 		return
 	}
 
@@ -1523,7 +1506,7 @@ func CreateCourseReview(c *gin.Context) {
 
 	var review models.CourseReview
 	if err := c.ShouldBindJSON(&review); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": msgInvalidInput})
+		api_response.Error(c, http.StatusBadRequest, msgInvalidInput)
 		return
 	}
 
@@ -1531,7 +1514,7 @@ func CreateCourseReview(c *gin.Context) {
 	review.SubjectID = subject.ID
 
 	if err := SafeCreate(db.DB, &review); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create review"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create review")
 		return
 	}
 
@@ -1553,11 +1536,9 @@ func CreateCourseReview(c *gin.Context) {
 
 	cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), subject.ID)
 
-	c.JSON(http.StatusCreated, gin.H{
-		"data": gin.H{
-			"review":    review,
-			"xpAwarded": xpAmount,
-		},
+	api_response.Success(c, gin.H{
+		"review":    review,
+		"xpAwarded": xpAmount,
 	})
 }
 
@@ -1589,11 +1570,11 @@ func GetCourseReviews(c *gin.Context) {
 		Limit(limit).
 		Offset(offset).
 		Find(&reviews).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch reviews"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch reviews")
 		return
 	}
 
-	c.JSON(http.StatusOK, reviews)
+	api_response.Success(c, reviews)
 }
 
 // DuplicateCourse duplicates an existing course (Subject) along with its topics, subtopics, and attachments

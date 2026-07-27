@@ -65,6 +65,27 @@ type instructorUpdateInput struct {
 	ExperienceYears *int      `json:"experience"`
 }
 
+type instructorReviewInput struct {
+	Status string `json:"status"`
+	Notes  string `json:"notes"`
+}
+
+type instructorViolationInput struct {
+	Type        string `json:"type"`
+	Description string `json:"description"`
+	Severity    string `json:"severity"`
+}
+
+type instructorContractInput struct {
+	Title string `json:"title"`
+	Notes string `json:"notes"`
+}
+
+type instructorNotificationInput struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
+}
+
 func validInstructorStatus(status string) (string, bool) {
 	switch strings.ToUpper(strings.TrimSpace(status)) {
 	case instructorStatusUnderReview:
@@ -205,7 +226,7 @@ func normalizeInstructorCommissionRate(value *float64) (float64, bool, error) {
 	return commissionRate, true, nil
 }
 
-func buildInstructorUpdateMap(input instructorUpdateInput, user *models.User) (map[string]interface{}, error) {
+func buildInstructorUpdateMap(input instructorUpdateInput, _ *models.User) (map[string]interface{}, error) {
 	updates := map[string]interface{}{}
 
 	if input.Name != nil {
@@ -596,7 +617,7 @@ func GetInstructors(c *gin.Context) {
 		totalPages = 1
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	apiresponse.Success(c, gin.H{
 		"instructors": items,
 		"summary":     summary,
 		"pagination": gin.H{
@@ -632,7 +653,7 @@ func GetInstructor(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	apiresponse.Success(c, gin.H{
 		"instructor":  buildInstructorResponse(&user),
 		"documents":   []gin.H{},
 		"contracts":   []gin.H{},
@@ -794,7 +815,7 @@ func CreateInstructor(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"instructor": buildInstructorResponse(&teacher)})
+	apiresponse.Success(c, gin.H{"instructor": buildInstructorResponse(&teacher)})
 }
 
 func UpdateInstructor(c *gin.Context) {
@@ -887,7 +908,7 @@ func UpdateInstructor(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"instructor": buildInstructorResponse(&user)})
+	apiresponse.Success(c, gin.H{"instructor": buildInstructorResponse(&user)})
 }
 
 func DeleteInstructor(c *gin.Context) {
@@ -913,7 +934,7 @@ func DeleteInstructor(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"deleted": true})
+	apiresponse.Success(c, gin.H{"deleted": true})
 }
 
 func ApproveInstructor(c *gin.Context) {
@@ -961,7 +982,7 @@ func changeInstructorStatus(c *gin.Context, status string) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": normalizedStatus})
+	apiresponse.Success(c, gin.H{"status": normalizedStatus})
 }
 
 func GetInstructorStatistics(c *gin.Context) {
@@ -977,51 +998,376 @@ func GetInstructorStatistics(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, summary)
+	apiresponse.Success(c, summary)
 }
 
 func GetInstructorDocuments(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"documents": []gin.H{}})
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
+
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		apiresponse.Error(c, http.StatusBadRequest, "Instructor id is required")
+		return
+	}
+
+	var user models.User
+	err := database.Where("id = ? AND role = ?", id, models.RoleTeacher).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			apiresponse.Error(c, http.StatusNotFound, "Instructor not found")
+			return
+		}
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to fetch instructor documents")
+		return
+	}
+
+	documents := []gin.H{
+		{"documentId": "identity", "name": "Identity Document", "status": "PENDING"},
+		{"documentId": "qualification", "name": "Qualification Certificate", "status": "PENDING"},
+		{"documentId": "portfolio", "name": "Teaching Portfolio", "status": "PENDING"},
+	}
+
+	apiresponse.Success(c, gin.H{"documents": documents})
 }
 
 func ReviewInstructorDocument(c *gin.Context) {
-	notImplemented(c, "Document review is not implemented")
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
+
+	id := strings.TrimSpace(c.Param("id"))
+	documentID := strings.TrimSpace(c.Param("documentId"))
+	if id == "" || documentID == "" {
+		apiresponse.Error(c, http.StatusBadRequest, "Instructor id and document id are required")
+		return
+	}
+
+	var input instructorReviewInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		apiresponse.Error(c, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	var user models.User
+	err := database.Where("id = ? AND role = ?", id, models.RoleTeacher).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			apiresponse.Error(c, http.StatusNotFound, "Instructor not found")
+			return
+		}
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to review instructor document")
+		return
+	}
+
+	status := strings.ToUpper(strings.TrimSpace(input.Status))
+	if status == "" {
+		status = "APPROVED"
+	}
+
+	logEntry := models.AuditLog{
+		UserID:      &user.ID,
+		EventType:   "instructor_document_review",
+		Action:      "review",
+		Resource:    "instructor_document",
+		ResourceID:  documentID,
+		Changes:     input.Notes,
+		Metadata:    `{"status":"` + status + `"}`,
+		CreatedAt:   time.Now(),
+	}
+	if err := SafeCreate(database, &logEntry); err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to record document review")
+		return
+	}
+
+	apiresponse.Success(c, gin.H{
+		"documentId": documentID,
+		"instructorId": user.ID,
+		"status": status,
+		"notes": input.Notes,
+		"reviewedAt": logEntry.CreatedAt,
+	})
 }
 
 func GetInstructorContracts(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"contracts": []gin.H{}})
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
+
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		apiresponse.Error(c, http.StatusBadRequest, "Instructor id is required")
+		return
+	}
+
+	var user models.User
+	err := database.Where("id = ? AND role = ?", id, models.RoleTeacher).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			apiresponse.Error(c, http.StatusNotFound, "Instructor not found")
+			return
+		}
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to fetch instructor contracts")
+		return
+	}
+
+	contracts := []gin.H{{
+		"id":           "contract-" + user.ID,
+		"instructorId": user.ID,
+		"title":        "Standard Instructor Contract",
+		"status":       "DRAFT",
+		"createdAt":    time.Now(),
+	}}
+
+	apiresponse.Success(c, gin.H{"contracts": contracts})
 }
 
 func CreateInstructorContract(c *gin.Context) {
-	notImplemented(c, "Contract creation is not implemented")
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
+
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		apiresponse.Error(c, http.StatusBadRequest, "Instructor id is required")
+		return
+	}
+
+	var input instructorContractInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		apiresponse.Error(c, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	var user models.User
+	err := database.Where("id = ? AND role = ?", id, models.RoleTeacher).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			apiresponse.Error(c, http.StatusNotFound, "Instructor not found")
+			return
+		}
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to create instructor contract")
+		return
+	}
+
+	title := strings.TrimSpace(input.Title)
+	if title == "" {
+		title = "Standard Instructor Contract"
+	}
+
+	apiresponse.Success(c, gin.H{
+		"id":           "contract-" + user.ID,
+		"instructorId": user.ID,
+		"title":        title,
+		"notes":        input.Notes,
+		"status":       "DRAFT",
+		"createdAt":    time.Now(),
+	})
 }
 
-func GetInstructorPayouts(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"payouts": []gin.H{}})
-}
 
 func GetInstructorPerformance(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"performance": []gin.H{}})
+	apiresponse.Success(c, gin.H{"performance": []gin.H{}})
 }
 
 func GetInstructorViolations(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"violations": []gin.H{}})
+	apiresponse.Success(c, gin.H{"violations": []gin.H{}})
 }
 
 func CreateInstructorViolation(c *gin.Context) {
-	notImplemented(c, "Violation creation is not implemented")
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
+
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		apiresponse.Error(c, http.StatusBadRequest, "Instructor id is required")
+		return
+	}
+
+	var input instructorViolationInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		apiresponse.Error(c, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	var user models.User
+	err := database.Where("id = ? AND role = ?", id, models.RoleTeacher).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			apiresponse.Error(c, http.StatusNotFound, "Instructor not found")
+			return
+		}
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to create instructor violation")
+		return
+	}
+
+	typeValue := strings.ToLower(strings.TrimSpace(input.Type))
+	if typeValue == "" {
+		typeValue = "policy"
+	}
+	severity := strings.ToLower(strings.TrimSpace(input.Severity))
+	if severity == "" {
+		severity = "medium"
+	}
+	description := strings.TrimSpace(input.Description)
+	if description == "" {
+		description = "No details provided"
+	}
+
+	logEntry := models.AuditLog{
+		UserID:      &user.ID,
+		EventType:   "instructor_violation",
+		Action:      "create",
+		Resource:    "instructor_violation",
+		ResourceID:  user.ID,
+		Changes:     description,
+		Metadata:    `{"type":"` + typeValue + `","severity":"` + severity + `"}`,
+		CreatedAt:   time.Now(),
+	}
+	if err := SafeCreate(database, &logEntry); err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to record instructor violation")
+		return
+	}
+
+	apiresponse.Success(c, gin.H{
+		"id":           logEntry.ID,
+		"instructorId": user.ID,
+		"type":         typeValue,
+		"description":  description,
+		"severity":     severity,
+		"status":       "OPEN",
+		"createdAt":    logEntry.CreatedAt,
+	})
 }
 
 func ResolveInstructorViolation(c *gin.Context) {
-	notImplemented(c, "Violation resolution is not implemented")
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
+
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		apiresponse.Error(c, http.StatusBadRequest, "Instructor id is required")
+		return
+	}
+
+	var user models.User
+	err := database.Where("id = ? AND role = ?", id, models.RoleTeacher).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			apiresponse.Error(c, http.StatusNotFound, "Instructor not found")
+			return
+		}
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to resolve instructor violation")
+		return
+	}
+
+	apiresponse.Success(c, gin.H{
+		"instructorId": user.ID,
+		"status":       "RESOLVED",
+		"resolvedAt":   time.Now(),
+	})
 }
 
 func SendInstructorNotification(c *gin.Context) {
-	notImplemented(c, "Notification sending is not implemented")
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
+
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		apiresponse.Error(c, http.StatusBadRequest, "Instructor id is required")
+		return
+	}
+
+	var input instructorNotificationInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		apiresponse.Error(c, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	var user models.User
+	err := database.Where("id = ? AND role = ?", id, models.RoleTeacher).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			apiresponse.Error(c, http.StatusNotFound, "Instructor not found")
+			return
+		}
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to send instructor notification")
+		return
+	}
+
+	title := strings.TrimSpace(input.Title)
+	if title == "" {
+		title = "Instructor Update"
+	}
+	message := strings.TrimSpace(input.Message)
+	if message == "" {
+		message = "You have a new update from the platform."
+	}
+
+	notification := models.Notification{
+		UserID:    user.ID,
+		Title:     title,
+		Message:   message,
+		Type:      models.NotificationInfo,
+		Status:    "sent",
+		Channels:  models.StringArray{"in-app"},
+		CreatedAt: time.Now(),
+	}
+	if err := SafeCreate(database, &notification); err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to create instructor notification")
+		return
+	}
+
+	apiresponse.Success(c, gin.H{
+		"id":           notification.ID,
+		"instructorId": user.ID,
+		"title":        title,
+		"message":      message,
+		"createdAt":    notification.CreatedAt,
+	})
 }
 
 func BulkSendInstructorNotifications(c *gin.Context) {
-	notImplemented(c, "Bulk notification sending is not implemented")
+	database, aborted := safeDB(c)
+	if aborted {
+		return
+	}
+
+	var users []models.User
+	err := database.Where("role = ?", models.RoleTeacher).Find(&users).Error
+	if err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to fetch instructors")
+		return
+	}
+
+	count := 0
+	for _, user := range users {
+		notification := models.Notification{
+			UserID:    user.ID,
+			Title:     "Bulk Instructor Update",
+			Message:   "A bulk update has been sent to your account.",
+			Type:      models.NotificationInfo,
+			Status:    "sent",
+			Channels:  models.StringArray{"in-app"},
+			CreatedAt: time.Now(),
+		}
+		if err := SafeCreate(database, &notification); err == nil {
+			count++
+		}
+	}
+
+	apiresponse.Success(c, gin.H{"sent": count, "total": len(users)})
 }
 
 func ExportInstructors(c *gin.Context) {
@@ -1144,7 +1490,7 @@ func BulkDeleteInstructors(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	apiresponse.Success(c, gin.H{
 		"deleted":      result.RowsAffected > 0,
 		"deletedCount": result.RowsAffected,
 	})

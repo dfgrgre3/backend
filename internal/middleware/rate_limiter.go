@@ -242,10 +242,13 @@ func AuthRateLimiter() gin.HandlerFunc {
 }
 
 // GlobalRateLimiter provides rate limiting for all API requests
+// FAIL CLOSED: if Redis is unavailable, deny requests to prevent DDoS bypass.
 func GlobalRateLimiter(limit int, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if db.Redis == nil {
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+				"error": rateLimiterUnavailable,
+			})
 			return
 		}
 		NewRateLimiter(db.Redis).RateLimitByIP(limit, window)(c)
@@ -253,10 +256,13 @@ func GlobalRateLimiter(limit int, window time.Duration) gin.HandlerFunc {
 }
 
 // AIRateLimiter provides rate limiting for AI requests
+// FAIL CLOSED: if Redis is unavailable, deny requests to prevent abuse bypass.
 func AIRateLimiter() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if db.Redis == nil {
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+				"error": rateLimiterUnavailable,
+			})
 			return
 		}
 		rl := NewRateLimiter(db.Redis)
@@ -273,10 +279,13 @@ func AIRateLimiter() gin.HandlerFunc {
 }
 
 // WebSocketRateLimiter provides rate limiting for WebSocket connections
+// FAIL CLOSED: if Redis is unavailable, deny requests to prevent abuse bypass.
 func WebSocketRateLimiter() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if db.Redis == nil {
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+				"error": rateLimiterUnavailable,
+			})
 			return
 		}
 		rl := NewRateLimiter(db.Redis)

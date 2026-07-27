@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -32,6 +33,7 @@ func StartAnalyticsBatchWorker() {
 
 	if err := ensureConsumerGroup(); err != nil {
 		log.Printf("[AnalyticsWorker] Failed to setup consumer group: %v", err)
+		log.Println("[AnalyticsWorker] Analytics batch worker disabled. Analytics events will not be processed in batch.")
 		return
 	}
 
@@ -51,8 +53,16 @@ func ensureConsumerGroup() error {
 		analyticsConsumerGroup,
 		"$",
 	).Err()
-	if err != nil && !hasPrefix(err.Error(), "BUSYGROUP") {
-		return err
+	if err != nil {
+		// Check if the error is due to Redis Streams not being supported
+		if err.Error() == "ERR unknown command 'xgroup'" || err.Error() == "ERR unknown command 'XGROUP'" {
+			log.Println("[AnalyticsWorker] Redis Streams not supported (Redis version < 5.0 or Streams disabled). Analytics batch worker disabled.")
+			return fmt.Errorf("redis streams not supported")
+		}
+		// If the group already exists, that's fine
+		if !hasPrefix(err.Error(), "BUSYGROUP") {
+			return err
+		}
 	}
 	return nil
 }

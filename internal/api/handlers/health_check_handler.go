@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"runtime"
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/logger"
 
@@ -67,15 +68,6 @@ func HealthCheck(c *gin.Context) {
 	responseCheck := checkResponseTimeHealth(c)
 	checks["response_time"] = responseCheck
 
-	// Determine HTTP status code
-	statusCode := http.StatusOK
-	switch overallStatus {
-	case "degraded":
-		statusCode = http.StatusOK // Still OK but degraded
-	case "critical":
-		statusCode = http.StatusServiceUnavailable
-	}
-
 	response := HealthResponse{
 		Status:    overallStatus,
 		Timestamp: time.Now().Format(time.RFC3339),
@@ -89,7 +81,7 @@ func HealthCheck(c *gin.Context) {
 		response.Message = "System is degraded. Some services may be impaired."
 	}
 
-	c.JSON(statusCode, response)
+	api_response.Success(c, response)
 	logger.Info(fmt.Sprintf("Health check - Status: %s", overallStatus), map[string]interface{}{
 		"overall_status": overallStatus,
 		"database":       dbCheck.Status,
@@ -261,7 +253,7 @@ func checkResponseTimeHealth(_ *gin.Context) Check {
 // LivenessCheck returns 200 if the service is alive
 // Used by Kubernetes liveness probes
 func LivenessCheck(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"status":    "alive",
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
@@ -276,15 +268,11 @@ func ReadinessCheck(c *gin.Context) {
 	// Check if database is accessible
 	var result int
 	if err := db.DB.WithContext(ctx).Raw("SELECT 1").Scan(&result).Error; err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status": "not_ready",
-			"reason": "database_unavailable",
-			"error":  err.Error(),
-		})
+		api_response.Error(c, http.StatusServiceUnavailable, "database_unavailable")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"status":    "ready",
 		"timestamp": time.Now().Format(time.RFC3339),
 	})

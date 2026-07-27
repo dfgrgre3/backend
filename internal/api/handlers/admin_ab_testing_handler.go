@@ -106,6 +106,25 @@ func AdminDeleteABTest(c *gin.Context) {
 	api_response.Success(c, nil)
 }
 
+// AdminGetABVariant resolves a stable server-side assignment for an existing experiment.
+func AdminGetABVariant(c *gin.Context) {
+	// Never trust a browser-supplied userId for allocation. The authenticated
+	// identity is populated by Auth() and is the only identity eligible here.
+	userID := c.GetString("userId")
+	if userID == "" {
+		api_response.Error(c, http.StatusUnauthorized, "authenticated user is required")
+		return
+	}
+
+	variant, err := abTestingService.ResolveVariant(c.Request.Context(), c.Param("id"), userID)
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	api_response.Success(c, gin.H{"variant": variant})
+}
+
 // AdminTrackABEvent tracks an event for a specific experiment variant
 func AdminTrackABEvent(c *gin.Context) {
 	id := c.Param("id")
@@ -119,7 +138,17 @@ func AdminTrackABEvent(c *gin.Context) {
 		return
 	}
 
-	if err := abTestingService.TrackEvent(c.Request.Context(), id, input.UserID, input.Event); err != nil {
+	authenticatedUserID := c.GetString("userId")
+	if authenticatedUserID == "" {
+		api_response.Error(c, http.StatusUnauthorized, "authenticated user is required")
+		return
+	}
+	if input.UserID != "" && input.UserID != authenticatedUserID {
+		api_response.Error(c, http.StatusForbidden, "userId must match the authenticated user")
+		return
+	}
+
+	if err := abTestingService.TrackEvent(c.Request.Context(), id, authenticatedUserID, input.Event); err != nil {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}

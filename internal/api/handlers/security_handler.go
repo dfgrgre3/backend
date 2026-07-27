@@ -28,13 +28,13 @@ func getSecurityLogRepo() *repository.SecurityLogRepository {
 func GetSecurityLogs(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
 	userIdStr, ok := userId.(string)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID in session"})
+		api_response.Error(c, http.StatusUnauthorized, "Invalid user ID in session")
 		return
 	}
 
@@ -47,11 +47,11 @@ func GetSecurityLogs(c *gin.Context) {
 	logs, err := getSecurityLogRepo().FindByUserID(userIdStr, limit)
 	if err != nil {
 		fmt.Printf("Error fetching security logs for user %s: %v\n", userIdStr, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch security logs", "details": err.Error()})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch security logs")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"logs": logs,
 	})
 }
@@ -59,7 +59,7 @@ func GetSecurityLogs(c *gin.Context) {
 func GetSecurityLogsForUser(c *gin.Context) {
 	userID := c.Param("id")
 	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user id is required"})
+		api_response.Error(c, http.StatusBadRequest, "user id is required")
 		return
 	}
 
@@ -72,11 +72,11 @@ func GetSecurityLogsForUser(c *gin.Context) {
 	logs, err := getSecurityLogRepo().FindByUserID(userID, limit)
 	if err != nil {
 		fmt.Printf("Error fetching security logs for user %s: %v\n", userID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch security logs", "details": err.Error()})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch security logs")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"logs": logs,
 	})
 }

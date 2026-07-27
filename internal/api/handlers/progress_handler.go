@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"thanawy-backend/internal/cqrs/queries"
 
+	apiresponse "thanawy-backend/internal/api/response"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -24,11 +26,11 @@ func GetProgressSummary(c *gin.Context) {
 
 	summary, err := progressQuery.GetSummary(uid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get progress summary"})
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to get progress summary")
 		return
 	}
 
-	c.JSON(http.StatusOK, ProgressSummary{
+	apiresponse.Success(c, ProgressSummary{
 		TotalMinutes:   summary.TotalMinutes,
 		AverageFocus:   summary.AverageFocus,
 		TasksCompleted: summary.TasksCompleted,
@@ -39,16 +41,16 @@ func GetProgressSummary(c *gin.Context) {
 func GetWeeklyAnalytics(c *gin.Context) {
 	userIdValue, exists := c.Get("userId")
 	if !exists || userIdValue == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		apiresponse.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 	userId := userIdValue.(string)
 
 	result, err := progressQuery.GetWeeklyAnalytics(userId)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get weekly analytics"})
+		apiresponse.Error(c, http.StatusInternalServerError, "Failed to get weekly analytics")
 		return
 	}
 
-	c.JSON(http.StatusOK, result)
+	apiresponse.Success(c, result)
 }

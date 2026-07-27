@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"thanawy-backend/internal/monitoring"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -49,8 +50,6 @@ func getSlowRequestThreshold() time.Duration {
 func PerformanceMonitor() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-		path := c.Request.URL.Path
-		raw := c.Request.URL.RawQuery
 		method := c.Request.Method
 
 		// Track active requests
@@ -62,13 +61,23 @@ func PerformanceMonitor() gin.HandlerFunc {
 		// Process request
 		c.Next()
 
-		// Calculate duration
+		// Calculate duration and resolve the registered route template only after handlers run.
 		duration := time.Since(start)
 		status := c.Writer.Status()
-
-		if raw != "" {
-			path = path + "?" + raw
+		path := c.FullPath()
+		if path == "" {
+			path = "unmatched"
 		}
+		timestamp := time.Now().UTC()
+
+		monitoring.RecordHTTPRequest(monitoring.HTTPRequestMetric{
+			Timestamp:  timestamp,
+			Route:      path,
+			Method:     method,
+			Status:     status,
+			DurationMS: duration.Milliseconds(),
+			Slow:       duration > slowRequestThreshold,
+		})
 
 		// Update metrics
 		globalMetrics.mu.Lock()
@@ -110,15 +119,15 @@ func GetMetrics() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total_requests":       globalMetrics.totalRequests,
-		"active_requests":      globalMetrics.activeRequests,
-		"error_requests":       globalMetrics.errorRequests,
-		"slow_requests":        globalMetrics.slowRequests,
-		"status_counts":        globalMetrics.statusCounts,
-		"method_counts":        globalMetrics.methodCounts,
-		"avg_latencies":        avgLatencies,
-		"slow_threshold_ms":    slowRequestThreshold.Milliseconds(),
-		"uptime":               time.Now().Format(time.RFC3339),
+		"total_requests":    globalMetrics.totalRequests,
+		"active_requests":   globalMetrics.activeRequests,
+		"error_requests":    globalMetrics.errorRequests,
+		"slow_requests":     globalMetrics.slowRequests,
+		"status_counts":     globalMetrics.statusCounts,
+		"method_counts":     globalMetrics.methodCounts,
+		"avg_latencies":     avgLatencies,
+		"slow_threshold_ms": slowRequestThreshold.Milliseconds(),
+		"uptime":            time.Now().Format(time.RFC3339),
 	}
 }
 

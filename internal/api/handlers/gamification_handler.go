@@ -90,12 +90,12 @@ func CreateCustomGoal(c *gin.Context) {
 		XPReward     int     `json:"xpReward"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if input.UserID != "" && input.UserID != userID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Cannot create goals for another user"})
+		api_response.Error(c, http.StatusForbidden, "Cannot create goals for another user")
 		return
 	}
 
@@ -103,7 +103,7 @@ func CreateCustomGoal(c *gin.Context) {
 	input.Unit = strings.TrimSpace(input.Unit)
 	input.Category = strings.TrimSpace(input.Category)
 	if input.Title == "" || input.TargetValue <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "title and a positive targetValue are required"})
+		api_response.Error(c, http.StatusBadRequest, "title and a positive targetValue are required")
 		return
 	}
 	if input.Unit == "" {
@@ -133,10 +133,10 @@ func CreateCustomGoal(c *gin.Context) {
 	}
 
 	if err := db.DB.Create(&goal).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create custom goal"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create custom goal")
 		return
 	}
-	c.JSON(http.StatusCreated, goal)
+	api_response.Success(c, goal)
 }
 
 func UpdateCustomGoal(c *gin.Context) {
@@ -145,17 +145,17 @@ func UpdateCustomGoal(c *gin.Context) {
 		CurrentValue float64 `json:"currentValue"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var goal models.CustomGoal
 	if err := db.DB.First(&goal, "id = ? AND \"userId\" = ?", c.Param("id"), userID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Custom goal not found"})
+			api_response.Error(c, http.StatusNotFound, "Custom goal not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch custom goal"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch custom goal")
 		return
 	}
 
@@ -172,10 +172,10 @@ func UpdateCustomGoal(c *gin.Context) {
 	}
 
 	if err := db.DB.Save(&goal).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update custom goal"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to update custom goal")
 		return
 	}
-	c.JSON(http.StatusOK, goal)
+	api_response.Success(c, goal)
 }
 
 // GetUserAchievements returns achievements for a specific user

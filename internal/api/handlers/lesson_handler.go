@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
+	"time"
+
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
-	"time"
+	"thanawy-backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -15,7 +19,7 @@ import (
 func GetLessons(c *gin.Context) {
 	authUserID, exists := c.Get("userId")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 	authUserIDStr, _ := authUserID.(string)
@@ -31,7 +35,7 @@ func GetLessons(c *gin.Context) {
 	isAdmin := roleStr == "ADMIN" || roleStr == "SUPER_ADMIN" || roleStr == "MODERATOR"
 
 	if userId != authUserIDStr && !isAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You are not authorized to view these lessons"})
+		api_response.Error(c, http.StatusForbidden, "You are not authorized to view these lessons")
 		return
 	}
 
@@ -58,11 +62,11 @@ func GetLessons(c *gin.Context) {
 		Offset(offset).
 		WithContext(c.Request.Context()).
 		Find(&lessons).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch lessons"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch lessons")
 		return
 	}
 
-	c.JSON(http.StatusOK, lessons)
+	api_response.Success(c, lessons)
 }
 
 // CreateLesson creates a new scheduled lesson
@@ -81,7 +85,7 @@ func CreateLesson(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -91,7 +95,7 @@ func CreateLesson(c *gin.Context) {
 		// Try alternative format
 		startTime, err = time.Parse("2006-01-02T15:04:05Z07:00", input.StartTime)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid startTime format"})
+			api_response.Error(c, http.StatusBadRequest, "Invalid startTime format")
 			return
 		}
 	}
@@ -100,7 +104,7 @@ func CreateLesson(c *gin.Context) {
 	if err != nil {
 		endTime, err = time.Parse("2006-01-02T15:04:05Z07:00", input.EndTime)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid endTime format"})
+			api_response.Error(c, http.StatusBadRequest, "Invalid endTime format")
 			return
 		}
 	}
@@ -109,10 +113,10 @@ func CreateLesson(c *gin.Context) {
 	var teacher models.User
 	if err := db.DB.Where("id = ? AND role = ?", input.TeacherID, models.RoleTeacher).First(&teacher).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Teacher not found"})
+			api_response.Error(c, http.StatusNotFound, "Teacher not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify teacher"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to verify teacher")
 		return
 	}
 
@@ -126,12 +130,109 @@ func CreateLesson(c *gin.Context) {
 	}
 
 	if err := SafeCreate(db.DB, &lesson); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create lesson"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create lesson")
 		return
 	}
 
 	// Reload with teacher info
 	db.DB.Preload("Teacher").First(&lesson, lesson.ID)
 
-	c.JSON(http.StatusCreated, lesson)
+	api_response.Success(c, lesson)
+}
+
+// TrackLessonView updates the authenticated user's view statistics for a lesson.
+func TrackLessonView(c *gin.Context) {
+	userID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		return
+	}
+
+	var input struct {
+		WatchTimeSeconds    int  `json:"watchTimeSeconds"`
+		LastPositionSeconds int  `json:"lastPositionSeconds"`
+		Completed           bool `json:"completed"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
+		return
+	}
+	if input.WatchTimeSeconds < 0 || input.LastPositionSeconds < 0 {
+		api_response.Error(c, http.StatusBadRequest, "View times cannot be negative")
+		return
+	}
+
+	lessonID := c.Param("id")
+	var lesson models.SubTopic
+	if err := db.DB.WithContext(c.Request.Context()).First(&lesson, "id = ?", lessonID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			api_response.Error(c, http.StatusNotFound, "Lesson not found")
+			return
+		}
+		api_response.Error(c, http.StatusInternalServerError, "Failed to verify lesson")
+		return
+	}
+
+	if err := services.NewLessonService().UpdateLessonViewStats(
+		userID,
+		lessonID,
+		input.WatchTimeSeconds,
+		input.LastPositionSeconds,
+		input.Completed,
+	); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to update lesson view")
+		return
+	}
+
+	api_response.Success(c, gin.H{"message": "Lesson view updated successfully"})
+}
+
+// GetLessonSubtitles returns subtitle tracks for a lesson.
+func GetLessonSubtitles(c *gin.Context) {
+	lessonID := c.Param("lessonId")
+	if !lessonExists(c, lessonID) {
+		return
+	}
+
+	subtitles := make([]models.LessonSubtitle, 0)
+	if err := db.DB.WithContext(c.Request.Context()).
+		Where("sub_topic_id = ?", lessonID).
+		Order("is_default DESC, language ASC").
+		Find(&subtitles).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch lesson subtitles")
+		return
+	}
+
+	api_response.Success(c, gin.H{"subtitles": subtitles})
+}
+
+// GetVideoChapters returns active video chapters for a lesson.
+func GetVideoChapters(c *gin.Context) {
+	lessonID := c.Param("lessonId")
+	if !lessonExists(c, lessonID) {
+		return
+	}
+
+	chapters := make([]models.VideoChapter, 0)
+	if err := db.DB.WithContext(c.Request.Context()).
+		Where("sub_topic_id = ? AND is_active = ?", lessonID, true).
+		Order("sort_order ASC").
+		Find(&chapters).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch video chapters")
+		return
+	}
+
+	api_response.Success(c, gin.H{"chapters": chapters})
+}
+
+func lessonExists(c *gin.Context, lessonID string) bool {
+	var lesson models.SubTopic
+	if err := db.DB.WithContext(c.Request.Context()).First(&lesson, "id = ?", lessonID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			api_response.Error(c, http.StatusNotFound, "Lesson not found")
+		} else {
+			api_response.Error(c, http.StatusInternalServerError, "Failed to verify lesson")
+		}
+		return false
+	}
+	return true
 }

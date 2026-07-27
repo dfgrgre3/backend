@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -20,5 +21,5 @@ func GetMetricsEndpoint(c *gin.Context) {
 	}
 
 	// Default: return JSON metrics
-	c.JSON(http.StatusOK, middleware.GetMetrics())
+	api_response.Success(c, middleware.GetMetrics())
 }

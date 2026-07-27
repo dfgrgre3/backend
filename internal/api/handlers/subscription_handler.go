@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/services"
@@ -18,10 +19,10 @@ const errPlanNotFound = "Plan not found"
 func GetSubscriptionPlans(c *gin.Context) {
 	var plans []models.SubscriptionPlan
 	if err := db.DB.Where(isActiveQuery, true).Order("price asc").Find(&plans).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch plans"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch plans")
 		return
 	}
-	c.JSON(http.StatusOK, plans)
+	api_response.Success(c, plans)
 }
 
 func GetUserSubscription(c *gin.Context) {
@@ -29,22 +30,22 @@ func GetUserSubscription(c *gin.Context) {
 
 	var user models.User
 	if err := db.DB.First(&user, idQuery, userId).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 
 	if user.ActiveSubscriptionID == nil {
-		c.JSON(http.StatusOK, gin.H{"active": false})
+		api_response.Success(c, gin.H{"active": false})
 		return
 	}
 
 	var sub models.UserSubscription
 	if err := db.DB.Preload("Plan").First(&sub, idQuery, *user.ActiveSubscriptionID).Error; err != nil {
-		c.JSON(http.StatusOK, gin.H{"active": false})
+		api_response.Success(c, gin.H{"active": false})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"active":       true,
 		"subscription": sub,
 	})
@@ -60,12 +61,12 @@ func PurchasePlan(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": errInvalidRequest})
+		api_response.Error(c, http.StatusBadRequest, errInvalidRequest)
 		return
 	}
 	var plan models.SubscriptionPlan
 	if err := db.DB.First(&plan, idQuery, req.PlanID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errPlanNotFound})
+		api_response.Error(c, http.StatusNotFound, errPlanNotFound)
 		return
 	}
 
@@ -91,7 +92,7 @@ func PurchasePlan(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	api_response.Success(c, gin.H{"success": true})
 }
 
 func calculateFinalPrice(tx *gorm.DB, originalPrice float64, couponCode string) float64 {
@@ -232,14 +233,14 @@ func calculateEndDate(interval models.SubscriptionInterval) time.Time {
 
 func subHandlePurchaseError(c *gin.Context, err error) {
 	if err == services.ErrInsufficientBalance {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "رصيدك غير كافٍ لإتمام هذه العملية"})
+		api_response.Error(c, http.StatusBadRequest, "رصيدك غير كافٍ لإتمام هذه العملية")
 		return
 	}
 	if err == services.ErrOptimisticLock {
-		c.JSON(http.StatusConflict, gin.H{"error": "يرجى المحاولة مرة أخرى"})
+		api_response.Error(c, http.StatusConflict, "يرجى المحاولة مرة أخرى")
 		return
 	}
-	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to complete purchase"})
+	api_response.Error(c, http.StatusInternalServerError, "Failed to complete purchase")
 }
 
 // GetInvoice returns invoice data for a specific payment
@@ -253,11 +254,11 @@ func GetInvoice(c *gin.Context) {
 
 	var invoice models.Invoice
 	if err := db.DB.Preload("Payment").Preload("Payment.Plan").Where("user_id = ?", userId).First(&invoice, idQuery, invoiceID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Invoice not found"})
+		api_response.Error(c, http.StatusNotFound, "Invoice not found")
 		return
 	}
 
-	c.JSON(http.StatusOK, invoice)
+	api_response.Success(c, invoice)
 }
 
 // InitiatePlanPayment initiates a Paymob payment for a subscription plan
@@ -271,19 +272,19 @@ func InitiatePlanPayment(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": errInvalidRequest})
+		api_response.Error(c, http.StatusBadRequest, errInvalidRequest)
 		return
 	}
 
 	var plan models.SubscriptionPlan
 	if err := db.DB.First(&plan, idQuery, req.PlanID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errPlanNotFound})
+		api_response.Error(c, http.StatusNotFound, errPlanNotFound)
 		return
 	}
 
 	var user models.User
 	if err := db.DB.First(&user, idQuery, userId).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 
@@ -293,7 +294,7 @@ func InitiatePlanPayment(c *gin.Context) {
 	// Authenticate with Paymob
 	authToken, err := paymob.Authenticate()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to authenticate with payment provider"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to authenticate with payment provider")
 		return
 	}
 
@@ -303,7 +304,7 @@ func InitiatePlanPayment(c *gin.Context) {
 	// Register order with Paymob
 	orderID, err := paymob.RegisterOrder(authToken, amountCents, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register order"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to register order")
 		return
 	}
 
@@ -317,7 +318,7 @@ func InitiatePlanPayment(c *gin.Context) {
 	case "fawry":
 		integrationID = paymob.FawryIntegrationID
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payment method"})
+		api_response.Error(c, http.StatusBadRequest, "Invalid payment method")
 		return
 	}
 
@@ -340,7 +341,7 @@ func InitiatePlanPayment(c *gin.Context) {
 	// Get payment key
 	paymentKey, err := paymob.GetPaymentKey(authToken, orderID, amountCents, integrationID, billingData)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate payment key"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to generate payment key")
 		return
 	}
 
@@ -356,7 +357,7 @@ func InitiatePlanPayment(c *gin.Context) {
 		PaymobOrderID: orderID,
 	}
 	if err := SafeCreate(db.DB, &payment); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create payment record"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create payment record")
 		return
 	}
 
@@ -364,10 +365,10 @@ func InitiatePlanPayment(c *gin.Context) {
 	if req.PaymentMethod == "wallet" && req.PhoneNumber != "" {
 		redirectURL, err := paymob.CreateWalletRequest(paymentKey, req.PhoneNumber)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create wallet request"})
+			api_response.Error(c, http.StatusInternalServerError, "Failed to create wallet request")
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
+		api_response.Success(c, gin.H{
 			"success":     true,
 			"paymentKey":  paymentKey,
 			"redirectUrl": redirectURL,
@@ -379,7 +380,7 @@ func InitiatePlanPayment(c *gin.Context) {
 
 	// For card payments, return iframe URL
 	iframeURL := fmt.Sprintf("https://accept.paymob.com/api/acceptance/iframes/%s?payment_token=%s", paymob.IframeID, paymentKey)
-	c.JSON(http.StatusOK, gin.H{
+	api_response.Success(c, gin.H{
 		"success":    true,
 		"paymentKey": paymentKey,
 		"iframeUrl":  iframeURL,
@@ -394,12 +395,12 @@ func CancelSubscription(c *gin.Context) {
 
 	var user models.User
 	if err := db.DB.First(&user, idQuery, userId).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errUserNotFound})
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 
 	if user.ActiveSubscriptionID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No active subscription to cancel"})
+		api_response.Error(c, http.StatusBadRequest, "No active subscription to cancel")
 		return
 	}
 
@@ -423,11 +424,11 @@ func CancelSubscription(c *gin.Context) {
 	})
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel subscription"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to cancel subscription")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Subscription cancelled successfully"})
+	api_response.Success(c, gin.H{"success": true, "message": "Subscription cancelled successfully"})
 }
 
 func RenewSubscription(c *gin.Context) {
@@ -438,13 +439,13 @@ func RenewSubscription(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": errInvalidRequest})
+		api_response.Error(c, http.StatusBadRequest, errInvalidRequest)
 		return
 	}
 
 	var plan models.SubscriptionPlan
 	if err := db.DB.First(&plan, idQuery, req.PlanID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": errPlanNotFound})
+		api_response.Error(c, http.StatusNotFound, errPlanNotFound)
 		return
 	}
 
@@ -468,5 +469,5 @@ func RenewSubscription(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Subscription renewed successfully"})
+	api_response.Success(c, gin.H{"success": true, "message": "Subscription renewed successfully"})
 }

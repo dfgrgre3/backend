@@ -7,8 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
-	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -199,6 +197,7 @@ type AuthService interface {
 	RevokeAllSessions(ctx context.Context, userID string) error
 	ChangePassword(ctx context.Context, userID, oldPassword, newPassword string) error
 	ForgotPassword(ctx context.Context, email string) error
+	VerifyForgotPasswordCode(ctx context.Context, email, code string) (string, error)
 	ResetPassword(ctx context.Context, token, newPassword string) error
 	VerifyEmail(ctx context.Context, userID, code string) error
 	ResendVerificationEmail(ctx context.Context, userID string) error
@@ -218,12 +217,20 @@ type AuthService interface {
 type authService struct {
 	authRepo     repository.AuthRepository
 	tokenService AuthTokenService
+	oauthService OAuthService
+	auditService *AuditService
+	cfg          *config.Config
+	mailQueue    *MailQueueWorker
 }
 
-func NewAuthService(authRepo repository.AuthRepository, tokenService AuthTokenService) AuthService {
+func NewAuthService(authRepo repository.AuthRepository, tokenService AuthTokenService, oauthService OAuthService, cfg *config.Config, mailQueue *MailQueueWorker) AuthService {
 	return &authService{
 		authRepo:     authRepo,
 		tokenService: tokenService,
+		oauthService: oauthService,
+		auditService: GetAuditService(),
+		cfg:          cfg,
+		mailQueue:    mailQueue,
 	}
 }
 
@@ -243,8 +250,7 @@ func (s *authService) Register(ctx context.Context, req *dto.RegisterRequest) (*
 	}
 
 	// Hash password with configured cost (defaults to 12, max 14 for security)
-	cfg := config.Load()
-	bcryptCost := cfg.BCryptCost
+	bcryptCost := s.cfg.BCryptCost
 	if bcryptCost < bcrypt.MinCost || bcryptCost > 14 {
 		bcryptCost = 12
 	}
@@ -268,15 +274,30 @@ func (s *authService) Register(ctx context.Context, req *dto.RegisterRequest) (*
 		return nil, err
 	}
 
-	// Send email verification code asynchronously
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("[Recovered] panic in ResendVerificationEmail goroutine: %v", r)
+	// Send email verification code via mail queue worker
+	if s.mailQueue != nil {
+		userName := user.Email
+		if user.Name != nil {
+			userName = *user.Name
+		}
+		codeBytes := make([]byte, 3)
+		if _, err := rand.Read(codeBytes); err == nil {
+			code := fmt.Sprintf("%06d", int(codeBytes[0])<<16|int(codeBytes[1])<<8|int(codeBytes[2])%1000000)
+			if len(code) > 6 {
+				code = code[:6]
 			}
-		}()
-		_ = s.ResendVerificationEmail(context.Background(), user.ID)
-	}()
+			verificationCode := &models.VerificationCode{
+				UserID:    user.ID,
+				Code:      code,
+				Type:      "email_verification",
+				ExpiresAt: time.Now().Add(15 * time.Minute),
+			}
+			if err := s.authRepo.CreateVerificationCode(ctx, verificationCode); err == nil {
+				body := GetVerificationEmailTemplate(userName, code)
+				_ = s.mailQueue.Enqueue(user.Email, "تأكيد البريد الإلكتروني - Tolo Platform", body)
+			}
+		}
+	}
 
 	return &dto.RegisterResponse{
 		Message: "User registered successfully",
@@ -293,26 +314,26 @@ func (s *authService) Login(ctx context.Context, req *dto.LoginRequest, userAgen
 	// Find user
 	var user models.User
 	if err := db.DB.WithContext(ctx).Where("email = ?", req.Email).First(&user).Error; err != nil {
-		s.logFailedLogin(ctx, "", ip, userAgent, "Invalid credentials", nil)
+		s.logFailedLogin(ctx, "", ip, userAgent, "Invalid credentials")
 		return nil, errors.New("invalid email or password")
 	}
 
 	// Check account lockout before password verification
 	if err := checkAccountLockout(ctx, user.ID); err != nil {
-		s.logFailedLogin(ctx, user.ID, ip, userAgent, "Account locked", &err)
+		s.logFailedLogin(ctx, user.ID, ip, userAgent, "Account locked")
 		return nil, err
 	}
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		recordFailedAttempt(ctx, user.ID)
-		s.logFailedLogin(ctx, user.ID, ip, userAgent, "Invalid credentials", nil)
+		s.logFailedLogin(ctx, user.ID, ip, userAgent, "Invalid credentials")
 		return nil, errors.New("invalid email or password")
 	}
 
 	// Check if active
 	if user.Status != models.StatusActive {
-		s.logFailedLogin(ctx, user.ID, ip, userAgent, "Account not active", nil)
+		s.logFailedLogin(ctx, user.ID, ip, userAgent, "Account not active")
 		return nil, errors.New("account is not active")
 	}
 
@@ -403,8 +424,7 @@ func (s *authService) ChangePassword(ctx context.Context, userID, oldPassword, n
 	}
 
 	// Hash new password with configured cost (max 14 for security)
-	cfg := config.Load()
-	bcryptCost := cfg.BCryptCost
+	bcryptCost := s.cfg.BCryptCost
 	if bcryptCost < bcrypt.MinCost || bcryptCost > 14 {
 		bcryptCost = 12
 	}
@@ -422,21 +442,14 @@ func (s *authService) ChangePassword(ctx context.Context, userID, oldPassword, n
 		return errors.New("failed to update password")
 	}
 
-	// Revoke all sessions except current (force re-login on other devices)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("[Recovered] panic in ChangePassword revoke-sessions goroutine: %v", r)
-			}
-		}()
-		sessions, _ := s.authRepo.GetUserSessions(context.Background(), userID)
-		for _, sess := range sessions {
-			if sess.ID != "" {
-				s.tokenService.BlacklistJTI(sess.ID, 15*time.Minute)
-			}
+	// Revoke all sessions (force re-login on other devices)
+	sessions, _ := s.authRepo.GetUserSessions(ctx, userID)
+	for _, sess := range sessions {
+		if sess.ID != "" {
+			s.tokenService.BlacklistJTI(sess.ID, 15*time.Minute)
 		}
-		s.authRepo.RevokeAllUserSessions(context.Background(), userID)
-	}()
+	}
+	s.authRepo.RevokeAllUserSessions(ctx, userID)
 
 	return nil
 }
@@ -564,7 +577,7 @@ func (s *authService) RevokeAllSessions(ctx context.Context, userID string) erro
 	return s.authRepo.RevokeAllUserSessions(ctx, userID)
 }
 
-func (s *authService) logFailedLogin(ctx context.Context, userID, ip, userAgent, reason string, lockoutErr *error) {
+func (s *authService) logFailedLogin(ctx context.Context, userID, ip, userAgent, reason string) {
 	if userID == "" {
 		return
 	}
@@ -602,42 +615,80 @@ func (s *authService) ForgotPassword(ctx context.Context, email string) error {
 		return nil
 	}
 
-	// Generate a cryptographically random token
+	// Generate a 6-digit verification code
+	codeBytes := make([]byte, 3)
+	if _, err := rand.Read(codeBytes); err != nil {
+		return errors.New("failed to generate verification code")
+	}
+	code := fmt.Sprintf("%06d", int(codeBytes[0])<<16|int(codeBytes[1])<<8|int(codeBytes[2])%1000000)
+	if len(code) > 6 {
+		code = code[:6]
+	}
+
+	// Store the verification code in Redis with 15-minute expiry
+	if db.Redis != nil {
+		key := fmt.Sprintf("forgot_password_code:%s", email)
+		if err := db.Redis.Set(ctx, key, code, 15*time.Minute).Err(); err != nil {
+			return errors.New("failed to store verification code")
+		}
+	}
+
+	// Send verification code via email
+	userName := user.Email
+	if user.Name != nil {
+		userName = *user.Name
+	}
+	body := GetForgotPasswordCodeEmailTemplate(userName, code)
+	_ = GetMailQueueWorker().Enqueue(user.Email, "رمز استعادة كلمة المرور - Tolo Platform", body)
+
+	return nil
+}
+
+func (s *authService) VerifyForgotPasswordCode(ctx context.Context, email, code string) (string, error) {
+	var user models.User
+	if err := db.DB.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+		return "", errors.New("invalid email")
+	}
+
+	// Verify the code from Redis
+	if db.Redis == nil {
+		return "", errors.New("verification service unavailable")
+	}
+
+	key := fmt.Sprintf("forgot_password_code:%s", email)
+	storedCode, err := db.Redis.Get(ctx, key).Result()
+	if err != nil {
+		return "", errors.New("invalid or expired verification code")
+	}
+
+	if storedCode != code {
+		return "", errors.New("invalid verification code")
+	}
+
+	// Generate a reset token for the password reset step
 	rawToken := make([]byte, 32)
 	if _, err := rand.Read(rawToken); err != nil {
-		return errors.New("failed to generate reset token")
+		return "", errors.New("failed to generate reset token")
 	}
 	tokenStr := hex.EncodeToString(rawToken)
 
-	// Store only the hash in the database
+	// Store the reset token with 15-minute expiry
 	tokenHash := sha256.Sum256([]byte(tokenStr))
 	tokenHashStr := hex.EncodeToString(tokenHash[:])
 
 	resetToken := &models.PasswordResetToken{
 		UserID:    user.ID,
 		TokenHash: tokenHashStr,
-		ExpiresAt: time.Now().Add(1 * time.Hour),
+		ExpiresAt: time.Now().Add(15 * time.Minute),
 	}
 	if err := db.DB.WithContext(ctx).Create(resetToken).Error; err != nil {
-		return errors.New("failed to create reset token")
+		return "", errors.New("failed to create reset token")
 	}
 
-	// Send reset email
-	frontendURL := os.Getenv("FRONTEND_URL")
-	if frontendURL == "" {
-		frontendURL = "http://localhost:3000"
-	}
-	resetLink := fmt.Sprintf("%s/reset-password?token=%s", frontendURL, tokenStr)
+	// Delete the verification code after successful verification
+	db.Redis.Del(ctx, key)
 
-	// Send reset email via queue worker
-	userName := user.Email
-	if user.Name != nil {
-		userName = *user.Name
-	}
-	body := GetPasswordResetEmailTemplate(userName, resetLink)
-	_ = GetMailQueueWorker().Enqueue(user.Email, "إعادة تعيين كلمة المرور - Tolo Platform", body)
-
-	return nil
+	return tokenStr, nil
 }
 
 func (s *authService) ResetPassword(ctx context.Context, token, newPassword string) error {
@@ -661,8 +712,7 @@ func (s *authService) ResetPassword(ctx context.Context, token, newPassword stri
 	db.DB.WithContext(ctx).Model(&resetToken).Update("is_used", true)
 
 	// Hash new password (max 14 for security)
-	cfg := config.Load()
-	bcryptCost := cfg.BCryptCost
+	bcryptCost := s.cfg.BCryptCost
 	if bcryptCost < bcrypt.MinCost || bcryptCost > 14 {
 		bcryptCost = 12
 	}
@@ -875,71 +925,134 @@ func (s *authService) DeleteAccount(ctx context.Context, userID, password, reaso
 }
 
 func (s *authService) GetOAuthRedirectURL(ctx context.Context, provider string) (string, error) {
-	state := uuid.New().String()
-	return fmt.Sprintf("https://accounts.google.com/o/oauth2/v2/auth?client_id=mock-client-id&redirect_uri=http://localhost:3000/api/auth/callback/%s&response_type=code&scope=email+profile&state=%s", provider, state), nil
+	if s.oauthService == nil {
+		return "", errors.New("OAuth service is not configured")
+	}
+
+	state, err := s.oauthService.GenerateOAuthState(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate OAuth state: %w", err)
+	}
+
+	switch strings.ToLower(provider) {
+	case "google":
+		redirectURL := s.oauthService.GetGoogleAuthURL(state)
+		if redirectURL == "" {
+			return "", errors.New("Google OAuth is not configured")
+		}
+		return redirectURL, nil
+	case "apple":
+		redirectURL := s.oauthService.GetAppleAuthURL(state)
+		if redirectURL == "" {
+			return "", errors.New("Apple OAuth is not configured")
+		}
+		return redirectURL, nil
+	default:
+		return "", fmt.Errorf("unsupported OAuth provider: %s", provider)
+	}
 }
 
 func (s *authService) HandleOAuthCallback(ctx context.Context, provider, code, state, userAgent, ip string) (*dto.LoginResponse, error) {
-	mockProviderUserID := "mock-oauth-user-id-" + code
-	mockEmail := fmt.Sprintf("oauth-%s-%s@example.com", provider, code[:4])
-
-	var oauthAcc models.OAuthAccount
-	err := db.DB.WithContext(ctx).Where("provider = ? AND provider_user_id = ?", provider, mockProviderUserID).First(&oauthAcc).Error
-	var user models.User
-
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		err = db.DB.WithContext(ctx).Where("email = ? AND deleted_at IS NULL", mockEmail).First(&user).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			user = models.User{
-				Email:         mockEmail,
-				PasswordHash:  "",
-				Role:          models.RoleStudent,
-				Status:        models.StatusActive,
-				Name:          func(s string) *string { return &s }("OAuth User"),
-				EmailVerified: true,
-			}
-			if err := db.DB.WithContext(ctx).Create(&user).Error; err != nil {
-				return nil, errors.New("failed to create oauth user")
-			}
-			profile := models.Profile{
-				UserID: user.ID,
-				Name:   "OAuth User",
-			}
-			db.DB.WithContext(ctx).Create(&profile)
-		}
-
-		oauthAcc = models.OAuthAccount{
-			UserID:         user.ID,
-			Provider:       provider,
-			ProviderUserID: mockProviderUserID,
-			Email:          &mockEmail,
-		}
-		db.DB.WithContext(ctx).Create(&oauthAcc)
-	} else {
-		if err := db.DB.WithContext(ctx).Where("id = ? AND deleted_at IS NULL", oauthAcc.UserID).First(&user).Error; err != nil {
-			return nil, errors.New("associated user not found")
-		}
+	// ───────────────────────────────────────────────────────────────────────────────
+	// Step 1: Validate OAuth state (CSRF protection)
+	// ───────────────────────────────────────────────────────────────────────────────
+	if s.oauthService == nil {
+		return nil, errors.New("OAuth service not configured")
 	}
 
-	tokenPair, err := s.tokenService.GenerateTokenPair(&user)
+	valid, err := s.oauthService.ValidateOAuthState(ctx, state)
+	if err != nil || !valid {
+		s.auditService.LogEvent("", AuditEventLoginFailed, "oauth", "", map[string]interface{}{
+			"provider": provider,
+			"reason":   "invalid_state",
+		}, ip, "")
+		return nil, errors.New("invalid or expired OAuth state - possible CSRF attack")
+	}
+
+	// ───────────────────────────────────────────────────────────────────────────────
+	// Step 2: Exchange authorization code for real user info
+	// ───────────────────────────────────────────────────────────────────────────────
+	var oauthUserInfo *OAuthUserInfo
+	var oauthErr error
+
+	switch provider {
+	case "google":
+		oauthUserInfo, oauthErr = s.oauthService.ExchangeGoogleCode(ctx, code)
+	case "apple":
+		oauthUserInfo, oauthErr = s.oauthService.ExchangeAppleCode(ctx, code)
+	default:
+		s.auditService.LogEvent("", AuditEventLoginFailed, "oauth", "", map[string]interface{}{
+			"provider": provider,
+			"reason":   "unsupported_provider",
+		}, ip, "")
+		return nil, fmt.Errorf("unsupported OAuth provider: %s", provider)
+	}
+
+	if oauthErr != nil {
+		s.auditService.LogEvent("", AuditEventLoginFailed, "oauth", "", map[string]interface{}{
+			"provider": provider,
+			"reason":   "exchange_failed",
+			"error":    oauthErr.Error(),
+		}, ip, "")
+		return nil, fmt.Errorf("failed to get user info from %s: %w", provider, oauthErr)
+	}
+
+	if oauthUserInfo == nil {
+		return nil, fmt.Errorf("no user info returned from %s", provider)
+	}
+
+	// ───────────────────────────────────────────────────────────────────────────────
+	// Step 3: Create user or link to existing account
+	// ───────────────────────────────────────────────────────────────────────────────
+	user, _, err := CreateUserFromOAuth(ctx, oauthUserInfo)
 	if err != nil {
-		return nil, err
+		s.auditService.LogEvent("", AuditEventLoginFailed, "oauth", "", map[string]interface{}{
+			"provider": provider,
+			"email":    oauthUserInfo.Email,
+			"reason":   "user_creation_failed",
+			"error":    err.Error(),
+		}, ip, "")
+		return nil, fmt.Errorf("failed to create or link OAuth user: %w", err)
 	}
 
+	if user == nil {
+		return nil, errors.New("user creation returned nil")
+	}
+
+	// ───────────────────────────────────────────────────────────────────────────────
+	// Step 4: Generate JWT tokens
+	// ───────────────────────────────────────────────────────────────────────────────
+	tokenPair, err := s.tokenService.GenerateTokenPair(user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate tokens: %w", err)
+	}
+
+	// ───────────────────────────────────────────────────────────────────────────────
+	// Step 5: Create user session
+	// ───────────────────────────────────────────────────────────────────────────────
 	session := &models.UserSession{
-		UserID:           user.ID,
-		RefreshToken:     tokenPair.RefreshToken,
-		RefreshTokenHash: models.HashToken(tokenPair.RefreshToken),
-		UserAgent:        userAgent,
-		IP:               ip,
-		DeviceType:       "desktop",
-		IsActive:         true,
-		ExpiresAt:        time.Now().Add(30 * 24 * time.Hour),
+		UserID:            user.ID,
+		RefreshToken:      tokenPair.RefreshToken,
+		RefreshTokenHash:  models.HashToken(tokenPair.RefreshToken),
+		UserAgent:         userAgent,
+		IP:                ip,
+		DeviceType:        "oauth_" + provider,
+		IsActive:          true,
+		ExpiresAt:         time.Now().Add(30 * 24 * time.Hour),
 		AbsoluteExpiresAt: time.Now().Add(30 * 24 * time.Hour),
 	}
+
 	if err := s.authRepo.CreateSession(ctx, session); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
+
+	// ───────────────────────────────────────────────────────────────────────────────
+	// Step 6: Log successful OAuth login and return response
+	// ───────────────────────────────────────────────────────────────────────────────
+	s.auditService.LogEvent(user.ID, AuditEventLogin, "oauth", user.ID, map[string]interface{}{
+		"provider": provider,
+		"email":    user.Email,
+	}, ip, "")
 
 	userDTO := dto.UserDTO{
 		ID:            user.ID,
@@ -958,23 +1071,55 @@ func (s *authService) HandleOAuthCallback(ctx context.Context, provider, code, s
 }
 
 func (s *authService) LinkOAuthProvider(ctx context.Context, userID, provider, code, state string) error {
-	mockProviderUserID := "mock-oauth-user-id-" + code
-	mockEmail := fmt.Sprintf("oauth-%s-%s@example.com", provider, code[:4])
+	if s.oauthService == nil {
+		return errors.New("OAuth service is not configured")
+	}
 
+	// Validate state parameter (CSRF protection)
+	valid, err := s.oauthService.ValidateOAuthState(ctx, state)
+	if err != nil || !valid {
+		return errors.New("invalid or expired OAuth state")
+	}
+
+	// Exchange the authorization code for user info from the provider
+	var oauthUserInfo *OAuthUserInfo
+	switch strings.ToLower(provider) {
+	case "google":
+		oauthUserInfo, err = s.oauthService.ExchangeGoogleCode(ctx, code)
+	case "apple":
+		oauthUserInfo, err = s.oauthService.ExchangeAppleCode(ctx, code)
+	default:
+		return fmt.Errorf("unsupported OAuth provider: %s", provider)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to exchange code with %s: %w", provider, err)
+	}
+
+	if oauthUserInfo == nil {
+		return fmt.Errorf("no user info returned from %s", provider)
+	}
+
+	// Check if this OAuth account is already linked to another user
 	var existingLink models.OAuthAccount
-	err := db.DB.WithContext(ctx).Where("provider = ? AND provider_user_id = ?", provider, mockProviderUserID).First(&existingLink).Error
+	err = db.DB.WithContext(ctx).
+		Where("provider = ? AND provider_user_id = ?", oauthUserInfo.Provider, oauthUserInfo.ProviderUserID).
+		First(&existingLink).Error
 	if err == nil {
 		return errors.New("this social account is already linked to another user")
+	} else if err != gorm.ErrRecordNotFound {
+		return fmt.Errorf("database error: %w", err)
 	}
 
+	// Link the OAuth account to the user
 	link := models.OAuthAccount{
 		UserID:         userID,
-		Provider:       provider,
-		ProviderUserID: mockProviderUserID,
-		Email:          &mockEmail,
+		Provider:       oauthUserInfo.Provider,
+		ProviderUserID: oauthUserInfo.ProviderUserID,
+		Email:          &oauthUserInfo.Email,
 	}
 	if err := db.DB.WithContext(ctx).Create(&link).Error; err != nil {
-		return errors.New("failed to link account")
+		return fmt.Errorf("failed to link account: %w", err)
 	}
 	return nil
 }

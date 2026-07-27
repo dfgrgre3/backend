@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	api_response "thanawy-backend/internal/api/response"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 
@@ -13,7 +14,7 @@ import (
 func GetPublicAnnouncements(c *gin.Context) {
 	var notifications []models.Notification
 	if err := db.DB.Order("created_at DESC").Limit(50).Find(&notifications).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch announcements"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch announcements")
 		return
 	}
 
@@ -32,7 +33,7 @@ func GetPublicAnnouncements(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusOK, items)
+	api_response.Success(c, items)
 }
 
 func CreatePublicAnnouncement(c *gin.Context) {
@@ -45,13 +46,13 @@ func CreatePublicAnnouncement(c *gin.Context) {
 		Tags     []string `json:"tags"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	input.Title = strings.TrimSpace(input.Title)
 	input.Content = strings.TrimSpace(input.Content)
 	if input.Title == "" || input.Content == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "title and content are required"})
+		api_response.Error(c, http.StatusBadRequest, "title and content are required")
 		return
 	}
 
@@ -65,23 +66,23 @@ func CreatePublicAnnouncement(c *gin.Context) {
 		IsRead:   false,
 	}
 	if err := SafeCreate(db.DB, &notification); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create announcement"})
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create announcement")
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"id": notification.ID})
+	api_response.Success(c, gin.H{"id": notification.ID})
 }
 
 func GetChatConversations(c *gin.Context) {
-	c.JSON(http.StatusOK, []gin.H{})
+	api_response.Success(c, []gin.H{})
 }
 
 func GetChatMessages(c *gin.Context) {
-	c.JSON(http.StatusOK, []gin.H{})
+	api_response.Success(c, []gin.H{})
 }
 
 func SendChatMessage(c *gin.Context) {
-	c.JSON(http.StatusCreated, gin.H{"success": true})
+	api_response.Success(c, gin.H{"success": true})
 }
 
 func defaultString(value, fallback string) string {

@@ -4,24 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 
 	"thanawy-backend/internal/db"
-)
-
-const (
-	CachePrefixSubject  = "subject:"
-	CachePrefixUser     = "user:"
-	CachePrefixCategory = "category:"
-	CachePrefixExam     = "exam:"
-	CachePrefixList     = "list:"
-	CachePrefixTeacher  = "teacher:"
-	CacheTTLSubject     = 30 * time.Minute
-	CacheTTLUser        = 15 * time.Minute
-	CacheTTLCategory    = 1 * time.Hour
-	CacheTTLExam        = 30 * time.Minute
-	CacheTTLList        = 5 * time.Minute
-	CacheTTLTeacher     = 1 * time.Hour
 )
 
 // Cache key format patterns
@@ -39,9 +23,9 @@ func (ci *CacheInvalidator) InvalidateSubject(ctx context.Context, id string) {
 	if db.Redis == nil {
 		return
 	}
-	key := fmt.Sprintf(entityIDKeyFmt, CachePrefixSubject, id)
+	key := fmt.Sprintf("subject:id:%s", id)
 	ci.del(ctx, key)
-	ci.invalidatePattern(ctx, CachePrefixSubject + CachePrefixList + "*")
+	ci.invalidatePattern(ctx, "subj:list:*")
 	log.Printf("[Cache] Invalidated subject cache: %s", id)
 }
 
@@ -49,8 +33,8 @@ func (ci *CacheInvalidator) InvalidateUser(ctx context.Context, id string) {
 	if db.Redis == nil {
 		return
 	}
-	ci.del(ctx, fmt.Sprintf(entityIDKeyFmt, CachePrefixUser, id))
-	ci.del(ctx, fmt.Sprintf("%semail:*", CachePrefixUser))
+	ci.del(ctx, fmt.Sprintf("user:id:%s", id))
+	ci.del(ctx, "user:email:*")
 	log.Printf("[Cache] Invalidated user cache: %s", id)
 }
 
@@ -58,9 +42,9 @@ func (ci *CacheInvalidator) InvalidateCategory(ctx context.Context, id string) {
 	if db.Redis == nil {
 		return
 	}
-	key := fmt.Sprintf(entityIDKeyFmt, CachePrefixCategory, id)
+	key := fmt.Sprintf("cat:id:%s", id)
 	ci.del(ctx, key)
-	ci.invalidatePattern(ctx, CachePrefixCategory + CachePrefixList + "*")
+	ci.invalidatePattern(ctx, "cat:list:*")
 	log.Printf("[Cache] Invalidated category cache: %s", id)
 }
 
@@ -68,9 +52,9 @@ func (ci *CacheInvalidator) InvalidateExam(ctx context.Context, id string) {
 	if db.Redis == nil {
 		return
 	}
-	key := fmt.Sprintf(entityIDKeyFmt, CachePrefixExam, id)
+	key := fmt.Sprintf("exam:id:%s", id)
 	ci.del(ctx, key)
-	ci.invalidatePattern(ctx, CachePrefixExam + CachePrefixList + "*")
+	ci.invalidatePattern(ctx, "exam:list:*")
 	log.Printf("[Cache] Invalidated exam cache: %s", id)
 }
 
@@ -78,7 +62,7 @@ func (ci *CacheInvalidator) InvalidateAllLists(ctx context.Context) {
 	if db.Redis == nil {
 		return
 	}
-	ci.invalidatePattern(ctx, "*" + CachePrefixList + "*")
+	ci.invalidatePattern(ctx, "*:list:*")
 	log.Printf("[Cache] Invalidated all list caches")
 }
 
@@ -96,7 +80,7 @@ func (ci *CacheInvalidator) InvalidateTeacher(ctx context.Context, id string) {
 	if db.Redis == nil {
 		return
 	}
-	ci.invalidatePattern(ctx, CachePrefixTeacher + "*")
+	ci.invalidatePattern(ctx, "teacher:*")
 	log.Printf("[Cache] Invalidated teacher cache: %s", id)
 }
 

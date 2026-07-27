@@ -30,6 +30,7 @@ const (
 	StatusActive    UserStatus = "ACTIVE"
 	StatusInactive  UserStatus = "INACTIVE"
 	StatusSuspended UserStatus = "SUSPENDED"
+	StatusBanned    UserStatus = "BANNED"
 )
 
 type User struct {
@@ -41,6 +42,8 @@ type User struct {
 	PasswordHash string         `gorm:"column:password_hash;not null" json:"-"`
 	Role         UserRole       `gorm:"default:'STUDENT';index" json:"role"`
 	Status       UserStatus     `gorm:"default:'ACTIVE';index" json:"status"`
+	StatusReason *string        `gorm:"column:status_reason" json:"statusReason"`
+	StatusExpiresAt *time.Time  `gorm:"column:status_expires_at" json:"statusExpiresAt"`
 	CreatedAt    time.Time      `gorm:"index;column:created_at" json:"createdAt"`
 	UpdatedAt    time.Time      `gorm:"column:updated_at" json:"updatedAt"`
 	DeletedAt    gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`

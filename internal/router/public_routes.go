@@ -1,7 +1,12 @@
 package router
 
 import (
+	"log"
+	"net/http"
+	"os"
+
 	"thanawy-backend/internal/api/handlers"
+	"thanawy-backend/internal/config"
 	"thanawy-backend/internal/middleware"
 	"thanawy-backend/internal/repository"
 	"thanawy-backend/internal/services"
@@ -21,7 +26,7 @@ func SetupPublicRoutes(router *gin.Engine) {
 	router.GET("/api/courses/:id", handlers.GetSubject)
 	router.GET("/api/courses/:id/lessons", handlers.GetCourseLessons)
 	router.GET("/api/lessons/:lessonId/subtitles", handlers.GetLessonSubtitles) // Public subtitles
-	router.GET("/api/lessons/:lessonId/chapters", handlers.GetVideoChapters)     // Public chapters
+	router.GET("/api/lessons/:lessonId/chapters", handlers.GetVideoChapters)    // Public chapters
 	router.GET("/api/courses/:id/reviews", handlers.GetCourseReviews)
 	router.GET("/api/categories", handlers.GetCategories)
 	router.GET("/api/courses/categories", handlers.GetCategories)
@@ -77,8 +82,34 @@ func SetupPublicRoutes(router *gin.Engine) {
 	}
 
 	// Local authentication endpoints
-	authService := services.NewAuthService(repository.NewAuthRepository(), services.NewAuthTokenService())
+	oauthRedirectBase := os.Getenv("OAUTH_REDIRECT_BASE_URL")
+	if oauthRedirectBase == "" {
+		oauthRedirectBase = "http://localhost:8082"
+	}
+	oauthService, err := services.NewOAuthService(services.OAuthConfig{
+		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		AppleClientID:      os.Getenv("APPLE_CLIENT_ID"),
+		AppleClientSecret:  os.Getenv("APPLE_SECRET"),
+		AppleKeyID:         os.Getenv("APPLE_KEY_ID"),
+		AppleTeamID:        os.Getenv("APPLE_TEAM_ID"),
+		RedirectURL:        oauthRedirectBase,
+	})
+	if err != nil {
+		log.Printf("OAuth service not configured: %v", err)
+	}
+	cfg := config.Load()
+	mailQueueWorker := services.GetMailQueueWorker()
+	authService := services.NewAuthService(repository.NewAuthRepository(), services.NewAuthTokenService(), oauthService, cfg, mailQueueWorker)
 	authHandler := handlers.NewAuthHandler(authService)
+
+	// CSRF bootstrap endpoint used by the admin client before state-changing requests.
+	// It ensures the browser receives a _csrf cookie even before the first write request.
+	router.GET("/api/auth/csrf", func(c *gin.Context) {
+		middleware.EnsureCSRFToken(c)
+		c.Status(http.StatusOK)
+	})
+
 	router.POST("/api/auth/register", middleware.GuestOnly(), middleware.AuthRateLimiter(), authHandler.Register)
 	router.POST("/api/auth/login", middleware.GuestOnly(), middleware.LoginRateLimiter(), authHandler.Login)
 	router.POST("/api/auth/refresh", middleware.AuthRateLimiter(), authHandler.RefreshToken)
@@ -86,6 +117,7 @@ func SetupPublicRoutes(router *gin.Engine) {
 	router.GET("/api/auth/me", middleware.Auth(), authHandler.Me)
 	router.POST("/api/auth/change-password", middleware.Auth(), authHandler.ChangePassword)
 	router.POST("/api/auth/forgot-password", middleware.AuthRateLimiter(), authHandler.ForgotPassword)
+	router.POST("/api/auth/forgot-password/verify-code", middleware.AuthRateLimiter(), authHandler.VerifyForgotPasswordCode)
 	router.POST("/api/auth/reset-password", middleware.AuthRateLimiter(), authHandler.ResetPassword)
 	router.POST("/api/auth/verify-email", middleware.Auth(), authHandler.VerifyEmail)
 	router.POST("/api/auth/resend-verification", middleware.Auth(), middleware.AuthRateLimiter(), authHandler.ResendVerification)
