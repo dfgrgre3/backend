@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -78,7 +79,8 @@ func PurchasePlan(c *gin.Context) {
 			return err
 		}
 
-		finalPrice := calculateFinalPrice(tx, plan.Price, req.CouponCode)
+		price, _ := plan.Price.Float64()
+		finalPrice := calculateFinalPrice(tx, price, req.CouponCode)
 
 		if err := subDeductUserBalance(tx, userId.(string), &user, finalPrice, fmt.Sprintf("شراء خطة اشتراك: %s", plan.Name), paymentRef); err != nil {
 			return err
@@ -111,9 +113,11 @@ func calculateFinalPrice(tx *gorm.DB, originalPrice float64, couponCode string) 
 
 	finalPrice := originalPrice
 	if coupon.DiscountType == "PERCENTAGE" {
-		finalPrice = originalPrice - (originalPrice * (coupon.DiscountValue / 100))
+		discountValue, _ := coupon.DiscountValue.Float64()
+		finalPrice = originalPrice - (originalPrice * (discountValue / 100))
 	} else {
-		finalPrice = originalPrice - coupon.DiscountValue
+		discountValue, _ := coupon.DiscountValue.Float64()
+		finalPrice = originalPrice - discountValue
 	}
 
 	if finalPrice < 0 {
@@ -131,14 +135,16 @@ func isCouponValid(coupon models.Coupon, amount float64) bool {
 	if coupon.MaxUses != nil && coupon.UsedCount >= *coupon.MaxUses {
 		return false
 	}
-	if coupon.MinOrderAmount > 0 && amount < coupon.MinOrderAmount {
+	minOrderAmount, _ := coupon.MinOrderAmount.Float64()
+	if minOrderAmount > 0 && amount < minOrderAmount {
 		return false
 	}
 	return true
 }
 
 func subDeductUserBalance(tx *gorm.DB, userID string, user *models.User, amount float64, description string, ref string) error {
-	if user.Balance < amount {
+	balance, _ := user.Balance.Float64()
+	if balance < amount {
 		return services.ErrInsufficientBalance
 	}
 
@@ -159,7 +165,7 @@ func subDeductUserBalance(tx *gorm.DB, userID string, user *models.User, amount 
 	walletTx := models.WalletTransaction{
 		UserID:      userID,
 		Type:        models.TxTypeWithdraw,
-		Amount:      -amount,
+		Amount:      decimal.NewFromFloat(-amount),
 		Currency:    "EGP",
 		WalletType:  "BALANCE",
 		Description: description,
@@ -207,7 +213,7 @@ func createSubscriptionAndPayment(tx *gorm.DB, userID string, plan models.Subscr
 	payment := models.Payment{
 		UserID:      userID,
 		PlanID:      plan.ID,
-		Amount:      amount,
+		Amount:      decimal.NewFromFloat(amount),
 		Currency:    plan.Currency,
 		Method:      "WALLET",
 		Status:      models.PaymentCompleted,
@@ -299,7 +305,8 @@ func InitiatePlanPayment(c *gin.Context) {
 	}
 
 	// Calculate amount in cents (Paymob uses cents)
-	amountCents := int64(plan.Price * 100)
+	price, _ := plan.Price.Float64()
+	amountCents := int64(price * 100)
 
 	// Register order with Paymob
 	orderID, err := paymob.RegisterOrder(authToken, amountCents, nil)
@@ -456,11 +463,12 @@ func RenewSubscription(c *gin.Context) {
 			return err
 		}
 
-		if err := subDeductUserBalance(tx, userId.(string), &user, plan.Price, fmt.Sprintf("تجديد اشتراك: %s", plan.Name), paymentRef); err != nil {
+		price, _ := plan.Price.Float64()
+		if err := subDeductUserBalance(tx, userId.(string), &user, price, fmt.Sprintf("تجديد اشتراك: %s", plan.Name), paymentRef); err != nil {
 			return err
 		}
 
-		_, err := createSubscriptionAndPayment(tx, userId.(string), plan, plan.Price, paymentRef)
+		_, err := createSubscriptionAndPayment(tx, userId.(string), plan, price, paymentRef)
 		return err
 	})
 

@@ -354,7 +354,7 @@ func GetNotificationStats(c *gin.Context) {
 		Channel string `json:"channel"`
 		Count   int64  `json:"count"`
 	}
-	db.DB.Raw("SELECT unnest(channels) as channel, count(*) as count FROM notifications GROUP BY unnest(channels)").Scan(&channelStats)
+	db.DB.Table(models.Notification{}.TableName()).Select("jsonb_array_elements_text(COALESCE(channels, '[]'::jsonb)) as channel, count(*) as count").Group("jsonb_array_elements_text(COALESCE(channels, '[]'::jsonb))").Scan(&channelStats)
 
 	// Get recent broadcasts
 	var recentBroadcasts []models.Broadcast

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 
 	"thanawy-backend/internal/models"
 	"thanawy-backend/internal/repository"
@@ -212,7 +213,7 @@ func (s *LmsService) EnrollUser(courseID, userID uuid.UUID) (*models.LmsEnrollme
 	enrollment := &models.LmsEnrollment{
 		CourseID:   courseID,
 		UserID:     userID,
-		EnrolledAt: time.Now(),
+		EnrolledAt: time.Now().UTC(),
 	}
 	if err := s.repo.CreateEnrollment(enrollment); err != nil {
 		return nil, err
@@ -357,10 +358,11 @@ func (s *LmsService) ListQuizzes(lessonID uuid.UUID) ([]models.LmsInteractiveQui
 // ----------------------------
 
 func (s *LmsService) AddPricing(courseID uuid.UUID, priceType models.PriceType, amount float64, currencyCode string, subDurationDays *int) (*models.LmsPricing, error) {
+	decimalAmount := decimal.NewFromFloat(amount)
 	p := &models.LmsPricing{
 		CourseID:                 courseID,
 		Type:                     priceType,
-		Amount:                   amount,
+		Amount:                   decimalAmount,
 		CurrencyCode:             currencyCode,
 		SubscriptionDurationDays: subDurationDays,
 		IsActive:                 true,
@@ -380,10 +382,11 @@ func (s *LmsService) ListPricings(courseID uuid.UUID) ([]models.LmsPricing, erro
 // ----------------------------
 
 func (s *LmsService) CreateBundle(title, slug string, price float64, currencyCode string) (*models.LmsBundle, error) {
+	decimalPrice := decimal.NewFromFloat(price)
 	b := &models.LmsBundle{
 		Title:        title,
 		Slug:         slug,
-		Price:        price,
+		Price:        decimalPrice,
 		CurrencyCode: currencyCode,
 		IsActive:     true,
 	}

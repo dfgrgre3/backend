@@ -63,7 +63,7 @@ func (s *BundleService) PurchaseBundle(userID, bundleID string, pricePaid float6
 			PricePaid:  pricePaid,
 			Currency:   bundle.Currency,
 			Status:     "ACTIVE",
-			EnrolledAt: time.Now(),
+			EnrolledAt: time.Now().UTC(),
 		}
 		if err := tx.Create(&enrollment).Error; err != nil {
 			return err
@@ -82,8 +82,8 @@ func (s *BundleService) PurchaseBundle(userID, bundleID string, pricePaid float6
 				ID:        uuid.New().String(),
 				UserID:    userID,
 				SubjectID: courseID,
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
+				CreatedAt: time.Now().UTC(),
+				UpdatedAt: time.Now().UTC(),
 			}
 			if err := tx.Create(&newEnrollment).Error; err != nil {
 				return err
@@ -96,7 +96,7 @@ func (s *BundleService) PurchaseBundle(userID, bundleID string, pricePaid float6
 		return tx.Model(&bundle).Updates(map[string]interface{}{
 			"total_students": gorm.Expr("total_students + 1"),
 			"total_revenue":  gorm.Expr("total_revenue + ?", pricePaid),
-			"updated_at":     time.Now(),
+			"updated_at":     time.Now().UTC(),
 		}).Error
 	})
 

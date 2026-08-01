@@ -84,7 +84,7 @@ func (s *BackupService) PerformBackup(backupID string) error {
 	backup.Status = "completed"
 	backup.Checksum = s.generateChecksum(backupID)
 	backup.DownloadURL = backupPath
-	now := time.Now()
+	now := time.Now().UTC()
 	backup.CompletedAt = &now
 
 	return db.DB.Save(&backup).Error
@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS "BackupFallback" (
     created_at TIMESTAMP
 );
 INSERT INTO "BackupFallback" (id, created_at) VALUES ('%s', NOW());
-`, backupID, time.Now().Format(time.RFC3339), backupErr, backupID)
+`, backupID, time.Now().UTC().Format(time.RFC3339), backupErr, backupID)
 }
 
 // compressAndWriteBackup compresses the backup data using gzip and writes it to disk.

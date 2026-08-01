@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"time"
 )
@@ -20,7 +21,7 @@ type WalletTransaction struct {
 	ID          string          `gorm:"primaryKey;type:uuid" json:"id"`
 	UserID      string          `gorm:"not null;index;type:uuid;constraint:OnDelete:CASCADE" json:"userId"`
 	Type        TransactionType `gorm:"not null;index" json:"type"`
-	Amount      float64         `gorm:"not null" json:"amount"`
+	Amount      decimal.Decimal `gorm:"not null;type:numeric(19,4)" json:"amount"`
 	Currency    string          `gorm:"-" json:"currency"` // Virtual field (default 'EGP'), not in DB
 	WalletType  string          `gorm:"column:walletId;not null;default:'BALANCE'" json:"walletType"`
 	Description string          `json:"description"`

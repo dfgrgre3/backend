@@ -1,7 +1,11 @@
 package models
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"time"
 )
@@ -18,14 +22,14 @@ const (
 
 type Payment struct {
 	ID        string        `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	UserID    string        `gorm:"not null;index:idx_payment_user_subject,priority:1;type:uuid;column:user_id" json:"userId"`
-	SubjectID *string       `gorm:"index:idx_payment_user_subject,priority:2;type:uuid;column:subject_id" json:"subjectId"`
-	PlanID    string        `gorm:"index;type:uuid;column:plan_id" json:"planId"`
-	Amount    float64       `gorm:"not null;check:amount >= 0;column:amount" json:"amount"`
-	Currency  string        `gorm:"not null;default:'EGP';column:currency" json:"currency"`
-	Status    PaymentStatus `gorm:"not null;default:'pending';index;column:status" json:"status"`
-	Method    string        `gorm:"not null;column:method" json:"method"` // PAYMOB, WALLET, etc.
-	Reference string        `gorm:"uniqueIndex;not null;column:reference" json:"reference"`
+	UserID    string        `gorm:"not null;index:idx_payment_user_subject,priority:1;type:uuid;column:user_id" json:"userId" binding:"required,uuid"`
+	SubjectID *string       `gorm:"index:idx_payment_user_subject,priority:2;type:uuid;column:subject_id" json:"subjectId" binding:"omitempty,uuid"`
+	PlanID    string        `gorm:"index;type:uuid;column:plan_id" json:"planId" binding:"required,uuid"`
+	Amount    decimal.Decimal `gorm:"not null;type:numeric(19,4);check:amount >= 0;column:amount" json:"amount" binding:"required,gt=0"`
+	Currency  string        `gorm:"not null;default:'EGP';column:currency" json:"currency" binding:"required,len=3"`
+	Status    PaymentStatus `gorm:"not null;default:'pending';index;column:status" json:"status" binding:"required,oneof=pending completed failed refunded cancelled"`
+	Method    string        `gorm:"not null;column:method" json:"method" binding:"required,min=2,max=50"` // PAYMOB, WALLET, etc.
+	Reference string        `gorm:"uniqueIndex;not null;column:reference" json:"reference" binding:"required,min=5,max=100"`
 
 	// Paymob specific fields
 	PaymobOrderID int64     `gorm:"index;column:paymob_order_id" json:"paymobOrderId"`
@@ -63,6 +67,24 @@ func (Payment) TableName() string {
 func (p *Payment) BeforeCreate(tx *gorm.DB) (err error) {
 	if p.ID == "" {
 		p.ID = uuid.New().String()
+	}
+	// Ensure amount is non-negative
+	if p.Amount.LessThan(decimal.Zero) {
+		return fmt.Errorf("payment amount cannot be negative")
+	}
+	// Trim reference
+	p.Reference = strings.TrimSpace(p.Reference)
+	return
+}
+
+func (p *Payment) BeforeUpdate(tx *gorm.DB) (err error) {
+	// Prevent changing reference after creation
+	if tx.Statement.Changed("Reference") && p.Reference != "" {
+		return fmt.Errorf("payment reference cannot be changed after creation")
+	}
+	// Ensure amount is non-negative
+	if tx.Statement.Changed("Amount") && p.Amount.LessThan(decimal.Zero) {
+		return fmt.Errorf("payment amount cannot be negative")
 	}
 	return
 }

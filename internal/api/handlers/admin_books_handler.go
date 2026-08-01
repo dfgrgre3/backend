@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	api_response "thanawy-backend/internal/api/response"
@@ -18,23 +19,37 @@ import (
 
 const headerContentType = "Content-Type"
 
+// bookListOrderValue holds the ORDER BY clause for the books list query.
+// It is resolved lazily on the first request (via bookListOrderOnce) to guarantee
+// that db.DB is fully initialised before Migrator().HasColumn() is called.
+// Using init() here would race against ConnectWithWriteDSN, causing HasColumn to
+// execute against a nil *gorm.DB and fall back to an expensive INFORMATION_SCHEMA
+// query on every subsequent request.
+var (
+	bookListOrderValue string
+	bookListOrderOnce  sync.Once
+)
+
+// resolveBookListOrder initialises bookListOrderValue exactly once, after the DB
+// connection is established.
+func resolveBookListOrder() {
+	bookListOrderOnce.Do(func() {
+		if db.DB != nil && db.DB.Migrator().HasColumn(&models.Book{}, "created_at") {
+			bookListOrderValue = "created_at DESC"
+		} else {
+			bookListOrderValue = `"createdAt" DESC`
+		}
+	})
+}
+
 func AdminGetBooks(c *gin.Context) {
+	resolveBookListOrder() // ensures the ORDER BY column is determined exactly once
 	var books []models.Book
-	if err := db.DB.Preload("Subject").Order(bookListOrder()).Find(&books).Error; err != nil {
+	if err := db.DB.Preload("Subject").Order(bookListOrderValue).Find(&books).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch books")
 		return
 	}
 	api_response.Success(c, books)
-}
-
-// bookListOrder supports databases that have not yet applied the timestamp
-// naming migration. New and migrated databases use created_at; older ones use
-// Prisma's legacy createdAt column.
-func bookListOrder() string {
-	if db.DB.Migrator().HasColumn(&models.Book{}, "created_at") {
-		return "created_at DESC"
-	}
-	return `"createdAt" DESC`
 }
 
 func AdminCreateBook(c *gin.Context) {
@@ -82,12 +97,12 @@ func AdminUpdateBook(c *gin.Context) {
 	}
 
 	var input struct {
-		Title       *string                 `json:"title" form:"title"`
-		Author      *string                 `json:"author" form:"author"`
-		Description *string                 `json:"description" form:"description"`
-		SubjectID   *string                 `json:"subjectId" form:"subjectId"`
-		Price       *float64                `json:"price" form:"price"`
-		IsFree      *bool                   `json:"isFree" form:"isFree"`
+		Title       *string               `json:"title" form:"title"`
+		Author      *string               `json:"author" form:"author"`
+		Description *string               `json:"description" form:"description"`
+		SubjectID   *string               `json:"subjectId" form:"subjectId"`
+		Price       *float64              `json:"price" form:"price"`
+		IsFree      *bool                 `json:"isFree" form:"isFree"`
 		Tags        *models.PGStringArray `json:"tags" form:"tags"`
 	}
 

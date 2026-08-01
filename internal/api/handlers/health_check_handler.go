@@ -70,7 +70,7 @@ func HealthCheck(c *gin.Context) {
 
 	response := HealthResponse{
 		Status:    overallStatus,
-		Timestamp: time.Now().Format(time.RFC3339),
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Checks:    checks,
 	}
 
@@ -255,27 +255,49 @@ func checkResponseTimeHealth(_ *gin.Context) Check {
 func LivenessCheck(c *gin.Context) {
 	api_response.Success(c, gin.H{
 		"status":    "alive",
-		"timestamp": time.Now().Format(time.RFC3339),
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	})
 }
 
-// ReadinessCheck returns 200 if the service is ready to serve traffic
-// Used by Kubernetes readiness probes
+// ReadinessCheck returns 200 if the service is ready to serve traffic.
+// Checks both database and Redis (if configured) to ensure all
+// required dependencies are available before accepting requests.
+// Used by Kubernetes readiness probes.
 func ReadinessCheck(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	// Check if database is accessible
+	// 1. Check database connectivity
 	var result int
 	if err := db.DB.WithContext(ctx).Raw("SELECT 1").Scan(&result).Error; err != nil {
 		api_response.Error(c, http.StatusServiceUnavailable, "database_unavailable")
 		return
 	}
 
+	// 2. Check Redis connectivity (if configured)
+	if db.Redis != nil {
+		if err := db.Redis.Ping(ctx).Err(); err != nil {
+			api_response.Error(c, http.StatusServiceUnavailable, "redis_unavailable")
+			return
+		}
+	}
+
 	api_response.Success(c, gin.H{
 		"status":    "ready",
-		"timestamp": time.Now().Format(time.RFC3339),
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"checks": gin.H{
+			"database": "ok",
+			"redis":    redisReadinessStatus(),
+		},
 	})
+}
+
+// redisReadinessStatus returns "ok" if Redis is connected, "disabled" otherwise.
+func redisReadinessStatus() string {
+	if db.Redis == nil {
+		return "disabled"
+	}
+	return "ok"
 }
 
 // getRedisClient returns the singleton Redis client from the db package

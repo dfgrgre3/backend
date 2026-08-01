@@ -22,6 +22,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -474,12 +475,13 @@ func EnrollCourse(c *gin.Context) {
 	}
 
 	// Payment verification logic
-	if subject.Price > 0 {
+	price, _ := subject.Price.Float64()
+	if price > 0 {
 		if !hasPaidForSubject(userId, courseId) {
 			api_response.Success(c, gin.H{
 				"error":           "Payment required for this course",
 				"courseId":        courseId,
-				"price":           subject.Price,
+				"price":           price,
 				"requiresPayment": true,
 			})
 			return
@@ -598,7 +600,9 @@ func processInternalWalletPayment(c *gin.Context, userId string, courseId string
 			return err
 		}
 
-		if user.Balance < subject.Price {
+		balance, _ := user.Balance.Float64()
+		price, _ := subject.Price.Float64()
+		if balance < price {
 			return gorm.ErrInvalidData // Insufficient balance
 		}
 
@@ -635,7 +639,8 @@ func processPaymobPayment(c *gin.Context, userId string, courseId string, subjec
 		return
 	}
 
-	amountCents := int64(subject.Price * 100)
+	price, _ := subject.Price.Float64()
+	amountCents := int64(price * 100)
 	orderID, err := paymobSvc.RegisterOrder(token, amountCents, []interface{}{
 		map[string]interface{}{
 			"name":         subject.Name,
@@ -663,7 +668,7 @@ func processPaymobPayment(c *gin.Context, userId string, courseId string, subjec
 		return
 	}
 
-	if err := createPendingPayment(userId, courseId, subject.Price, method, orderID); err != nil {
+	if err := createPendingPayment(userId, courseId, price, method, orderID); err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to save payment record")
 		return
 	}
@@ -711,7 +716,7 @@ func createPendingPayment(userId, courseId string, amount float64, method string
 	payment := models.Payment{
 		UserID:        userId,
 		SubjectID:     &courseId,
-		Amount:        amount,
+		Amount:        decimal.NewFromFloat(amount),
 		Method:        method,
 		Status:        models.PaymentPending,
 		Reference:     generateSecureReference("COURSE"),

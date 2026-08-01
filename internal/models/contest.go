@@ -16,8 +16,8 @@ type Contest struct {
 	PinCode           *string           `gorm:"column:pin_code" json:"pinCode"`
 	Status            string            `gorm:"default:'DRAFT';index;column:status" json:"status"`
 	Questions         []ContestQuestion `gorm:"foreignKey:ContestID;constraint:OnDelete:CASCADE" json:"questions,omitempty"`
-	CreatedAt         time.Time         `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt         time.Time         `gorm:"column:updated_at" json:"updatedAt"`
+	CreatedAt         time.Time         `gorm:"column:createdAt" json:"createdAt"`
+	UpdatedAt         time.Time         `gorm:"column:updatedAt" json:"updatedAt"`
 	DeletedAt         gorm.DeletedAt    `gorm:"index;column:deleted_at" json:"-"`
 }
 

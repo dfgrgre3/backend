@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"gorm.io/gorm"
+	"gorm.io/plugin/dbresolver"
 )
 
 //go:embed migrations/*.sql
@@ -229,12 +230,16 @@ func RunSQLMigrations(database *gorm.DB) error {
 		return nil
 	}
 
-	if err := database.Exec(`SELECT pg_advisory_lock(hashtext('thanawy_backend_schema_migrations'))`).Error; err != nil {
+	// Always acquire the advisory lock on the write source so that concurrent
+	// migration runners (e.g. during a rolling deploy) do not race each other.
+	writeDB := database.Clauses(dbresolver.Write)
+
+	if err := writeDB.Exec(`SELECT pg_advisory_lock(hashtext('thanawy_backend_schema_migrations'))`).Error; err != nil {
 		return fmt.Errorf("acquire migration lock: %w", err)
 	}
-	defer releaseMigrationLock(database)
+	defer releaseMigrationLock(writeDB)
 
-	if err := ensureMigrationTable(database); err != nil {
+	if err := ensureMigrationTable(writeDB); err != nil {
 		return err
 	}
 
@@ -244,7 +249,7 @@ func RunSQLMigrations(database *gorm.DB) error {
 	}
 
 	for _, name := range names {
-		if err := applyMigration(database, name); err != nil {
+		if err := applyMigration(writeDB, name); err != nil {
 			return err
 		}
 	}
@@ -303,6 +308,8 @@ func applyMigration(database *gorm.DB, name string) error {
 	sum := sha256.Sum256(contents)
 	checksum := hex.EncodeToString(sum[:])
 
+	// Always read migration records from the write source to avoid reading
+	// stale data from a replica that may be behind by a few milliseconds.
 	var existing migrationRecord
 	err = database.First(&existing, "id = ?", id).Error
 	if err == nil {
@@ -327,14 +334,22 @@ func applyMigration(database *gorm.DB, name string) error {
 	})
 }
 
+// shouldSkipBaseline returns true when an existing schema is already in place,
+// meaning the baseline migration should be recorded but not executed.
+// Uses a single query to check both conditions together.
 func shouldSkipBaseline(database *gorm.DB) bool {
-	var migrationCount int64
-	database.Model(&migrationRecord{}).Count(&migrationCount)
+	var result struct {
+		MigrationCount   int64
+		UserTableExists  int64
+	}
+	database.Raw(`
+		SELECT
+			(SELECT COUNT(*) FROM "schema_migrations") AS migration_count,
+			(SELECT COUNT(*) FROM information_schema.tables
+			 WHERE table_schema = 'public' AND table_name = 'User') AS user_table_exists
+	`).Scan(&result)
 
-	var userTableExists int64
-	database.Raw(`SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'User'`).Scan(&userTableExists)
-
-	return userTableExists > 0 || migrationCount > 0
+	return result.UserTableExists > 0 || result.MigrationCount > 0
 }
 
 func executeMigrationStatements(tx *gorm.DB, id, contents, checksum string) error {
@@ -344,11 +359,11 @@ func executeMigrationStatements(tx *gorm.DB, id, contents, checksum string) erro
 	}
 
 	for i, stmt := range statements {
-		trimmed := strings.TrimSpace(stmt)
-		if trimmed == "" || strings.HasPrefix(trimmed, "--") {
+		// splitSQLStatements already strips comments; only skip truly empty strings.
+		if strings.TrimSpace(stmt) == "" {
 			continue
 		}
-		if shouldSkipMigrationStatement(id, trimmed) {
+		if shouldSkipMigrationStatement(id, stmt) {
 			continue
 		}
 

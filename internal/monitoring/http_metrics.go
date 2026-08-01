@@ -2,9 +2,11 @@ package monitoring
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -200,7 +202,7 @@ type metricKey struct {
 }
 
 func persistMetricBatch(metrics []HTTPRequestMetric) {
-	if db.WriteDB() == nil {
+	if db.WriteDB() == nil || len(metrics) == 0 {
 		return
 	}
 	grouped := make(map[metricKey][]HTTPRequestMetric)
@@ -208,8 +210,14 @@ func persistMetricBatch(metrics []HTTPRequestMetric) {
 		key := metricKey{metric.Timestamp.UTC().Truncate(time.Minute), metric.Route, metric.Method, metric.Status}
 		grouped[key] = append(grouped[key], metric)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+
+	if len(grouped) == 0 {
+		return
+	}
+
+	var valueStrings []string
+	var valueArgs []interface{}
+
 	for key, samples := range grouped {
 		durations := make([]int64, 0, len(samples))
 		var errors, slow, sum, maximum int64
@@ -228,10 +236,18 @@ func persistMetricBatch(metrics []HTTPRequestMetric) {
 		}
 		sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
 		count := int64(len(samples))
-		err := db.WriteDB(ctx).Exec(`INSERT INTO http_metric_buckets (bucket_start, route, method, status, request_count, error_count, slow_count, duration_sum_ms, duration_max_ms, p50_ms, p95_ms, p99_ms, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()) ON CONFLICT (bucket_start, route, method, status) DO UPDATE SET p50_ms = ((http_metric_buckets.p50_ms * http_metric_buckets.request_count) + (EXCLUDED.p50_ms * EXCLUDED.request_count)) / (http_metric_buckets.request_count + EXCLUDED.request_count), p95_ms = ((http_metric_buckets.p95_ms * http_metric_buckets.request_count) + (EXCLUDED.p95_ms * EXCLUDED.request_count)) / (http_metric_buckets.request_count + EXCLUDED.request_count), p99_ms = ((http_metric_buckets.p99_ms * http_metric_buckets.request_count) + (EXCLUDED.p99_ms * EXCLUDED.request_count)) / (http_metric_buckets.request_count + EXCLUDED.request_count), request_count = http_metric_buckets.request_count + EXCLUDED.request_count, error_count = http_metric_buckets.error_count + EXCLUDED.error_count, slow_count = http_metric_buckets.slow_count + EXCLUDED.slow_count, duration_sum_ms = http_metric_buckets.duration_sum_ms + EXCLUDED.duration_sum_ms, duration_max_ms = GREATEST(http_metric_buckets.duration_max_ms, EXCLUDED.duration_max_ms), updated_at = NOW()`, key.bucket, key.route, key.method, key.status, count, errors, slow, sum, maximum, percentile(durations, .50), percentile(durations, .95), percentile(durations, .99)).Error
-		if err != nil {
-			log.Printf("[PERF] failed to persist HTTP metric bucket: %v", err)
-		}
+
+		valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())")
+		valueArgs = append(valueArgs, key.bucket, key.route, key.method, key.status, count, errors, slow, sum, maximum, percentile(durations, .50), percentile(durations, .95), percentile(durations, .99))
+	}
+
+	query := fmt.Sprintf(`INSERT INTO http_metric_buckets (bucket_start, route, method, status, request_count, error_count, slow_count, duration_sum_ms, duration_max_ms, p50_ms, p95_ms, p99_ms, updated_at) VALUES %s ON CONFLICT (bucket_start, route, method, status) DO UPDATE SET p50_ms = ((http_metric_buckets.p50_ms * http_metric_buckets.request_count) + (EXCLUDED.p50_ms * EXCLUDED.request_count)) / (http_metric_buckets.request_count + EXCLUDED.request_count), p95_ms = ((http_metric_buckets.p95_ms * http_metric_buckets.request_count) + (EXCLUDED.p95_ms * EXCLUDED.request_count)) / (http_metric_buckets.request_count + EXCLUDED.request_count), p99_ms = ((http_metric_buckets.p99_ms * http_metric_buckets.request_count) + (EXCLUDED.p99_ms * EXCLUDED.request_count)) / (http_metric_buckets.request_count + EXCLUDED.request_count), request_count = http_metric_buckets.request_count + EXCLUDED.request_count, error_count = http_metric_buckets.error_count + EXCLUDED.error_count, slow_count = http_metric_buckets.slow_count + EXCLUDED.slow_count, duration_sum_ms = http_metric_buckets.duration_sum_ms + EXCLUDED.duration_sum_ms, duration_max_ms = GREATEST(http_metric_buckets.duration_max_ms, EXCLUDED.duration_max_ms), updated_at = NOW()`, strings.Join(valueStrings, ", "))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.WriteDB(ctx).Exec(query, valueArgs...).Error; err != nil {
+		log.Printf("[PERF] failed to persist HTTP metric bucket batch: %v", err)
 	}
 }
 

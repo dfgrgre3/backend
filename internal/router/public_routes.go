@@ -98,7 +98,13 @@ func SetupPublicRoutes(router *gin.Engine) {
 	if err != nil {
 		log.Printf("OAuth service not configured: %v", err)
 	}
-	cfg := config.Load()
+	cfg, configErr := config.LoadSafe()
+	if configErr != nil {
+		if gin.Mode() != gin.TestMode {
+			log.Fatalf("FATAL: invalid configuration: %v", configErr)
+		}
+		cfg = &config.Config{}
+	}
 	mailQueueWorker := services.GetMailQueueWorker()
 	authService := services.NewAuthService(repository.NewAuthRepository(), services.NewAuthTokenService(), oauthService, cfg, mailQueueWorker)
 	authHandler := handlers.NewAuthHandler(authService)

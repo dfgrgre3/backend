@@ -179,30 +179,27 @@ func (s *authTokenService) ValidateAccessToken(tokenString string) (*CustomClaim
 	var claims *CustomClaims
 	var err error
 
-	if s.cfg.JWTIssuerURL == "" {
-		claims = &CustomClaims{}
-		var token *jwt.Token
-		token, err = jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
-			return []byte(s.cfg.JWTSecretKey), nil
-		}, jwt.WithAudience("thanawy-api"))
-		if err != nil {
-			return nil, err
+	// Try HMAC signing first (our primary signing method for local tokens)
+	claims = &CustomClaims{}
+	var token *jwt.Token
+	token, err = jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		if !token.Valid {
-			return nil, errors.New("invalid token")
-		}
+		return []byte(s.cfg.JWTSecretKey), nil
+	}, jwt.WithAudience("thanawy-api"))
+	if err == nil && token.Valid {
 		if claims.UserID == "" {
 			claims.UserID = claims.Subject
 		}
-	} else {
-		// Try parsing as RSA public key first (for external JWTs)
-		publicKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(strings.ReplaceAll(s.cfg.JWTSecretKey, `\n`, "\n")))
-		if err == nil {
+		goto checkBlacklist
+	}
+
+	// Fallback: try parsing as RSA public key (for external JWTs)
+	if s.cfg.JWTIssuerURL != "" {
+		publicKey, parseErr := jwt.ParseRSAPublicKeyFromPEM([]byte(strings.ReplaceAll(s.cfg.JWTSecretKey, `\n`, "\n")))
+		if parseErr == nil {
 			claims = &CustomClaims{}
-			var token *jwt.Token
 			token, err = jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 				if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -220,9 +217,14 @@ func (s *authTokenService) ValidateAccessToken(tokenString string) (*CustomClaim
 			}
 			claims.UserID = claims.Subject
 		} else {
-			return nil, fmt.Errorf("invalid JWT secret key: %w", err)
+			return nil, fmt.Errorf("invalid JWT secret key: %w", parseErr)
 		}
+	} else {
+		// JWTIssuerURL is not set, propagate the original HMAC error
+		return nil, err
 	}
+
+checkBlacklist:
 
 	if claims != nil && s.IsJTIBlacklisted(claims.ID) {
 		return nil, errors.New("token has been blacklisted/revoked")

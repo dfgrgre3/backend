@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/events"
 	"time"
@@ -75,6 +76,12 @@ func IngestEvent(c *gin.Context) {
 		MaxLen: analyticsMaxLen,
 		Approx: true,
 	}).Err(); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unknown command") {
+			log.Printf("[EventIngest] Redis Streams (XADD) not supported (< 5.0), falling back to List: %v", err)
+			_ = db.Redis.LPush(c.Request.Context(), analyticsStream+":list", string(data)).Err()
+			c.Status(http.StatusAccepted)
+			return
+		}
 		log.Printf("[EventIngest] Redis XAdd failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to ingest event"})
 		return

@@ -1,9 +1,7 @@
 package worker
 
 import (
-	"log"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -30,17 +28,7 @@ func GetClient() *asynq.Client {
 			return nil
 		}
 
-		var opts asynq.RedisConnOpt
-		if strings.HasPrefix(redisAddr, "redis://") || strings.HasPrefix(redisAddr, "rediss://") {
-			parsedOpts, err := asynq.ParseRedisURI(redisAddr)
-			if err != nil {
-				log.Printf("failed to parse redis uri for worker client: %v", err)
-				return nil
-			}
-			opts = parsedOpts
-		} else {
-			opts = asynq.RedisClientOpt{Addr: redisAddr}
-		}
+		opts := parseAsynqRedisConnOpt(redisAddr)
 
 		client = asynq.NewClient(opts)
 	}

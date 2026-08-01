@@ -107,7 +107,7 @@ func (h *ProgressHandler) handleLessonCompleted(ctx context.Context, p ProgressU
 		return fmt.Errorf(errDatabaseNotConnected)
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 
 	result := writeDB(ctx).Exec(`
 		INSERT INTO "TopicProgress" ("id", "user_id", "sub_topic_id", "status", "completed", "time_spent_seconds", "last_watched_position", "created_at", "updated_at")
@@ -133,7 +133,7 @@ func (h *ProgressHandler) handleLessonProgress(ctx context.Context, p ProgressUp
 		return fmt.Errorf(errDatabaseNotConnected)
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 
 	result := writeDB(ctx).Exec(`
 		INSERT INTO "TopicProgress" ("id", "user_id", "sub_topic_id", "status", "completed", "time_spent_seconds", "last_watched_position", "created_at", "updated_at")
@@ -157,7 +157,7 @@ func (h *ProgressHandler) handleExamCompleted(ctx context.Context, p ProgressUpd
 		return fmt.Errorf(errDatabaseNotConnected)
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 
 	result := writeDB(ctx).Exec(`
 		INSERT INTO "ExamResult" ("id", "exam_id", "user_id", "score", "passed", "taken_at", "created_at", "updated_at")
@@ -199,7 +199,7 @@ func (h *ProgressHandler) handleStudySession(ctx context.Context, p ProgressUpda
 		return fmt.Errorf(errDatabaseNotConnected)
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	endTime := now.Add(time.Duration(p.StudySessionMinutes) * time.Minute)
 
 	result := writeDB(ctx).Exec(`

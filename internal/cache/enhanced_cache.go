@@ -8,31 +8,30 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"thanawy-backend/internal/db"
 )
 
-// EnhancedCache provides advanced caching with multiple strategies
+// EnhancedCache provides a two-level cache:
+//   - L1: in-process LRU cache (fast, no network round-trip)
+//   - L2: Redis (shared across replicas, survives restarts)
+//
+// The Redis client is resolved lazily via db.GetRedis() on every operation so
+// that the cache remains fully functional even if Redis connects after the
+// cache is first created (common in production startup ordering).
 type EnhancedCache struct {
-	redis *RedisCache
 	local *LRUCache
 	stats *CacheStats
 	mu    sync.RWMutex
 }
 
-// RedisCache wraps Redis operations
-type RedisCache struct {
-	client *redis.Client
-}
-
 // CacheStats tracks cache performance metrics
 type CacheStats struct {
-	mu           sync.Mutex
-	hits         int64
-	misses       int64
-	errors       int64
-	localHits    int64
-	redisHits    int64
+	mu        sync.Mutex
+	hits      int64
+	misses    int64
+	errors    int64
+	localHits int64
+	redisHits int64
 }
 
 // CacheStrategy defines caching behavior
@@ -49,16 +48,16 @@ const (
 	CacheStrategyRefreshAhead
 )
 
-// NewEnhancedCache creates a new enhanced cache instance
+// NewEnhancedCache creates a new enhanced cache instance.
+// maxLocalSize controls the in-process LRU capacity.
 func NewEnhancedCache(maxLocalSize int) *EnhancedCache {
 	return &EnhancedCache{
-		redis: &RedisCache{client: db.Redis},
 		local: NewLRUCache(maxLocalSize),
 		stats: &CacheStats{},
 	}
 }
 
-// Get retrieves a value using read-through strategy
+// Get retrieves a value using read-through strategy (L1 → L2 → miss).
 func (ec *EnhancedCache) Get(ctx context.Context, key string, dest interface{}) error {
 	// Try local cache first (L1)
 	if ec.local != nil {
@@ -69,11 +68,11 @@ func (ec *EnhancedCache) Get(ctx context.Context, key string, dest interface{}) 
 	}
 
 	// Try Redis cache (L2)
-	if ec.redis.client != nil {
-		data, err := ec.redis.client.Get(ctx, key).Bytes()
+	if client := db.GetRedis(); client != nil {
+		data, err := client.Get(ctx, key).Bytes()
 		if err == nil {
 			ec.recordRedisHit()
-			// Populate local cache
+			// Populate local cache for subsequent reads.
 			if ec.local != nil {
 				ec.local.Set(key, data, 5*time.Minute)
 			}
@@ -85,7 +84,7 @@ func (ec *EnhancedCache) Get(ctx context.Context, key string, dest interface{}) 
 	return fmt.Errorf("cache miss: %s", key)
 }
 
-// Set stores a value using write-through strategy
+// Set stores a value using write-through strategy (L1 and L2 simultaneously).
 func (ec *EnhancedCache) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -93,14 +92,14 @@ func (ec *EnhancedCache) Set(ctx context.Context, key string, value interface{},
 		return err
 	}
 
-	// Write to local cache
+	// Write to local cache.
 	if ec.local != nil {
 		ec.local.Set(key, data, ttl)
 	}
 
-	// Write to Redis
-	if ec.redis.client != nil {
-		if err := ec.redis.client.Set(ctx, key, data, ttl).Err(); err != nil {
+	// Write to Redis.
+	if client := db.GetRedis(); client != nil {
+		if err := client.Set(ctx, key, data, ttl).Err(); err != nil {
 			ec.recordError()
 			log.Printf("[Cache] Redis set error for key %s: %v", key, err)
 			return err
@@ -110,60 +109,79 @@ func (ec *EnhancedCache) Set(ctx context.Context, key string, value interface{},
 	return nil
 }
 
-// Delete removes a key from all cache layers
+// Delete removes a key from all cache layers.
 func (ec *EnhancedCache) Delete(ctx context.Context, key string) error {
 	if ec.local != nil {
 		ec.local.Delete(key)
 	}
-	if ec.redis.client != nil {
-		return ec.redis.client.Del(ctx, key).Err()
+	if client := db.GetRedis(); client != nil {
+		return client.Del(ctx, key).Err()
 	}
 	return nil
 }
 
-// InvalidatePattern removes keys matching a pattern
+// InvalidatePattern removes keys matching a pattern from Redis and clears the
+// entire local cache (pattern scanning local cache is not cost-effective).
 func (ec *EnhancedCache) InvalidatePattern(ctx context.Context, pattern string) error {
-	if ec.redis.client != nil {
-		iter := ec.redis.client.Scan(ctx, 0, pattern, 100).Iterator()
+	if client := db.GetRedis(); client != nil {
+		iter := client.Scan(ctx, 0, pattern, 100).Iterator()
+		pipe := client.Pipeline()
+		count := 0
 		for iter.Next(ctx) {
-			if err := ec.redis.client.Del(ctx, iter.Val()).Err(); err != nil {
-				log.Printf("[Cache] Error deleting key %s: %v", iter.Val(), err)
+			pipe.Del(ctx, iter.Val())
+			count++
+		}
+		if count > 0 {
+			if _, err := pipe.Exec(ctx); err != nil {
+				log.Printf("[Cache] Error executing pipeline delete for pattern %s: %v", pattern, err)
 			}
 		}
+		if err := iter.Err(); err != nil {
+			return err
+		}
 	}
-	// Note: Local cache pattern invalidation would require scanning all keys
-	// For simplicity, we clear local cache on pattern invalidation
+	// Clear local cache on pattern invalidation — scanning all local keys is
+	// O(n) and not worth it; a full local clear is cheaper and safe.
 	if ec.local != nil {
 		ec.local.Clear()
 	}
 	return nil
 }
 
-// GetOrSet implements cache-aside pattern with automatic population
+// GetOrSet implements cache-aside: return the cached value if available,
+// otherwise call loader, store the result, and return it.
 func (ec *EnhancedCache) GetOrSet(ctx context.Context, key string, dest interface{}, ttl time.Duration, loader func() (interface{}, error)) error {
-	// Try to get from cache
-	err := ec.Get(ctx, key, dest)
-	if err == nil {
+	// Try to get from cache.
+	if err := ec.Get(ctx, key, dest); err == nil {
 		return nil
 	}
 
-	// Cache miss - load data
+	// Cache miss — load data from the source.
 	value, err := loader()
 	if err != nil {
 		return err
 	}
 
-	// Store in cache
-	if err := ec.Set(ctx, key, value, ttl); err != nil {
-		log.Printf("[Cache] Failed to store loaded value: %v", err)
+	// Marshal once, reuse for both store and unmarshal into dest.
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
 	}
 
-	// Unmarshal into dest
-	data, _ := json.Marshal(value)
+	// Store in both cache layers (best-effort — don't fail the caller on cache write errors).
+	if ec.local != nil {
+		ec.local.Set(key, data, ttl)
+	}
+	if client := db.GetRedis(); client != nil {
+		if err := client.Set(ctx, key, data, ttl).Err(); err != nil {
+			log.Printf("[Cache] Failed to store loaded value in Redis: %v", err)
+		}
+	}
+
 	return json.Unmarshal(data, dest)
 }
 
-// GetStats returns cache performance statistics
+// GetStats returns cache performance statistics.
 func (ec *EnhancedCache) GetStats() CacheStatsSnapshot {
 	ec.stats.mu.Lock()
 	defer ec.stats.mu.Unlock()
@@ -185,7 +203,7 @@ func (ec *EnhancedCache) GetStats() CacheStatsSnapshot {
 	}
 }
 
-// CacheStatsSnapshot is a point-in-time view of cache stats
+// CacheStatsSnapshot is a point-in-time view of cache stats.
 type CacheStatsSnapshot struct {
 	TotalRequests int64
 	Hits          int64
@@ -194,12 +212,6 @@ type CacheStatsSnapshot struct {
 	LocalHits     int64
 	RedisHits     int64
 	HitRate       float64
-}
-
-func (ec *EnhancedCache) recordHit() {
-	ec.stats.mu.Lock()
-	ec.stats.hits++
-	ec.stats.mu.Unlock()
 }
 
 func (ec *EnhancedCache) recordLocalHit() {
@@ -229,6 +241,7 @@ func (ec *EnhancedCache) recordError() {
 }
 
 // Cache warming functions
+
 func (ec *EnhancedCache) WarmSubjectCache(ctx context.Context, subjectIDs []string) error {
 	for _, id := range subjectIDs {
 		// Pre-load subject details
@@ -247,9 +260,14 @@ func (ec *EnhancedCache) WarmUserCache(ctx context.Context, userIDs []string) er
 	return nil
 }
 
-// Global enhanced cache instance
-var GlobalEnhancedCache *EnhancedCache
-var cacheOnce sync.Once
+// Global enhanced cache singleton.
+// Uses sync.Once to create exactly one instance. The instance itself always
+// resolves the live Redis client at call time, so it is safe to call
+// GetEnhancedCache() before Redis has connected.
+var (
+	GlobalEnhancedCache *EnhancedCache
+	cacheOnce           sync.Once
+)
 
 func GetEnhancedCache() *EnhancedCache {
 	cacheOnce.Do(func() {

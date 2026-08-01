@@ -1,0 +1,101 @@
+.PHONY: help build test lint fmt clean migrate-up migrate-down run dev install-deps
+
+# Variables
+APP_NAME=thanawy-backend
+CMD_DIR=./cmd
+API_CMD=$(CMD_DIR)/api
+MIGRATE_CMD=$(CMD_DIR)/migrate
+BUILD_DIR=./bin
+GO=go
+
+# Default target
+help:
+	@echo "Available targets:"
+	@echo "  make build         - Build the application"
+	@echo "  make test          - Run tests"
+	@echo "  make lint          - Run linters"
+	@echo "  make fmt           - Format code"
+	@echo "  make clean         - Clean build artifacts"
+	@echo "  make migrate-up    - Run database migrations"
+	@echo "  make migrate-down  - Rollback database migrations"
+	@echo "  make run           - Run the API server"
+	@echo "  make dev           - Run in development mode with hot reload"
+	@echo "  make install-deps  - Install Go dependencies"
+
+# Build the application
+build:
+	@echo "Building $(APP_NAME)..."
+	@mkdir -p $(BUILD_DIR)
+	$(GO) build -o $(BUILD_DIR)/api $(API_CMD)/main.go
+	$(GO) build -o $(BUILD_DIR)/migrate $(MIGRATE_CMD)/main.go
+	@echo "Build complete: $(BUILD_DIR)/api, $(BUILD_DIR)/migrate"
+
+# Run tests
+test:
+	@echo "Running tests..."
+	$(GO) test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+	@echo "Test coverage report: coverage.out"
+
+# Run linters
+lint:
+	@echo "Running linters..."
+	$(GO) vet ./...
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run; \
+	else \
+		echo "golangci-lint not installed. Install it from https://golangci-lint.run/usage/install/"; \
+	fi
+
+# Format code
+fmt:
+	@echo "Formatting code..."
+	$(GO) fmt ./...
+	@if command -v goimports >/dev/null 2>&1; then \
+		goimports -w .; \
+	fi
+
+# Clean build artifacts
+clean:
+	@echo "Cleaning build artifacts..."
+	@rm -rf $(BUILD_DIR)
+	@rm -f coverage.out
+	@echo "Clean complete"
+
+# Run database migrations up
+migrate-up:
+	@echo "Running database migrations..."
+	$(GO) run $(MIGRATE_CMD)/main.go up
+
+# Run database migrations down
+migrate-down:
+	@echo "Rolling back database migrations..."
+	$(GO) run $(MIGRATE_CMD)/main.go down
+
+# Run the API server
+run:
+	@echo "Starting API server..."
+	$(GO) run $(API_CMD)/main.go
+
+# Run in development mode with hot reload (requires air)
+dev:
+	@if command -v air >/dev/null 2>&1; then \
+		air; \
+	else \
+		echo "air not installed. Install it with: go install github.com/cosmtrek/air@latest"; \
+		$(GO) run $(API_CMD)/main.go; \
+	fi
+
+# Install Go dependencies
+install-deps:
+	@echo "Installing Go dependencies..."
+	$(GO) mod download
+	$(GO) mod tidy
+	@echo "Dependencies installed"
+
+# Install development tools
+install-tools:
+	@echo "Installing development tools..."
+	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	$(GO) install github.com/cosmtrek/air@latest
+	$(GO) install golang.org/x/tools/cmd/goimports@latest
+	@echo "Development tools installed"

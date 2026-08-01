@@ -354,7 +354,8 @@ func OptimizedEnrollCourse(c *gin.Context) {
 	}
 
 	// Payment verification logic
-	if subject.Price > 0 {
+	price, _ := subject.Price.Float64()
+	if price > 0 {
 		paid, err := qo.OptimizedPaymentCheck(ctx, userId, subject.ID)
 		if err != nil {
 			api_response.Error(c, http.StatusInternalServerError, "Failed to check payment status")
@@ -364,7 +365,7 @@ func OptimizedEnrollCourse(c *gin.Context) {
 			api_response.Success(c, gin.H{
 				"error":           "Payment required for this course",
 				"courseId":        courseId,
-				"price":           subject.Price,
+				"price":           price,
 				"requiresPayment": true,
 			})
 			return

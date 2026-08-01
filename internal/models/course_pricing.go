@@ -31,18 +31,18 @@ const (
 
 // CoursePricing stores the complete pricing configuration for a course
 type CoursePricing struct {
-	ID                 string        `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	SubjectID          string        `gorm:"uniqueIndex;type:uuid;column:subject_id" json:"subjectId"`
-	PricingType        PricingType   `gorm:"default:'ONE_TIME';column:pricing_type" json:"pricingType"`
-	Price              float64       `gorm:"default:0;column:price" json:"price"`
-	Currency           Currency      `gorm:"default:'EGP';column:currency" json:"currency"`
-	DiscountPrice      *float64      `gorm:"column:discount_price" json:"discountPrice,omitempty"`
-	DiscountStartAt    *time.Time    `gorm:"column:discount_start_at" json:"discountStartAt,omitempty"`
-	DiscountEndAt      *time.Time    `gorm:"column:discount_end_at" json:"discountEndAt,omitempty"`
-	SubscriptionPlanID *string       `gorm:"type:uuid;column:subscription_plan_id" json:"subscriptionPlanId,omitempty"`
-	IsActive           bool          `gorm:"default:true;column:is_active" json:"isActive"`
-	CreatedAt          time.Time     `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt          time.Time     `gorm:"column:updated_at" json:"updatedAt"`
+	ID                 string      `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	SubjectID          string      `gorm:"uniqueIndex;type:uuid;column:subject_id" json:"subjectId"`
+	PricingType        PricingType `gorm:"default:'ONE_TIME';column:pricing_type" json:"pricingType"`
+	Price              float64     `gorm:"default:0;column:price" json:"price"`
+	Currency           Currency    `gorm:"default:'EGP';column:currency" json:"currency"`
+	DiscountPrice      *float64    `gorm:"column:discount_price" json:"discountPrice,omitempty"`
+	DiscountStartAt    *time.Time  `gorm:"column:discount_start_at" json:"discountStartAt,omitempty"`
+	DiscountEndAt      *time.Time  `gorm:"column:discount_end_at" json:"discountEndAt,omitempty"`
+	SubscriptionPlanID *string     `gorm:"type:uuid;column:subscription_plan_id" json:"subscriptionPlanId,omitempty"`
+	IsActive           bool        `gorm:"default:true;column:is_active" json:"isActive"`
+	CreatedAt          time.Time   `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt          time.Time   `gorm:"column:updated_at" json:"updatedAt"`
 
 	// Relations
 	Subject       *Subject          `gorm:"foreignKey:SubjectID;constraint:OnDelete:CASCADE" json:"subject,omitempty"`
@@ -140,7 +140,7 @@ type BundleEnrollment struct {
 	DeletedAt  gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
 
 	// Relations
-	User   *User        `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user,omitempty"`
+	User   *User         `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user,omitempty"`
 	Bundle *CourseBundle `gorm:"foreignKey:BundleID;constraint:OnDelete:CASCADE" json:"bundle,omitempty"`
 }
 
@@ -157,14 +157,14 @@ func (be *BundleEnrollment) BeforeCreate(tx *gorm.DB) error {
 
 // BundleCourse is the explicit junction table for bundle-courses
 type BundleCourse struct {
-	BundleID string    `gorm("primaryKey;type:uuid;column:bundle_id" json:"bundleId"`
-	CourseID string    `gorm("primaryKey;type:uuid;column:course_id" json:"courseId"`
-	SortOrder int       `gorm("default:0;column:sort_order" json:"sortOrder"`
-	AddedAt   time.Time `gorm("column:added_at" json:"addedAt"`
+	BundleID  string    `gorm:"primaryKey;type:uuid;column:bundle_id" json:"bundleId"`
+	CourseID  string    `gorm:"primaryKey;type:uuid;column:course_id" json:"courseId"`
+	SortOrder int       `gorm:"default:0;column:sort_order" json:"sortOrder"`
+	AddedAt   time.Time `gorm:"column:added_at" json:"addedAt"`
 
 	// Relations
-	Bundle *CourseBundle `gorm("foreignKey:BundleID;constraint:OnDelete:CASCADE" json:"bundle,omitempty"`
-	Course *Subject      `gorm("foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"course,omitempty"`
+	Bundle *CourseBundle `gorm:"foreignKey:BundleID;constraint:OnDelete:CASCADE" json:"bundle,omitempty"`
+	Course *Subject      `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"course,omitempty"`
 }
 
 func (BundleCourse) TableName() string {
@@ -174,7 +174,7 @@ func (BundleCourse) TableName() string {
 // CourseVersion stores immutable curriculum snapshots for versioning
 type CourseVersion struct {
 	ID                 string    `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	SubjectID          string    `gorm("index;type:uuid;column:subject_id" json:"subjectId"`
+	SubjectID          string    `gorm:"index;type:uuid;column:subject_id" json:"subjectId"`
 	Version            string    `gorm:"not null;column:version" json:"version"`
 	VersionNumber      int       `gorm:"default:1;column:version_number" json:"versionNumber"`
 	ChangeSummary      *string   `gorm:"column:change_summary" json:"changeSummary,omitempty"`
@@ -208,30 +208,30 @@ type UpdatePricingRequest struct {
 }
 
 type CreateBundleRequest struct {
-	Name            string   `json:"name" binding:"required"`
-	NameAr          *string  `json:"nameAr,omitempty"`
-	Description     *string  `json:"description,omitempty"`
-	DescriptionAr   *string  `json:"descriptionAr,omitempty"`
-	Price           float64  `json:"price"`
-	Currency        Currency `json:"currency"`
-	CourseIDs       []string `json:"courseIds"`
-	ThumbnailUrl    *string  `json:"thumbnailUrl,omitempty"`
-	IsFeatured      bool     `json:"isFeatured"`
-	FeaturedUntil   *string  `json:"featuredUntil,omitempty"`
+	Name          string   `json:"name" binding:"required"`
+	NameAr        *string  `json:"nameAr,omitempty"`
+	Description   *string  `json:"description,omitempty"`
+	DescriptionAr *string  `json:"descriptionAr,omitempty"`
+	Price         float64  `json:"price"`
+	Currency      Currency `json:"currency"`
+	CourseIDs     []string `json:"courseIds"`
+	ThumbnailUrl  *string  `json:"thumbnailUrl,omitempty"`
+	IsFeatured    bool     `json:"isFeatured"`
+	FeaturedUntil *string  `json:"featuredUntil,omitempty"`
 }
 
 type UpdateBundleRequest struct {
-	Name            *string  `json:"name,omitempty"`
-	NameAr          *string  `json:"nameAr,omitempty"`
-	Description     *string  `json:"description,omitempty"`
-	DescriptionAr   *string  `json:"descriptionAr,omitempty"`
-	Price           *float64 `json:"price,omitempty"`
-	Currency        *Currency `json:"currency,omitempty"`
-	DiscountPrice   *float64 `json:"discountPrice,omitempty"`
-	ThumbnailUrl    *string  `json:"thumbnailUrl,omitempty"`
-	IsActive        *bool    `json:"isActive,omitempty"`
-	IsFeatured      *bool    `json:"isFeatured,omitempty"`
-	FeaturedUntil   *string  `json:"featuredUntil,omitempty"`
+	Name          *string   `json:"name,omitempty"`
+	NameAr        *string   `json:"nameAr,omitempty"`
+	Description   *string   `json:"description,omitempty"`
+	DescriptionAr *string   `json:"descriptionAr,omitempty"`
+	Price         *float64  `json:"price,omitempty"`
+	Currency      *Currency `json:"currency,omitempty"`
+	DiscountPrice *float64  `json:"discountPrice,omitempty"`
+	ThumbnailUrl  *string   `json:"thumbnailUrl,omitempty"`
+	IsActive      *bool     `json:"isActive,omitempty"`
+	IsFeatured    *bool     `json:"isFeatured,omitempty"`
+	FeaturedUntil *string   `json:"featuredUntil,omitempty"`
 }
 
 type AddBundleCoursesRequest struct {

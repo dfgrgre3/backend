@@ -127,7 +127,7 @@ func GetMetrics() map[string]interface{} {
 		"method_counts":     globalMetrics.methodCounts,
 		"avg_latencies":     avgLatencies,
 		"slow_threshold_ms": slowRequestThreshold.Milliseconds(),
-		"uptime":            time.Now().Format(time.RFC3339),
+		"uptime":            time.Now().UTC().Format(time.RFC3339),
 	}
 }
 

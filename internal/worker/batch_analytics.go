@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"thanawy-backend/internal/db"
@@ -22,32 +23,112 @@ const (
 	analyticsBlockTime     = 5 * time.Second
 )
 
-// StartAnalyticsBatchWorker starts the Redis Stream consumer for analytics events.
-// It runs in its own goroutine and is completely independent from Asynq.
-// This separates analytics traffic from business logic queues.
-func StartAnalyticsBatchWorker() {
-	if db.Redis == nil {
+// StartAnalyticsBatchWorkerWithContext starts the analytics event consumer.
+// It prefers Redis Streams (Redis >= 5.0) but falls back to Redis Lists
+// (LPUSH/BRPOP) for older Redis versions (3.x, 4.x).
+// This runs in its own goroutine and is completely independent from Asynq.
+// The loop exits cleanly when ctx is cancelled.
+func StartAnalyticsBatchWorkerWithContext(ctx context.Context) {
+	if !db.IsRedisAvailable() {
 		log.Println("[AnalyticsWorker] Redis not available, skipping")
 		return
 	}
 
+	// Try Redis Streams first (requires Redis >= 5.0)
 	if err := ensureConsumerGroup(); err != nil {
-		log.Printf("[AnalyticsWorker] Failed to setup consumer group: %v", err)
-		log.Println("[AnalyticsWorker] Analytics batch worker disabled. Analytics events will not be processed in batch.")
+		log.Printf("[AnalyticsWorker] Redis Streams not available (%v), falling back to Redis List mode", err)
+		startListBasedWorkerWithContext(ctx)
 		return
 	}
 
 	log.Println("[AnalyticsWorker] Starting Redis Stream consumer (separate from Asynq)")
 	for {
-		if err := processBatch(); err != nil {
+		select {
+		case <-ctx.Done():
+			log.Println("[AnalyticsWorker] Shutdown signal received — stopping stream consumer")
+			return
+		default:
+		}
+		if err := processBatch(ctx); err != nil {
 			log.Printf("[AnalyticsWorker] Batch error: %v", err)
+			// Back off briefly on transient errors so we don't spin-loop.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Second):
+			}
+		}
+	}
+}
+
+// StartAnalyticsBatchWorker is kept for backwards-compatibility.
+func StartAnalyticsBatchWorker() {
+	StartAnalyticsBatchWorkerWithContext(context.Background())
+}
+
+// startListBasedWorkerWithContext uses Redis Lists (LPUSH/BRPOP) as a fallback for Redis < 5.0.
+// This provides the same analytics batching functionality without Redis Streams.
+// The loop exits cleanly when ctx is cancelled.
+func startListBasedWorkerWithContext(ctx context.Context) {
+	log.Println("[AnalyticsWorker] Starting Redis List-based analytics consumer (fallback mode)")
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("[AnalyticsWorker] Shutdown signal received — stopping list consumer")
+			return
+		default:
+		}
+		// BRPOP blocks until an element is available (timeout: 5 seconds)
+		result, err := db.GetRedis().BRPop(ctx, 5*time.Second, analyticsStream).Result()
+		if err != nil {
+			if err == redis.Nil || ctx.Err() != nil {
+				// Timeout or context cancelled — loop to re-check ctx
+				continue
+			}
+			log.Printf("[AnalyticsWorker] BRPOP error: %v", err)
 			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		// result[0] = key name, result[1] = value
+		if len(result) < 2 {
+			continue
+		}
+		rawData := result[1]
+
+		// Parse the event
+		var event events.AnalyticsEvent
+		if err := json.Unmarshal([]byte(rawData), &event); err != nil {
+			log.Printf("[AnalyticsWorker] Skipping malformed event: %v", err)
+			continue
+		}
+
+		// Build and insert the record
+		var payload map[string]interface{}
+		json.Unmarshal(event.Payload, &payload)
+		if payload == nil {
+			payload = make(map[string]interface{})
+		}
+
+		record := map[string]interface{}{
+			"event_id":    event.ID,
+			"event_type":  string(event.Type),
+			"user_id":     event.UserID,
+			"payload":     payload,
+			"source":      "frontend",
+			"received_at": time.UnixMilli(event.Timestamp),
+			"created_at":  time.Now().UTC(),
+		}
+
+		if err := batchInsert(ctx, []map[string]interface{}{record}); err != nil {
+			log.Printf("[AnalyticsWorker] Failed to insert event %s: %v", event.ID, err)
 		}
 	}
 }
 
 func ensureConsumerGroup() error {
-	err := db.Redis.XGroupCreateMkStream(
+	err := db.GetRedis().XGroupCreateMkStream(
 		context.Background(),
 		analyticsStream,
 		analyticsConsumerGroup,
@@ -55,7 +136,7 @@ func ensureConsumerGroup() error {
 	).Err()
 	if err != nil {
 		// Check if the error is due to Redis Streams not being supported
-		if err.Error() == "ERR unknown command 'xgroup'" || err.Error() == "ERR unknown command 'XGROUP'" {
+		if strings.Contains(strings.ToLower(err.Error()), "unknown command") {
 			log.Println("[AnalyticsWorker] Redis Streams not supported (Redis version < 5.0 or Streams disabled). Analytics batch worker disabled.")
 			return fmt.Errorf("redis streams not supported")
 		}
@@ -74,9 +155,7 @@ func hasPrefix(s, prefix string) bool {
 	return s[:len(prefix)] == prefix
 }
 
-func processBatch() error {
-	ctx := context.Background()
-
+func processBatch(ctx context.Context) error {
 	messages, err := readBatchMessages(ctx)
 	if err != nil {
 		return err
@@ -92,7 +171,7 @@ func processBatch() error {
 		}
 	}
 
-	if err := db.Redis.XAck(ctx, analyticsStream, analyticsConsumerGroup, ids...).Err(); err != nil {
+	if err := db.GetRedis().XAck(ctx, analyticsStream, analyticsConsumerGroup, ids...).Err(); err != nil {
 		log.Printf("[AnalyticsWorker] Failed to ack messages: %v", err)
 		return err
 	}
@@ -203,14 +282,14 @@ func analyticsRecordFromMessage(msg redis.XMessage) (map[string]interface{}, boo
 		"payload":     payload,
 		"source":      "frontend",
 		"received_at": time.UnixMilli(event.Timestamp),
-		"created_at":  time.Now(),
+		"created_at":  time.Now().UTC(),
 	}, true
 }
 
 func readAnalyticsGroupWithRetry(ctx context.Context, args *redis.XReadGroupArgs) ([]redis.XStream, error) {
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
-		entries, err := db.Redis.XReadGroup(ctx, args).Result()
+		entries, err := db.GetRedis().XReadGroup(ctx, args).Result()
 		if err == nil || err == redis.Nil {
 			return entries, err
 		}

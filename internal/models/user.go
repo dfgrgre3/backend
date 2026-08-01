@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -34,19 +36,18 @@ const (
 )
 
 type User struct {
-	ID           string         `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	Email        string         `gorm:"uniqueIndex;not null" json:"email"`
-	Name         *string        `gorm:"index" json:"name"`
-	Username     *string        `gorm:"uniqueIndex" json:"username"`
-	Avatar       *string        `json:"avatar"`
-	PasswordHash string         `gorm:"column:password_hash;not null" json:"-"`
-	Role         UserRole       `gorm:"default:'STUDENT';index" json:"role"`
-	Status       UserStatus     `gorm:"default:'ACTIVE';index" json:"status"`
-	StatusReason *string        `gorm:"column:status_reason" json:"statusReason"`
-	StatusExpiresAt *time.Time  `gorm:"column:status_expires_at" json:"statusExpiresAt"`
-	CreatedAt    time.Time      `gorm:"index;column:created_at" json:"createdAt"`
-	UpdatedAt    time.Time      `gorm:"column:updated_at" json:"updatedAt"`
-	DeletedAt    gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
+	ID              string         `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	Email           string         `gorm:"uniqueIndex;not null" json:"email" binding:"required,email"`
+	Name            *string        `gorm:"index" json:"name" binding:"omitempty,min=2,max=100"`
+	Username        *string        `gorm:"uniqueIndex" json:"username" binding:"omitempty,min=3,max=30"`
+	Avatar          *string        `json:"avatar" binding:"omitempty,url"`
+	Role            UserRole       `gorm:"default:'STUDENT';index" json:"role" binding:"required,oneof=STUDENT TEACHER MODERATOR ADMIN SUPER_ADMIN PARENT SUPPORT"`
+	Status          UserStatus     `gorm:"default:'ACTIVE';index" json:"status" binding:"required,oneof=ACTIVE INACTIVE SUSPENDED BANNED"`
+	StatusReason    *string        `gorm:"column:status_reason" json:"statusReason" binding:"omitempty,max=500"`
+	StatusExpiresAt *time.Time     `gorm:"column:status_expires_at" json:"statusExpiresAt"`
+	CreatedAt       time.Time      `gorm:"index;column:created_at" json:"createdAt"`
+	UpdatedAt       time.Time      `gorm:"column:updated_at" json:"updatedAt"`
+	DeletedAt       gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
 
 	// Profile fields
 	Phone         *string `gorm:"index;column:phone" json:"phone"`
@@ -58,42 +59,40 @@ type User struct {
 	Section       *string `gorm:"column:section" json:"section"`
 	Bio           *string `gorm:"column:bio" json:"bio"`
 
-	InstructorStatus      string         `gorm:"column:instructor_status;default:'PENDING';index" json:"instructorStatus"`
+	InstructorStatus      string          `gorm:"column:instructor_status;default:'PENDING';index" json:"instructorStatus"`
 	InstructorSpecialties JSONStringArray `gorm:"type:jsonb;column:instructor_specialties" json:"instructorSpecialties"`
 	InstructorLanguages   JSONStringArray `gorm:"type:jsonb;column:instructor_languages" json:"instructorLanguages"`
-	CommissionRate        float64        `gorm:"column:commission_rate;default:0" json:"commissionRate"`
-	ExperienceYears       *string        `gorm:"column:experience_years" json:"experienceYears"`
+	CommissionRate        decimal.Decimal `gorm:"column:commission_rate;type:numeric(5,4);default:0" json:"commissionRate"`
+	ExperienceYears       *string         `gorm:"column:experience_years" json:"experienceYears"`
 
 	// Profile extended
-	WakeUpTime                *string    `gorm:"column:wake_up_time" json:"wakeUpTime"`
-	SleepTime                 *string    `gorm:"column:sleep_time" json:"sleepTime"`
-	FocusStrategy             string     `gorm:"default:'POMODORO';column:focus_strategy" json:"focusStrategy"`
-	EmailNotifications        bool       `gorm:"default:true;column:email_notifications" json:"emailNotifications"`
-	EmailVerificationToken    *string    `gorm:"column:email_verification_token" json:"-"`
-	EmailVerificationExpires  *time.Time `gorm:"column:email_verification_expires" json:"-"`
-	PhoneVerificationOTP      *string    `gorm:"column:phone_verification_otp" json:"-"`
-	PhoneVerificationExpires  *time.Time `gorm:"column:phone_verification_expires" json:"-"`
-	PhoneVerificationAttempts int        `gorm:"default:0;column:phone_verification_attempts" json:"-"`
-	PhoneVerificationLastSent *time.Time `gorm:"column:phone_verification_last_sent" json:"-"`
-	SMSNotifications          bool       `gorm:"default:false;column:sms_notifications" json:"smsNotifications"`
-	BiometricEnabled          bool       `gorm:"default:false;column:biometric_enabled" json:"biometricEnabled"`
-	GoogleID                  *string    `gorm:"column:google_id" json:"googleId"`
-	GithubID                  *string    `gorm:"column:github_id" json:"githubId"`
-	PasswordChangedAt         *time.Time `gorm:"column:password_changed_at" json:"-"`
-	PasswordExpiresAt         *time.Time `gorm:"column:password_expires_at" json:"-"`
-	DateOfBirth               *time.Time `gorm:"column:date_of_birth" json:"dateOfBirth"`
+	WakeUpTime                *string       `gorm:"column:wake_up_time" json:"wakeUpTime"`
+	SleepTime                 *string       `gorm:"column:sleep_time" json:"sleepTime"`
+	FocusStrategy             string        `gorm:"default:'POMODORO';column:focus_strategy" json:"focusStrategy"`
+	EmailNotifications        bool          `gorm:"default:true;column:email_notifications" json:"emailNotifications"`
+	EmailVerificationToken    *string       `gorm:"column:email_verification_token" json:"-"`
+	EmailVerificationExpires  *time.Time    `gorm:"column:email_verification_expires" json:"-"`
+	PhoneVerificationOTP      *string       `gorm:"column:phone_verification_otp" json:"-"`
+	PhoneVerificationExpires  *time.Time    `gorm:"column:phone_verification_expires" json:"-"`
+	PhoneVerificationAttempts int           `gorm:"default:0;column:phone_verification_attempts" json:"-"`
+	PhoneVerificationLastSent *time.Time    `gorm:"column:phone_verification_last_sent" json:"-"`
+	SMSNotifications          bool          `gorm:"default:false;column:sms_notifications" json:"smsNotifications"`
+	BiometricEnabled          bool          `gorm:"default:false;column:biometric_enabled" json:"biometricEnabled"`
+	GoogleID                  *string       `gorm:"column:google_id" json:"googleId"`
+	GithubID                  *string       `gorm:"column:github_id" json:"githubId"`
+	DateOfBirth               *time.Time    `gorm:"column:date_of_birth" json:"dateOfBirth"`
 	AlternativePhone          *string       `gorm:"column:alternative_phone" json:"alternativePhone"`
 	InterestedSubjects        PGStringArray `gorm:"type:text[];column:interested_subjects" json:"interestedSubjects"`
 	StudyGoal                 *string       `gorm:"column:study_goal" json:"studyGoal"`
 	SubjectsTaught            PGStringArray `gorm:"type:text[];column:subjects_taught" json:"subjectsTaught"`
 	ClassesTaught             PGStringArray `gorm:"type:text[];column:classes_taught" json:"classesTaught"`
-	ReferralCode              *string    `gorm:"column:referral_code" json:"referralCode"`
-	AdditionalAiCredits       int        `gorm:"default:0;column:additional_ai_credits" json:"additionalAiCredits"`
-	AdditionalExamCredits     int        `gorm:"default:0;column:additional_exam_credits" json:"additionalExamCredits"`
-	LastUsageReset            time.Time  `gorm:"column:last_usage_reset" json:"-"`
-	MonthlyAiMessageCount     int        `gorm:"default:0;column:monthly_ai_message_count" json:"-"`
-	MonthlyExamCount          int        `gorm:"default:0;column:monthly_exam_count" json:"-"`
-	ArchiveReason             *string    `gorm:"column:archive_reason" json:"-"`
+	ReferralCode              *string       `gorm:"column:referral_code" json:"referralCode"`
+	AdditionalAiCredits       int           `gorm:"default:0;column:additional_ai_credits" json:"additionalAiCredits"`
+	AdditionalExamCredits     int           `gorm:"default:0;column:additional_exam_credits" json:"additionalExamCredits"`
+	LastUsageReset            time.Time     `gorm:"column:last_usage_reset" json:"-"`
+	MonthlyAiMessageCount     int           `gorm:"default:0;column:monthly_ai_message_count" json:"-"`
+	MonthlyExamCount          int           `gorm:"default:0;column:monthly_exam_count" json:"-"`
+	ArchiveReason             *string       `gorm:"column:archive_reason" json:"-"`
 
 	// Gamification (core)
 	TotalXP int `gorm:"default:0;index" json:"totalXP"`
@@ -118,10 +117,10 @@ type User struct {
 	Permissions JSONStringArray `gorm:"type:jsonb" json:"permissions"`
 
 	// Billing & Credits
-	Balance     float64 `gorm:"default:0" json:"balance"`
-	AiCredits   int     `gorm:"default:0" json:"aiCredits"`
-	ExamCredits int     `gorm:"default:0" json:"examCredits"`
-	Version     int     `gorm:"default:1" json:"-"`
+	Balance     decimal.Decimal `gorm:"default:0;type:numeric(19,4)" json:"balance"`
+	AiCredits   int             `gorm:"default:0" json:"aiCredits"`
+	ExamCredits int             `gorm:"default:0" json:"examCredits"`
+	Version     int             `gorm:"default:1" json:"-"`
 
 	// Subscriptions
 	ActiveSubscriptionID  *string    `gorm:"index;type:uuid;column:active_subscription_id" json:"activeSubscriptionId"`
@@ -130,8 +129,6 @@ type User struct {
 	// Security & Auth
 	LastLogin            *time.Time `gorm:"index" json:"lastLogin"`
 	TwoFactorEnabled     bool       `gorm:"default:false" json:"twoFactorEnabled"`
-	TwoFactorSecret      *string    `json:"-"`
-	BackupCodes          string     `gorm:"column:backup_codes" json:"-"`
 	ResetPasswordToken   *string    `gorm:"index" json:"-"`
 	ResetPasswordExpires *time.Time `json:"-"`
 	MagicLinkToken       *string    `gorm:"index" json:"-"`
@@ -140,6 +137,7 @@ type User struct {
 	VerificationExpires  *time.Time `json:"-"`
 
 	// Relations
+	Credential         *UserCredential     `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 	Settings           *UserSettings       `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 	Enrollments        []Enrollment        `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 	LessonProgresses   []LessonProgress    `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
@@ -153,7 +151,6 @@ type User struct {
 	SecurityLogs       []SecurityLog       `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 	WalletTransactions []WalletTransaction `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 }
-
 
 func (u *User) HasPermission(permission string) bool {
 	effective := u.GetEffectivePermissions()
@@ -209,6 +206,24 @@ func (User) TableName() string {
 func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
 	if u.ID == "" {
 		u.ID = uuid.New().String()
+	}
+	// Trim whitespace from email
+	u.Email = strings.TrimSpace(u.Email)
+	// Normalize email to lowercase
+	u.Email = strings.ToLower(u.Email)
+	return
+}
+
+func (u *User) BeforeUpdate(tx *gorm.DB) (err error) {
+	// Trim whitespace from email on update
+	if tx.Statement.Changed("Email") {
+		u.Email = strings.TrimSpace(strings.ToLower(u.Email))
+	}
+	// Validate the role only when the update actually changes it. Map-based
+	// updates use an empty model value, so validating unconditionally rejects
+	// unrelated profile updates.
+	if tx.Statement.Changed("Role") && !IsValidUserRole(u.Role) {
+		return fmt.Errorf("invalid user role: %s", u.Role)
 	}
 	return
 }

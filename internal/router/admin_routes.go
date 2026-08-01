@@ -65,6 +65,8 @@ func SetupAdminRoutes(router *gin.Engine) {
 		// AI
 		admin.GET("/ai", handlers.AdminAIGet)
 		admin.POST("/ai", handlers.AdminAIPost)
+		admin.GET("/ai/analyze", handlers.AdminAIAnalyze)
+		admin.POST("/ai/analyze", handlers.AdminAIAnalyze)
 
 		// ---------------------------------------------------------------
 		// Sensitive operations: ADMIN and SUPER_ADMIN only.
@@ -146,7 +148,7 @@ func SetupAdminRoutes(router *gin.Engine) {
 		sensitive.POST("/backups/:id/verify", handlers.VerifyBackup)
 		sensitive.GET("/backups/:id/progress", handlers.GetBackupProgress)
 
-		// Session Management
+		// Session & Security Management
 		admin.GET("/security/sessions", handlers.GetActiveSessions)
 		admin.GET("/security/sessions/stats", handlers.GetSessionStats)
 		admin.POST("/security/sessions/:id/revoke", handlers.RevokeSession)
@@ -154,7 +156,12 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/security/sessions/user/:userId/revoke-all", handlers.RevokeUserSessions)
 		admin.POST("/security/sessions/:id/suspend", handlers.SuspendSession)
 		admin.GET("/security/sessions/activity", handlers.GetSessionActivity)
+		admin.GET("/security/logs", handlers.GetAdminSecurityLogs)
 		admin.GET("/security/logs/users/:id", handlers.GetSecurityLogsForUser)
+		admin.GET("/security/fingerprints", handlers.GetDeviceFingerprints)
+		admin.POST("/security/fingerprints/block", handlers.BlockDeviceFingerprint)
+		admin.POST("/security/fingerprints/:id/unblock", handlers.UnblockDeviceFingerprint)
+		admin.GET("/security/roles", handlers.GetRolePermissions)
 
 		// IP Whitelist (admin-only)
 		sensitive.GET("/security/ip-whitelist", handlers.GetIPWhitelist)
@@ -204,6 +211,12 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.PATCH("/blog/:id", handlers.AdminUpdateBlogPost)
 		admin.DELETE("/blog/:id", handlers.AdminDeleteBlogPost)
 
+		// Events
+		admin.GET("/events", handlers.AdminGetEvents)
+		admin.POST("/events", handlers.AdminCreateEvent)
+		admin.PATCH("/events", handlers.AdminUpdateEvent)
+		admin.DELETE("/events", handlers.AdminDeleteEvent)
+
 		// Automations
 		admin.GET("/automations", handlers.AdminGetAutomations)
 		admin.POST("/automations", handlers.AdminCreateAutomation)
@@ -231,6 +244,35 @@ func SetupAdminRoutes(router *gin.Engine) {
 
 		// Books
 		admin.GET("/books", handlers.AdminGetBooks)
+
+		// Learning Paths
+		admin.GET("/learning-paths", handlers.AdminListLearningPaths)
+		admin.POST("/learning-paths", handlers.AdminCreateLearningPath)
+		admin.GET("/learning-paths/:id", handlers.AdminGetLearningPath)
+		admin.PATCH("/learning-paths/:id", handlers.AdminUpdateLearningPath)
+		admin.DELETE("/learning-paths/:id", handlers.AdminDeleteLearningPath)
+
+		// Bank Questions
+		admin.GET("/bank-questions", handlers.AdminListBankQuestions)
+		admin.GET("/bank-questions/:id", handlers.AdminGetBankQuestion)
+		admin.POST("/bank-questions", handlers.AdminCreateBankQuestion)
+		admin.PATCH("/bank-questions/:id", handlers.AdminUpdateBankQuestion)
+		admin.DELETE("/bank-questions/:id", handlers.AdminDeleteBankQuestion)
+
+		// Resources
+		admin.GET("/resources", handlers.AdminGetResources)
+		admin.POST("/resources", handlers.AdminCreateResource)
+		admin.PATCH("/resources", handlers.AdminUpdateResource)
+		admin.DELETE("/resources", handlers.AdminDeleteResource)
+
+		// Media Assets
+		admin.GET("/media", handlers.AdminListMedia)
+		admin.POST("/media", handlers.AdminCreateMedia)
+		admin.GET("/media/tags", handlers.AdminGetMediaTags)
+
+		// Landing Page
+		admin.GET("/landing", handlers.AdminListLandingSections)
+		admin.POST("/landing", handlers.AdminUpsertLandingSection)
 
 		// Affiliates
 		admin.GET("/affiliates", handlers.AdminGetAffiliates)
@@ -260,6 +302,7 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/users/:id/enrollments", handlers.AdminEnrollUser)
 		admin.GET("/users/:id/login-attempts", handlers.GetUserLoginAttempts)
 		admin.GET("/users/:id/video-engagement", handlers.GetUserVideoEngagement)
+		admin.GET("/users/:id/wallet/transactions", handlers.GetUserWalletTransactions)
 		admin.GET("/search/users", handlers.SearchUsers)
 		admin.POST("/users/search", handlers.SearchUsers)
 
@@ -415,6 +458,9 @@ func SetupAdminRoutes(router *gin.Engine) {
 		// -------------------------------
 		admin.GET("/payments", handlers.GetAdminPayments)
 		admin.POST("/payments/refund", handlers.AdminRefundPayment)
+
+		// Dunning — subscription payment failure tracking
+		admin.GET("/dunning", handlers.AdminListDunning)
 
 		// -------------------------------
 		// Exams Management

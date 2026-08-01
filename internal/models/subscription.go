@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"time"
 )
@@ -28,7 +29,7 @@ type SubscriptionPlan struct {
 	Name        string               `gorm:"not null;uniqueIndex;column:name" json:"name"`
 	NameAr      string               `gorm:"not null;column:name_ar" json:"nameAr"`
 	Description string               `gorm:"column:description" json:"description"`
-	Price       float64              `gorm:"not null;default:0;column:price" json:"price"`
+	Price       decimal.Decimal      `gorm:"not null;type:numeric(19,4);default:0;column:price" json:"price"`
 	Currency    string               `gorm:"not null;default:'EGP';column:currency" json:"currency"`
 	Interval    SubscriptionInterval `gorm:"not null;default:'MONTHLY';column:interval" json:"interval"`
 	IsActive    bool                 `gorm:"default:true;index;column:is_active" json:"isActive"`

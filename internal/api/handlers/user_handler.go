@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 var (
@@ -190,7 +191,7 @@ func GetUsers(c *gin.Context) {
 
 	// Email verified filter
 	switch emailVerified {
-case "true":
+	case "true":
 		query = query.Where("email_verified = ?", true)
 	case "false":
 		query = query.Where("email_verified = ?", false)
@@ -198,7 +199,7 @@ case "true":
 
 	// Two factor filter
 	switch twoFactorEnabled {
-case "true":
+	case "true":
 		query = query.Where("two_factor_enabled = ?", true)
 	case "false":
 		query = query.Where("two_factor_enabled = ?", false)
@@ -339,32 +340,32 @@ case "true":
 	items := make([]gin.H, 0, len(users))
 	for _, user := range users {
 		items = append(items, gin.H{
-			"id":                 user.ID,
-			"email":              user.Email,
-			"name":               user.Name,
-			"username":           user.Username,
-			"avatar":             user.Avatar,
-			"phone":              user.Phone,
-			"phoneVerified":      user.PhoneVerified,
-			"twoFactorEnabled":   user.TwoFactorEnabled,
-			"role":               user.Role,
-			"status":             user.Status,
-			"permissions":        user.GetEffectivePermissions(),
-			"emailVerified":      user.EmailVerified,
-			"country":            user.Country,
-			"gradeLevel":         user.GradeLevel,
-			"createdAt":          user.CreatedAt,
-			"updatedAt":          user.UpdatedAt,
-			"lastLogin":          user.LastLogin,
-			"totalXP":            user.TotalXP,
-			"level":              user.Level,
-			"currentStreak":      user.CurrentStreak,
-			"activeSubscriptionId": user.ActiveSubscriptionID,
+			"id":                    user.ID,
+			"email":                 user.Email,
+			"name":                  user.Name,
+			"username":              user.Username,
+			"avatar":                user.Avatar,
+			"phone":                 user.Phone,
+			"phoneVerified":         user.PhoneVerified,
+			"twoFactorEnabled":      user.TwoFactorEnabled,
+			"role":                  user.Role,
+			"status":                user.Status,
+			"permissions":           user.GetEffectivePermissions(),
+			"emailVerified":         user.EmailVerified,
+			"country":               user.Country,
+			"gradeLevel":            user.GradeLevel,
+			"createdAt":             user.CreatedAt,
+			"updatedAt":             user.UpdatedAt,
+			"lastLogin":             user.LastLogin,
+			"totalXP":               user.TotalXP,
+			"level":                 user.Level,
+			"currentStreak":         user.CurrentStreak,
+			"activeSubscriptionId":  user.ActiveSubscriptionID,
 			"subscriptionExpiresAt": user.SubscriptionExpiresAt,
 			"_count": gin.H{
-				"tasks":             taskMap[user.ID],
-				"studySessions":     sessionMap[user.ID],
-				"achievements":      achievementMap[user.ID],
+				"tasks":              taskMap[user.ID],
+				"studySessions":      sessionMap[user.ID],
+				"achievements":       achievementMap[user.ID],
 				"subjectEnrollments": enrollmentMap[user.ID],
 			},
 		})
@@ -548,11 +549,9 @@ func DeleteUser(c *gin.Context) {
 }
 
 func CreateUser(c *gin.Context) {
-	// Security: password is NOT accepted. External auth provider is used.
-	// Accepting a local password creates a parallel auth path that bypasses
-	// session management, JTI blacklisting, and MFA enforcement.
 	var input struct {
 		Email    string  `json:"email" binding:"required,email"`
+		Password string  `json:"password" binding:"required,min=8"`
 		Name     *string `json:"name"`
 		Username *string `json:"username"`
 		Role     string  `json:"role"`
@@ -588,7 +587,19 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	if err := SafeCreate(db.DB, &user); err != nil {
+	credential := models.UserCredential{}
+	if err := credential.SetPassword(input.Password); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create user")
+		return
+	}
+
+	if err := db.DB.Transaction(func(tx *gorm.DB) error {
+		if err := SafeCreate(tx, &user); err != nil {
+			return err
+		}
+		credential.UserID = user.ID
+		return SafeCreate(tx, &credential)
+	}); err != nil {
 		if IsDuplicateKeyError(err) {
 			api_response.Error(c, http.StatusConflict, "User with this email already exists")
 			return
@@ -647,19 +658,21 @@ func buildUserDetailsPayload(user models.User) gin.H {
 
 	if !statsCached {
 		// Merge into fewer queries using subqueries for better performance
-		readDB := db.ReadDB()
-		if readDB == nil {
-			readDB = db.DB
+		getDB := func() *gorm.DB {
+			if rdb := db.ReadDB(); rdb != nil {
+				return rdb
+			}
+			return db.DB.Session(&gorm.Session{})
 		}
 
-		readDB.Model(&models.Task{}).Where("user_id = ? AND status = ?", user.ID, models.TaskCompleted).Count(&tasksCompleted)
-		readDB.Model(&models.Task{}).Where(userIDQuery, user.ID).Count(&totalTasks)
-		readDB.Model(&models.StudySession{}).Where(userIDQuery, user.ID).Count(&totalStudySessions)
-		readDB.Model(&models.StudySession{}).Where(userIDQuery, user.ID).Select("COALESCE(SUM(duration_min), 0)").Scan(&totalStudyTime)
-		readDB.Model(&models.ExamResult{}).Where("user_id = ? AND passed = ?", user.ID, true).Count(&examsPassed)
-		readDB.Model(&models.ExamResult{}).Where(userIDQuery, user.ID).Count(&examResultsCount)
-		readDB.Model(&models.Notification{}).Where("user_id = ? AND is_read = ?", user.ID, false).Count(&unreadNotifications)
-		readDB.Model(&models.Enrollment{}).Where(userIDQuery, user.ID).Count(&totalEnrollments)
+		getDB().Model(&models.Task{}).Where("user_id = ? AND status = ?", user.ID, models.TaskCompleted).Count(&tasksCompleted)
+		getDB().Model(&models.Task{}).Where(userIDQuery, user.ID).Count(&totalTasks)
+		getDB().Model(&models.StudySession{}).Where(userIDQuery, user.ID).Count(&totalStudySessions)
+		getDB().Model(&models.StudySession{}).Where(userIDQuery, user.ID).Select("COALESCE(SUM(duration_min), 0)").Scan(&totalStudyTime)
+		getDB().Model(&models.ExamResult{}).Where("user_id = ? AND passed = ?", user.ID, true).Count(&examsPassed)
+		getDB().Model(&models.ExamResult{}).Where(userIDQuery, user.ID).Count(&examResultsCount)
+		getDB().Model(&models.Notification{}).Where("user_id = ? AND is_read = ?", user.ID, false).Count(&unreadNotifications)
+		getDB().Model(&models.Enrollment{}).Where(userIDQuery, user.ID).Count(&totalEnrollments)
 
 		// Cache the results for 3 minutes
 		if db.Redis != nil {
@@ -811,24 +824,26 @@ func GetUserEnrollments(c *gin.Context) {
 		if e.Subject.ID != "" {
 			subjectName = e.Subject.Name
 			subjectSlug = stringOrEmpty(e.Subject.Slug)
-			price = e.Subject.Price
+			price, _ = e.Subject.Price.Float64()
 		}
 		items = append(items, gin.H{
-			"id":                e.ID,
-			"courseId":          e.SubjectID,
-			"courseName":        subjectName,
-			"courseSlug":        subjectSlug,
-			"price":             price,
-			"progress":          e.Progress,
-			"status":            func() string {
-				if e.Progress >= 100.0 {
+			"id":         e.ID,
+			"courseId":   e.SubjectID,
+			"courseName": subjectName,
+			"courseSlug": subjectSlug,
+			"price":      price,
+			"progress":   e.Progress,
+			"status": func() string {
+				progress, _ := e.Progress.Float64()
+				if progress >= 100.0 {
 					return "COMPLETED"
 				}
 				return "ACTIVE"
 			}(),
-			"enrolledAt":        e.EnrolledAt,
+			"enrolledAt": e.EnrolledAt,
 		})
-		totalProgress += e.Progress
+		progress, _ := e.Progress.Float64()
+		totalProgress += progress
 	}
 
 	avgProgress := 0.0
@@ -877,9 +892,12 @@ func AdminEnrollUser(c *gin.Context) {
 		return
 	}
 
-	if !req.IsFree && subject.Price > 0 && !hasPaidForSubject(userID, subject.ID) {
-		api_response.Error(c, http.StatusBadRequest, "User has not paid for this course. Use isFree=true to bypass payment.")
-		return
+	if !req.IsFree {
+		price, _ := subject.Price.Float64()
+		if price > 0 && !hasPaidForSubject(userID, subject.ID) {
+			api_response.Error(c, http.StatusBadRequest, "User has not paid for this course. Use isFree=true to bypass payment.")
+			return
+		}
 	}
 
 	if err := executeEnrollmentTransaction(userID, subject.ID); err != nil {
@@ -918,11 +936,11 @@ func GetUserVideoEngagement(c *gin.Context) {
 	for _, p := range progressRecords {
 		totalWatchSeconds += p.TimeSpentSeconds
 		videos = append(videos, gin.H{
-			"lessonId":           p.LessonID,
-			"timeSpentSeconds":   p.TimeSpentSeconds,
-			"timeSpentMinutes":   p.TimeSpentSeconds / 60,
-			"completed":          p.Completed,
-			"status":             string(p.Status),
+			"lessonId":            p.LessonID,
+			"timeSpentSeconds":    p.TimeSpentSeconds,
+			"timeSpentMinutes":    p.TimeSpentSeconds / 60,
+			"completed":           p.Completed,
+			"status":              string(p.Status),
 			"lastWatchedPosition": p.LastWatchedPosition,
 		})
 	}
@@ -1132,9 +1150,10 @@ func fetchBillingData(uid string) gin.H {
 			Find(&res.payments)
 
 		for _, p := range res.payments {
+			amount, _ := p.Amount.Float64()
 			switch p.Status {
 			case models.PaymentCompleted:
-				res.totalSpent += p.Amount
+				res.totalSpent += amount
 				res.successCount++
 			case models.PaymentPending:
 				res.pendingCount++
@@ -1266,7 +1285,7 @@ func EnsureUserExists(userId, email string) error {
 		EmailVerified: false,
 		Status:        models.StatusActive,
 		Role:          models.RoleStudent,
-		Balance:       0,
+		Balance:       decimal.NewFromInt(0),
 		AiCredits:     0,
 		ExamCredits:   0,
 		TotalXP:       0,
@@ -1659,12 +1678,12 @@ func UnlinkStudentFromParent(c *gin.Context) {
 // GetParentStatistics returns statistics for parents
 func GetParentStatistics(c *gin.Context) {
 	var stats struct {
-		TotalParents      int64
-		ActiveParents     int64
-		SuspendedParents  int64
-		PendingApproval   int64
-		OnlineParents     int64
-		NewParentsToday   int64
+		TotalParents        int64
+		ActiveParents       int64
+		SuspendedParents    int64
+		PendingApproval     int64
+		OnlineParents       int64
+		NewParentsToday     int64
 		NewParentsThisMonth int64
 	}
 
@@ -1729,42 +1748,70 @@ func BulkCreateUsers(c *gin.Context) {
 		return
 	}
 
-	created := 0
-	failed := 0
+	var usersToCreate []models.User
+	var credentialsToCreate []models.UserCredential
 
 	for _, userReq := range req.Users {
 		role := models.RoleStudent
 		if userReq.Role != "" {
 			validRoles := map[string]bool{"STUDENT": true, "TEACHER": true, "MODERATOR": true, "ADMIN": true}
 			if !validRoles[userReq.Role] {
-				failed++
 				continue
 			}
 			role = models.UserRole(userReq.Role)
 		}
 
 		// Hash password
-		passwordHash, err := bcrypt.GenerateFromPassword([]byte(userReq.Password), bcrypt.DefaultCost)
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(userReq.Password), bcrypt.DefaultCost)
 		if err != nil {
-			failed++
 			continue
 		}
 
 		user := models.User{
-			Email:        userReq.Email,
-			Name:         &userReq.Name,
-			Username:     userReq.Username,
-			PasswordHash: string(passwordHash),
-			Role:         role,
+			Email:    userReq.Email,
+			Name:     &userReq.Name,
+			Username: userReq.Username,
+			Role:     role,
 		}
+		usersToCreate = append(usersToCreate, user)
 
-		if err := SafeCreate(db.DB, &user); err != nil {
-			failed++
-			continue
-		}
-
-		created++
+		// Store credential temporarily - will be assigned a user ID after creation
+		credentialsToCreate = append(credentialsToCreate, models.UserCredential{
+			PasswordHash: string(hashedPassword),
+		})
 	}
+
+	// Batch insert users and their credentials in chunks of 100
+	created := 0
+	if len(usersToCreate) > 0 {
+		err := db.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.CreateInBatches(&usersToCreate, 100).Error; err != nil {
+				return err
+			}
+			for i := range credentialsToCreate {
+				credentialsToCreate[i].UserID = usersToCreate[i].ID
+			}
+			return tx.CreateInBatches(&credentialsToCreate, 100).Error
+		})
+		if err != nil {
+			// Fallback: try individual transactions for better error handling
+			for i := range usersToCreate {
+				if err := db.DB.Transaction(func(tx *gorm.DB) error {
+					if err := SafeCreate(tx, &usersToCreate[i]); err != nil {
+						return err
+					}
+					credentialsToCreate[i].UserID = usersToCreate[i].ID
+					return SafeCreate(tx, &credentialsToCreate[i])
+				}); err == nil {
+					created++
+				}
+			}
+		} else {
+			created = len(usersToCreate)
+		}
+	}
+
+	failed := len(req.Users) - created
 
 	LogAudit(c, "BULK_CREATE_USERS", "user", "", gin.H{"created": created, "failed": failed})
 	api_response.Success(c, gin.H{"created": created, "failed": failed})
@@ -1781,18 +1828,20 @@ func BulkDeleteUsers(c *gin.Context) {
 		return
 	}
 
-	deleted := 0
-	failed := 0
+	if len(req.UserIDs) == 0 {
+		api_response.Success(c, gin.H{"deleted": 0, "failed": 0})
+		return
+	}
 
+	// Batch delete users in a single query
+	result := db.DB.Where("id IN ?", req.UserIDs).Delete(&models.User{})
+	deleted := int(result.RowsAffected)
+	failed := len(req.UserIDs) - deleted
+
+	// Invalidate caches for all deleted users
 	for _, userID := range req.UserIDs {
-		if err := db.DB.Delete(&models.User{}, idQuery, userID).Error; err != nil {
-			failed++
-			continue
-		}
-
 		middleware.InvalidateRolePermsCache(userID)
 		getUserRepo().InvalidateCache(userID)
-		deleted++
 	}
 
 	LogAudit(c, "BULK_DELETE_USERS", "user", "", gin.H{"deleted": deleted, "failed": failed})
@@ -1812,12 +1861,12 @@ func BanUser(c *gin.Context) {
 	}
 
 	var req struct {
-		Reason      *string `json:"reason"`
-		DurationHours *int  `json:"durationHours"`
-		NotifyUser  bool    `json:"notifyUser"`
-		Permanent   bool    `json:"permanent"`
-		ExpiresAt   *string `json:"expiresAt"`
-		HideContent bool    `json:"hideContent"`
+		Reason        *string `json:"reason"`
+		DurationHours *int    `json:"durationHours"`
+		NotifyUser    bool    `json:"notifyUser"`
+		Permanent     bool    `json:"permanent"`
+		ExpiresAt     *string `json:"expiresAt"`
+		HideContent   bool    `json:"hideContent"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1870,9 +1919,9 @@ func SuspendUser(c *gin.Context) {
 	}
 
 	var req struct {
-		Reason       *string `json:"reason"`
+		Reason        *string `json:"reason"`
 		DurationHours *int    `json:"durationHours"`
-		NotifyUser   bool     `json:"notifyUser"`
+		NotifyUser    bool    `json:"notifyUser"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {

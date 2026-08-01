@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -121,13 +122,15 @@ func CreateCustomGoal(c *gin.Context) {
 		UserID:       userID,
 		Title:        input.Title,
 		Description:  strings.TrimSpace(input.Description),
-		TargetValue:  input.TargetValue,
-		CurrentValue: input.CurrentValue,
+		TargetValue:  decimal.NewFromFloat(input.TargetValue),
+		CurrentValue: decimal.NewFromFloat(input.CurrentValue),
 		Unit:         input.Unit,
 		Category:     input.Category,
 		XPReward:     input.XPReward,
 	}
-	if goal.CurrentValue >= goal.TargetValue {
+	currentValue, _ := goal.CurrentValue.Float64()
+	targetValue, _ := goal.TargetValue.Float64()
+	if currentValue >= targetValue {
 		goal.IsCompleted = true
 		goal.CompletedAt = &now
 	}
@@ -159,8 +162,10 @@ func UpdateCustomGoal(c *gin.Context) {
 		return
 	}
 
-	goal.CurrentValue = input.CurrentValue
-	if goal.CurrentValue >= goal.TargetValue {
+	goal.CurrentValue = decimal.NewFromFloat(input.CurrentValue)
+	currentValue, _ := goal.CurrentValue.Float64()
+	targetValue, _ := goal.TargetValue.Float64()
+	if currentValue >= targetValue {
 		if !goal.IsCompleted {
 			now := time.Now()
 			goal.CompletedAt = &now

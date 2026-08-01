@@ -50,7 +50,7 @@ func (s *SchedulerService) Stop() {
 // ProcessPendingItems processes all pending items that are due
 func (s *SchedulerService) ProcessPendingItems() {
 	var items []models.ScheduledItem
-	now := time.Now()
+	now := time.Now().UTC()
 
 	db.DB.Where("status = ? AND scheduled_for <= ?", "pending", now).Find(&items)
 
@@ -97,11 +97,11 @@ func (s *SchedulerService) ProcessItem(itemID string) error {
 		if item.RetryCount < item.MaxRetries {
 			item.Status = "pending"
 			// Reschedule for 5 minutes later
-			item.ScheduledFor = time.Now().Add(5 * time.Minute)
+			item.ScheduledFor = time.Now().UTC().Add(5 * time.Minute)
 		}
 	} else {
 		item.Status = "completed"
-		now := time.Now()
+		now := time.Now().UTC()
 		item.ExecutedAt = &now
 	}
 

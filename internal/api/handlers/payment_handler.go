@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -281,7 +282,8 @@ func CreatePayment(c *gin.Context) {
 			api_response.Error(c, http.StatusBadRequest, "Invalid subject")
 			return
 		}
-		if subject.Price > 0 && req.Amount != subject.Price {
+		price, _ := subject.Price.Float64()
+		if price > 0 && req.Amount != price {
 			api_response.Error(c, http.StatusBadRequest, "Invalid payment amount")
 			return
 		}
@@ -290,7 +292,7 @@ func CreatePayment(c *gin.Context) {
 	payment := models.Payment{
 		UserID:    userId.(string),
 		SubjectID: req.SubjectID,
-		Amount:    req.Amount,
+		Amount:    decimal.NewFromFloat(req.Amount),
 		Currency:  req.Currency,
 		Method:    req.Method,
 		Status:    models.PaymentPending,
@@ -392,7 +394,8 @@ func PurchaseAddon(c *gin.Context) {
 			return err
 		}
 
-		if user.Balance < price {
+		balance, _ := user.Balance.Float64()
+		if balance < price {
 			return services.ErrInsufficientBalance
 		}
 
@@ -460,7 +463,7 @@ func createAddonRecords(tx *gorm.DB, userID string, addonID string, price float6
 	walletTx := models.WalletTransaction{
 		UserID:      userID,
 		Type:        models.TxTypeWithdraw,
-		Amount:      -price,
+		Amount:      decimal.NewFromFloat(-price),
 		Currency:    "EGP",
 		WalletType:  "BALANCE",
 		Description: fmt.Sprintf("شراء إضافة: %s", addonID),
@@ -472,7 +475,7 @@ func createAddonRecords(tx *gorm.DB, userID string, addonID string, price float6
 
 	payment := models.Payment{
 		UserID:      userID,
-		Amount:      price,
+		Amount:      decimal.NewFromFloat(price),
 		Currency:    "EGP",
 		Method:      "WALLET",
 		Status:      models.PaymentCompleted,
@@ -531,7 +534,7 @@ func HandleWalletDeposit(c *gin.Context) {
 	// Create payment record for audit trail
 	payment := models.Payment{
 		UserID:      userId.(string),
-		Amount:      req.Amount,
+		Amount:      decimal.NewFromFloat(req.Amount),
 		Currency:    "EGP",
 		Method:      "WALLET_TOPUP",
 		Status:      models.PaymentCompleted,

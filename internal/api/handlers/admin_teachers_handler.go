@@ -89,19 +89,18 @@ func CreateTeacher(c *gin.Context) {
 	randomBytes := make([]byte, 16)
 	_, _ = rand.Read(randomBytes)
 	randomPassword := hex.EncodeToString(randomBytes)
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(randomPassword), 12)
+	_, err := bcrypt.GenerateFromPassword([]byte(randomPassword), 12)
 	if err != nil {
 		apiresponse.Error(c, http.StatusInternalServerError, "Failed to generate password")
 		return
 	}
 
 	teacher := models.User{
-		Email:        email,
-		Name:         &teacherName,
-		Username:     &teacherName,
-		PasswordHash: string(hashedPassword),
-		Role:         models.RoleTeacher,
-		Bio:          input.Notes,
+		Email:    email,
+		Name:     &teacherName,
+		Username: &teacherName,
+		Role:     models.RoleTeacher,
+		Bio:      input.Notes,
 	}
 
 	if err := SafeCreate(db.DB, &teacher); err != nil {

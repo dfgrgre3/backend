@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	api_response "thanawy-backend/internal/api/response"
@@ -61,11 +62,12 @@ func GetEnrollmentStatus(c *gin.Context) {
 	}
 
 	// Check if payment is required
-	paymentRequired := subject.Price > 0 && !hasPaidForSubject(userId, subject.ID)
+	price, _ := subject.Price.Float64()
+	paymentRequired := price > 0 && !hasPaidForSubject(userId, subject.ID)
 
 	var progress float64
 	if isEnrolled {
-		progress = enrollment.Progress
+		progress, _ = enrollment.Progress.Float64()
 	}
 
 	// Determine enrollment status
@@ -299,12 +301,13 @@ func GetCourseStudents(c *gin.Context) {
 
 	students := make([]StudentInfo, 0, len(enrollments))
 	for _, e := range enrollments {
+		progress, _ := e.Progress.Float64()
 		studentInfo := StudentInfo{
 			ID:         e.ID,
 			UserID:     e.UserID,
-			Progress:   e.Progress,
+			Progress:   progress,
 			EnrolledAt: e.EnrolledAt,
-			Completed:  e.Progress >= 100.0,
+			Completed:  progress >= 100.0,
 		}
 		if e.User.ID != "" {
 			studentInfo.Name = e.User.GetName()
@@ -353,7 +356,12 @@ func fireEnrollmentEvent(c *gin.Context, userId, subjectId, eventType string) {
 			"data": string(eventBytes),
 		},
 	}).Err(); err != nil {
-		log.Printf("[Enrollment] Failed to publish event to Redis: %v", err)
+		if strings.Contains(strings.ToLower(err.Error()), "unknown command") {
+			log.Printf("[Enrollment] Redis Streams (XADD) not supported (< 5.0), falling back to List: %v", err)
+			_ = db.Redis.LPush(c.Request.Context(), "analytics_events:list", string(eventBytes)).Err()
+		} else {
+			log.Printf("[Enrollment] Failed to publish event to Redis: %v", err)
+		}
 	}
 }
 
@@ -391,7 +399,8 @@ func ManualEnroll(c *gin.Context) {
 	}
 
 	// If not free, check payment
-	if !input.IsFree && subject.Price > 0 {
+	price, _ := subject.Price.Float64()
+	if !input.IsFree && price > 0 {
 		if !hasPaidForSubject(input.UserID, subject.ID) {
 			api_response.Error(c, http.StatusBadRequest, "User has not paid for this course. Use isFree=true to bypass payment.")
 			return

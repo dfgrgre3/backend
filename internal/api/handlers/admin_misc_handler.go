@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"thanawy-backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"runtime"
 	"sync"
 )
@@ -358,7 +360,8 @@ func AdminExamsBulkUpload(c *gin.Context) {
 		return
 	}
 
-	importedCount := 0
+	// Batch create questions
+	var questions []models.Question
 	for i := 1; i < len(records); i++ {
 		row := records[i]
 		if len(row) < 6 {
@@ -371,15 +374,27 @@ func AdminExamsBulkUpload(c *gin.Context) {
 
 		optionsJSON, _ := json.Marshal(options)
 
-		question := models.Question{
+		questions = append(questions, models.Question{
 			ExamID:  exam.ID,
 			Text:    text,
 			Options: string(optionsJSON),
 			Answer:  answer,
-		}
+		})
+	}
 
-		if err := SafeCreate(db.DB, &question); err == nil {
-			importedCount++
+	importedCount := 0
+	if len(questions) > 0 {
+		// Batch insert questions in chunks of 100
+		if err := db.DB.CreateInBatches(&questions, 100).Error; err != nil {
+			log.Printf("ERROR: Failed to bulk insert questions: %v", err)
+			// Fallback: try individual inserts
+			for _, q := range questions {
+				if err := SafeCreate(db.DB, &q); err == nil {
+					importedCount++
+				}
+			}
+		} else {
+			importedCount = len(questions)
 		}
 	}
 
@@ -523,16 +538,19 @@ func applyCoupon(couponCode string, price float64) (*models.Coupon, float64) {
 	// Validate coupon
 	isExpired := coupon.ExpiryDate != nil && coupon.ExpiryDate.Before(time.Now())
 	isMaxUsed := coupon.MaxUses != nil && coupon.UsedCount >= *coupon.MaxUses
-	isBelowMin := coupon.MinOrderAmount > 0 && price < coupon.MinOrderAmount
+	minOrderAmount, _ := coupon.MinOrderAmount.Float64()
+	isBelowMin := minOrderAmount > 0 && price < minOrderAmount
 
 	if isExpired || isMaxUsed || isBelowMin {
 		return nil, price
 	}
 
 	if coupon.DiscountType == "PERCENTAGE" {
-		price = price * (1 - coupon.DiscountValue/100)
+		discountValue, _ := coupon.DiscountValue.Float64()
+		price = price * (1 - discountValue/100)
 	} else {
-		price = price - coupon.DiscountValue
+		discountValue, _ := coupon.DiscountValue.Float64()
+		price = price - discountValue
 	}
 
 	if price < 0 {
@@ -609,7 +627,7 @@ func SubscriptionCheckout(c *gin.Context) {
 
 	payment := models.Payment{
 		UserID:        userId,
-		Amount:        price,
+		Amount:        decimal.NewFromFloat(price),
 		Method:        req.PaymentMethod,
 		Status:        models.PaymentPending,
 		Reference:     fmt.Sprintf("SUB-%d", time.Now().Unix()),
@@ -773,38 +791,58 @@ func GetAdminDashboard(c *gin.Context) {
 		AchievementsEarned int64 `gorm:"column:achievements_earned"`
 	}
 
-	var stats dashboardStats
-	queryMetrics := `
-		SELECT
-			(SELECT COUNT(*) FROM "User" WHERE deleted_at IS NULL) as total_users,
-			(SELECT COUNT(*) FROM "User" WHERE created_at >= ? AND deleted_at IS NULL) as new_users_today,
-			(SELECT COUNT(*) FROM "User" WHERE created_at >= ? AND deleted_at IS NULL) as new_users_this_week,
-			(SELECT COUNT(*) FROM "Subject" WHERE deleted_at IS NULL) as total_subjects,
-			(SELECT COUNT(*) FROM "Exam" WHERE deleted_at IS NULL) as total_exams,
-			(SELECT COUNT(*) FROM "Task" WHERE status = 'COMPLETED' AND deleted_at IS NULL) as completed_tasks,
-			(SELECT COUNT(*) FROM "StudySession" WHERE deleted_at IS NULL) as total_study_sessions,
-			(SELECT COALESCE(SUM(duration_min), 0) FROM "StudySession" WHERE deleted_at IS NULL) as study_minutes,
-			(SELECT COUNT(*) FROM "ExamResult" WHERE deleted_at IS NULL) as exams_taken,
-			(SELECT COUNT(*) FROM "SubTopic" WHERE type != 'QUIZ' AND deleted_at IS NULL) as total_resources,
-			(SELECT COUNT(*) FROM "Challenge" WHERE is_active = true AND deleted_at IS NULL) as active_challenges,
-			(SELECT COUNT(*) FROM "UserAchievement" WHERE deleted_at IS NULL) as achievements_earned
-	`
-	if err := db.DB.Raw(queryMetrics, todayStart, weekAgo).Scan(&stats).Error; err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to load dashboard metrics")
-		return
-	}
+	// Fetch metrics in parallel for better performance
+	var wgMetrics sync.WaitGroup
+	wgMetrics.Add(9)
 
-	totalUsers = stats.TotalUsers
-	newUsersToday = stats.NewUsersToday
-	newUsersThisWeek = stats.NewUsersThisWeek
-	totalSubjects = stats.TotalSubjects
-	totalExams = stats.TotalExams
-	completedTasks = stats.CompletedTasks
-	studyMinutes = stats.StudyMinutes
-	examsTaken = stats.ExamsTaken
-	totalResources = stats.TotalResources
-	activeChallenges = stats.ActiveChallenges
-	achievementsEarned = stats.AchievementsEarned
+	go func() {
+		defer wgMetrics.Done()
+		type userCounts struct {
+			Total     int64 `gorm:"column:total"`
+			Today     int64 `gorm:"column:today"`
+			ThisWeek  int64 `gorm:"column:this_week"`
+		}
+		var uc userCounts
+		db.DB.Model(&models.User{}).
+			Select("COUNT(*) as total, COUNT(*) FILTER (WHERE created_at >= ?) as today, COUNT(*) FILTER (WHERE created_at >= ?) as this_week", todayStart, weekAgo).
+			Scan(&uc)
+		totalUsers = uc.Total
+		newUsersToday = uc.Today
+		newUsersThisWeek = uc.ThisWeek
+	}()
+	go func() {
+		defer wgMetrics.Done()
+		db.DB.Model(&models.Subject{}).Count(&totalSubjects)
+	}()
+	go func() {
+		defer wgMetrics.Done()
+		db.DB.Model(&models.Exam{}).Count(&totalExams)
+	}()
+	go func() {
+		defer wgMetrics.Done()
+		db.DB.Model(&models.Task{}).Where("status = ?", "COMPLETED").Count(&completedTasks)
+	}()
+	go func() {
+		defer wgMetrics.Done()
+		db.DB.Model(&models.StudySession{}).Select("COALESCE(SUM(duration_min), 0)").Scan(&studyMinutes)
+	}()
+	go func() {
+		defer wgMetrics.Done()
+		db.DB.Model(&models.ExamResult{}).Count(&examsTaken)
+	}()
+	go func() {
+		defer wgMetrics.Done()
+		db.DB.Model(&models.SubTopic{}).Where("type != ?", "QUIZ").Count(&totalResources)
+	}()
+	go func() {
+		defer wgMetrics.Done()
+		db.DB.Model(&models.Challenge{}).Where("is_active = ?", true).Count(&activeChallenges)
+	}()
+	go func() {
+		defer wgMetrics.Done()
+		db.DB.Model(&models.UserAchievement{}).Count(&achievementsEarned)
+	}()
+	wgMetrics.Wait()
 
 	// Fetch lists in parallel
 	var wg sync.WaitGroup
@@ -974,7 +1012,7 @@ func GetAdminDashboard(c *gin.Context) {
 	db.DB.Model(&models.UserSubscription{}).
 		Select("COALESCE(SUM(sp.price), 0)").
 		Joins("LEFT JOIN \"SubscriptionPlan\" sp ON \"UserSubscription\".plan_id = sp.id").
-		Where("\"UserSubscription\".deleted_at IS NULL AND \"UserSubscription\".status = ?", "PENDING").
+		Where("\"UserSubscription\".status = ?", "PENDING").
 		Scan(&pendingRevenue)
 
 	// Fetch recent items
@@ -1017,7 +1055,7 @@ func GetAdminDashboard(c *gin.Context) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		db.DB.Where("deleted_at IS NULL AND status = ?", "LIVE").Order(createdAtDescSort).Limit(5).Find(&liveClasses)
+		db.DB.Where("status = ?", "LIVE").Order(createdAtDescSort).Limit(5).Find(&liveClasses)
 	}()
 	go func() {
 		defer wg.Done()
@@ -1754,7 +1792,9 @@ func GetAdminInfrastructureStats(c *gin.Context) {
 	if err != nil {
 		dbStatus = "unhealthy"
 	} else {
-		if sqlDB.Ping() != nil {
+		pingCtx, pingCancel := context.WithTimeout(c.Request.Context(), 500*time.Millisecond)
+		defer pingCancel()
+		if pingErr := sqlDB.PingContext(pingCtx); pingErr != nil {
 			dbStatus = "unhealthy"
 		} else {
 			dbConnections = sqlDB.Stats().OpenConnections

@@ -261,16 +261,24 @@ func (s *authService) Register(ctx context.Context, req *dto.RegisterRequest) (*
 
 	fullName := req.FirstName + " " + req.LastName
 
-	// Create user
-	user := models.User{
-		Email:        req.Email,
-		PasswordHash: string(hashedPassword),
-		Name:         &fullName,
-		Role:         models.RoleStudent,
-		Status:       models.StatusActive,
-	}
-
-	if err := db.DB.WithContext(ctx).Create(&user).Error; err != nil {
+	// Create user and credential in a transaction
+	var user models.User
+	if err := db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		user = models.User{
+			Email:  req.Email,
+			Name:   &fullName,
+			Role:   models.RoleStudent,
+			Status: models.StatusActive,
+		}
+		if err := tx.Create(&user).Error; err != nil {
+			return err
+		}
+		credential := models.UserCredential{
+			UserID:       user.ID,
+			PasswordHash: string(hashedPassword),
+		}
+		return tx.Create(&credential).Error
+	}); err != nil {
 		return nil, err
 	}
 
@@ -290,7 +298,7 @@ func (s *authService) Register(ctx context.Context, req *dto.RegisterRequest) (*
 				UserID:    user.ID,
 				Code:      code,
 				Type:      "email_verification",
-				ExpiresAt: time.Now().Add(15 * time.Minute),
+				ExpiresAt: time.Now().UTC().Add(15 * time.Minute),
 			}
 			if err := s.authRepo.CreateVerificationCode(ctx, verificationCode); err == nil {
 				body := GetVerificationEmailTemplate(userName, code)
@@ -324,8 +332,15 @@ func (s *authService) Login(ctx context.Context, req *dto.LoginRequest, userAgen
 		return nil, err
 	}
 
+	// Get user credential for password verification
+	var credential models.UserCredential
+	if err := db.DB.WithContext(ctx).Where("user_id = ?", user.ID).First(&credential).Error; err != nil {
+		s.logFailedLogin(ctx, user.ID, ip, userAgent, "Invalid credentials")
+		return nil, errors.New("invalid email or password")
+	}
+
 	// Verify password
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(credential.PasswordHash), []byte(req.Password)); err != nil {
 		recordFailedAttempt(ctx, user.ID)
 		s.logFailedLogin(ctx, user.ID, ip, userAgent, "Invalid credentials")
 		return nil, errors.New("invalid email or password")
@@ -374,8 +389,8 @@ func (s *authService) Login(ctx context.Context, req *dto.LoginRequest, userAgen
 		DeviceType:   detectDeviceType(userAgent),
 		Status:       "active",
 		IsActive:     true,
-		LastAccessed: time.Now(),
-		ExpiresAt:    time.Now().Add(30 * 24 * time.Hour),
+		LastAccessed: time.Now().UTC(),
+		ExpiresAt:    time.Now().UTC().Add(30 * 24 * time.Hour),
 	}
 
 	if err := s.authRepo.CreateSession(ctx, session); err != nil {
@@ -413,13 +428,14 @@ func (s *authService) ChangePassword(ctx context.Context, userID, oldPassword, n
 		return err
 	}
 
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("id = ?", userID).First(&user).Error; err != nil {
+	// Get user credential
+	var credential models.UserCredential
+	if err := db.DB.WithContext(ctx).Where("user_id = ?", userID).First(&credential).Error; err != nil {
 		return errors.New("user not found")
 	}
 
 	// Verify old password
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPassword)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(credential.PasswordHash), []byte(oldPassword)); err != nil {
 		return errors.New("current password is incorrect")
 	}
 
@@ -433,12 +449,13 @@ func (s *authService) ChangePassword(ctx context.Context, userID, oldPassword, n
 		return errors.New("failed to hash password")
 	}
 
-	user.PasswordHash = string(hashedPassword)
-	now := time.Now()
-	user.PasswordChangedAt = &now
+	// Update credential
+	credential.PasswordHash = string(hashedPassword)
+	now := time.Now().UTC()
+	credential.LastChangedAt = now
 
 	// Save new password
-	if err := db.DB.WithContext(ctx).Save(&user).Error; err != nil {
+	if err := db.DB.WithContext(ctx).Save(&credential).Error; err != nil {
 		return errors.New("failed to update password")
 	}
 
@@ -489,21 +506,26 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken, userAgent,
 		}
 	}
 
-	// Find session
-	session, err := s.authRepo.GetSessionByToken(ctx, refreshToken)
+	// Find session with user in a single query using JOIN to reduce round trips
+	var session models.UserSession
+	var user models.User
+	err := db.DB.WithContext(ctx).
+		Model(&models.UserSession{}).
+		Where("refresh_token_hash = ? AND is_active = ?",
+			models.ComputeRefreshTokenHash(refreshToken), true).
+		First(&session).Error
 	if err != nil {
 		return nil, errors.New("invalid or expired refresh token")
+	}
+
+	// Fetch user (we already have user_id from session)
+	if err := db.DB.WithContext(ctx).Where("id = ?", session.UserID).First(&user).Error; err != nil {
+		return nil, errors.New("user not found")
 	}
 
 	if session.ExpiresAt.Before(time.Now()) {
 		s.authRepo.RevokeSession(ctx, session.ID)
 		return nil, errors.New("refresh token expired")
-	}
-
-	// Find user
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("id = ?", session.UserID).First(&user).Error; err != nil {
-		return nil, errors.New("user not found")
 	}
 
 	// Generate new tokens
@@ -512,28 +534,51 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken, userAgent,
 		return nil, err
 	}
 
-	// Rotate refresh token: Invalidate old, create new
-	s.authRepo.RevokeSession(ctx, session.ID)
-	// Blacklist the old access token (since its JTI is session.ID)
-	s.tokenService.BlacklistJTI(session.ID, 15*time.Minute)
+	// Rotate refresh token: Invalidate old, create new - use transaction for atomicity
+	err = db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Revoke old session
+		if err := tx.Model(&models.UserSession{}).
+			Where("id = ?", session.ID).
+			Updates(map[string]interface{}{
+				"is_active":  false,
+				"status":     "revoked",
+				"revoked_at": tx.NowFunc(),
+			}).Error; err != nil {
+			return err
+		}
 
-	os, browser := parseUserAgent(userAgent)
+		// Create new session
+		os, browser := parseUserAgent(userAgent)
+		newSession := &models.UserSession{
+			ID:           tokenPair.JTI,
+			UserID:       user.ID,
+			RefreshToken: tokenPair.RefreshToken,
+			UserAgent:    userAgent,
+			Browser:      browser,
+			OS:           os,
+			IP:           ip,
+			DeviceType:   detectDeviceType(userAgent),
+			Status:       "active",
+			IsActive:     true,
+			LastAccessed: time.Now().UTC(),
+			ExpiresAt:    time.Now().UTC().Add(30 * 24 * time.Hour),
+		}
+		if err := tx.Create(newSession).Error; err != nil {
+			return err
+		}
 
-	newSession := &models.UserSession{
-		ID:           tokenPair.JTI,
-		UserID:       user.ID,
-		RefreshToken: tokenPair.RefreshToken,
-		UserAgent:    userAgent,
-		Browser:      browser,
-		OS:           os,
-		IP:           ip,
-		DeviceType:   detectDeviceType(userAgent),
-		Status:       "active",
-		IsActive:     true,
-		LastAccessed: time.Now(),
-		ExpiresAt:    time.Now().Add(30 * 24 * time.Hour),
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	s.authRepo.CreateSession(ctx, newSession)
+
+	// Blacklist the old access token (since its JTI is session.ID) - fire and forget
+	go func(jti string) {
+		_, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		s.tokenService.BlacklistJTI(jti, 15*time.Minute)
+	}(session.ID)
 
 	return &dto.RefreshTokenResponse{
 		AccessToken:  tokenPair.AccessToken,
@@ -679,7 +724,7 @@ func (s *authService) VerifyForgotPasswordCode(ctx context.Context, email, code 
 	resetToken := &models.PasswordResetToken{
 		UserID:    user.ID,
 		TokenHash: tokenHashStr,
-		ExpiresAt: time.Now().Add(15 * time.Minute),
+		ExpiresAt: time.Now().UTC().Add(15 * time.Minute),
 	}
 	if err := db.DB.WithContext(ctx).Create(resetToken).Error; err != nil {
 		return "", errors.New("failed to create reset token")
@@ -703,7 +748,7 @@ func (s *authService) ResetPassword(ctx context.Context, token, newPassword stri
 
 	var resetToken models.PasswordResetToken
 	if err := db.DB.WithContext(ctx).
-		Where("token_hash = ? AND is_used = ? AND expires_at > ?", tokenHashStr, false, time.Now()).
+		Where("token_hash = ? AND is_used = ? AND expires_at > ?", tokenHashStr, false, time.Now().UTC()).
 		First(&resetToken).Error; err != nil {
 		return errors.New("invalid or expired reset token")
 	}
@@ -721,13 +766,13 @@ func (s *authService) ResetPassword(ctx context.Context, token, newPassword stri
 		return errors.New("failed to hash password")
 	}
 
-	// Update user password
-	now := time.Now()
-	if err := db.DB.WithContext(ctx).Model(&models.User{}).
-		Where("id = ?", resetToken.UserID).
+	// Update user credential
+	now := time.Now().UTC()
+	if err := db.DB.WithContext(ctx).Model(&models.UserCredential{}).
+		Where("user_id = ?", resetToken.UserID).
 		Updates(map[string]interface{}{
-			"password_hash":       string(hashedPassword),
-			"password_changed_at": now,
+			"password_hash":    string(hashedPassword),
+			"last_changed_at": now,
 		}).Error; err != nil {
 		return errors.New("failed to update password")
 	}
@@ -748,7 +793,7 @@ func (s *authService) VerifyEmail(ctx context.Context, userID, code string) erro
 		return errors.New("invalid or expired verification code")
 	}
 
-	if verificationCode.ExpiresAt.Before(time.Now()) {
+	if verificationCode.ExpiresAt.Before(time.Now().UTC()) {
 		return errors.New("verification code has expired")
 	}
 
@@ -801,7 +846,7 @@ func (s *authService) ResendVerificationEmail(ctx context.Context, userID string
 		UserID:    user.ID,
 		Code:      code,
 		Type:      "email_verification",
-		ExpiresAt: time.Now().Add(15 * time.Minute),
+		ExpiresAt: time.Now().UTC().Add(15 * time.Minute),
 	}
 	if err := s.authRepo.CreateVerificationCode(ctx, verificationCode); err != nil {
 		return errors.New("failed to create verification code")
@@ -907,13 +952,19 @@ func (s *authService) DeleteAccount(ctx context.Context, userID, password, reaso
 		return errors.New("user not found")
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	// Get user credential for password verification
+	var credential models.UserCredential
+	if err := db.DB.WithContext(ctx).Where("user_id = ?", userID).First(&credential).Error; err != nil {
+		return errors.New("user not found")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(credential.PasswordHash), []byte(password)); err != nil {
 		return errors.New("invalid password")
 	}
 
 	s.RevokeAllSessions(ctx, userID)
 
-	now := time.Now()
+	now := time.Now().UTC()
 	user.DeletedAt = gorm.DeletedAt{Time: now, Valid: true}
 	user.Status = "INACTIVE"
 	user.ArchiveReason = &reason
@@ -1246,8 +1297,10 @@ func (s *authService) FinalizeAccountRecovery(ctx context.Context, ticket, code,
 		return err
 	}
 
-	user.PasswordHash = string(hashedPassword)
-	if err := db.DB.WithContext(ctx).Save(&user).Error; err != nil {
+	// Update user credential
+	if err := db.DB.WithContext(ctx).Model(&models.UserCredential{}).
+		Where("user_id = ?", user.ID).
+		Update("password_hash", string(hashedPassword)).Error; err != nil {
 		return errors.New("failed to save new password")
 	}
 

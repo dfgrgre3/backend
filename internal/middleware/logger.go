@@ -42,7 +42,7 @@ func StructuredLogger() gin.HandlerFunc {
 		}
 
 		entry := LogEntry{
-			Timestamp: time.Now().Format(time.RFC3339),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
 			Level:     "info",
 			Message:   fmt.Sprintf("%s %s -> %d", c.Request.Method, path, c.Writer.Status()),
 			Service:   "thanawy-backend",

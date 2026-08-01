@@ -167,7 +167,7 @@ func (h *OAuthHandler) OAuthCallback(c *gin.Context) {
 
 			// Generate random password hash
 			randomPassword := generateStateToken() + generateStateToken()
-			pwHash, err := bcrypt.GenerateFromPassword([]byte(randomPassword), bcrypt.DefaultCost)
+			_, err := bcrypt.GenerateFromPassword([]byte(randomPassword), bcrypt.DefaultCost)
 			if err != nil {
 				tx.Rollback()
 				response.Error(c, http.StatusInternalServerError, "Registration failure")
@@ -176,7 +176,6 @@ func (h *OAuthHandler) OAuthCallback(c *gin.Context) {
 
 			user = models.User{
 				Email:         oauthUser.Email,
-				PasswordHash:  string(pwHash),
 				Role:          models.RoleStudent,
 				Status:        models.StatusActive,
 				EmailVerified: true,

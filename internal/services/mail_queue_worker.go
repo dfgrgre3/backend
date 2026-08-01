@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sync"
@@ -56,15 +57,6 @@ func (w *MailQueueWorker) Start() {
 
 	w.active = true
 	w.quit = make(chan struct{})
-
-	// Auto migrate database model if connection is active
-	if db.DB != nil {
-		if err := db.DB.AutoMigrate(&MailTask{}); err != nil {
-			log.Printf("[MailWorker] Database migration failed: %v", err)
-		} else {
-			log.Println("[MailWorker] Database migration completed successfully")
-		}
-	}
 
 	go w.run()
 	log.Println("[MailWorker] Background daemon started successfully")
@@ -128,9 +120,17 @@ func (w *MailQueueWorker) processPendingTasks() {
 	}
 
 	var tasks []MailTask
-	// Fetch both 'pending' and 'retry' tasks
-	err := db.DB.Where("status = ? OR status = ?", "pending", "retry").
-		Limit(10).
+	// Use context with timeout to prevent slow queries from blocking
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Fetch only needed columns, filter by status and deleted_at, order by created_at ASC
+	err := db.DB.WithContext(ctx).
+		Unscoped().
+		Select("id, \"to\", subject, body, status, attempts, max_retry, last_error, created_at, updated_at").
+		Where("status IN ? AND deleted_at IS NULL", []string{"pending", "retry"}).
+		Order("created_at ASC").
+		Limit(100).
 		Find(&tasks).Error
 
 	if err != nil {

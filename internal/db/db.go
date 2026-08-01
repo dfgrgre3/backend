@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"strings"
-	"thanawy-backend/internal/models"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -20,15 +17,28 @@ import (
 
 var DB *gorm.DB
 
-// PrismaNamingStrategy implements GORM's NamingStrategy to match Prisma conventions:
-// - Table names: PascalCase (e.g., "User", "Subject")
-// - Column names: snake_case (matching recent migrations)
-type PrismaNamingStrategy struct {
+// LegacySchemaNamingStrategy preserves the existing database contract while
+// decoupling GORM from the removed Prisma toolchain. New schema changes must be
+// expressed as versioned SQL migrations rather than inferred from an ORM.
+type LegacySchemaNamingStrategy struct {
 	schema.NamingStrategy
 }
 
-func (PrismaNamingStrategy) TableName(table string) string {
+func (LegacySchemaNamingStrategy) TableName(table string) string {
 	return table // Model name is already PascalCase
+}
+
+// buildGormLogger returns a configured GORM logger shared by all connection helpers.
+func buildGormLogger() logger.Interface {
+	return logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold:             500 * time.Millisecond,
+			LogLevel:                  getGormLogLevel(),
+			IgnoreRecordNotFoundError: true,
+			ParameterizedQueries:      true,
+		},
+	)
 }
 
 func Connect(dsn string) (*gorm.DB, error) {
@@ -36,26 +46,44 @@ func Connect(dsn string) (*gorm.DB, error) {
 }
 
 func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
-	logMode := getGormLogLevel()
+	// Determine the DSN for app-role connections.
+	// We use DSN string manipulation (not a test connection) to avoid the
+	// extra round-trip on every process start.
+	useAppRole := os.Getenv("DATABASE_USE_APP_ROLE") == "true"
+	appDSN := dsn
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
-			SlowThreshold:             500 * time.Millisecond,
-			LogLevel:                  logMode,
-			IgnoreRecordNotFoundError: true,
-			ParameterizedQueries:      true,
-		}),
-		PrepareStmt:    !usesPgBouncer(dsn), // PgBouncer transaction pooling cannot safely cache prepared statements.
-		NamingStrategy: PrismaNamingStrategy{},
+	if useAppRole {
+		appDSNFromFunc, err := GetAppDSN()
+		if err != nil {
+			log.Printf("[WARN] Failed to build app DSN for RLS, falling back to provided DSN: %v", err)
+		} else {
+			appDSN = appDSNFromFunc
+			log.Printf("[DB] Using app role connection to respect RLS policies")
+		}
+	} else {
+		log.Printf("[DB] Using direct database connection (app role disabled)")
+	}
+
+	db, err := gorm.Open(postgres.Open(appDSN), &gorm.Config{
+		Logger:         buildGormLogger(),
+		PrepareStmt:    !usesPgBouncer(appDSN), // PgBouncer transaction pooling cannot safely cache prepared statements.
+		NamingStrategy: LegacySchemaNamingStrategy{},
 	})
-
 	if err != nil {
 		return nil, err
 	}
 
-	sourceDSN := dsn
+	// Determine write source DSN.
+	sourceDSN := appDSN
 	if writeDSN != "" {
-		sourceDSN = writeDSN
+		// For write DSN, also apply app role to respect RLS.
+		writeAppDSN, err := GetDSNForRole(writeDSN, RoleApp)
+		if err != nil {
+			log.Printf("[WARN] Failed to add app role to write DSN: %v", err)
+			sourceDSN = writeDSN
+		} else {
+			sourceDSN = writeAppDSN
+		}
 	}
 
 	replicaDialectors := getReplicaDialectors()
@@ -64,11 +92,13 @@ func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
 	log.Printf("Database connection pool settings: MaxIdleConns=%d, MaxOpenConns=%d, ConnMaxLifetime=%s, ConnMaxIdleTime=%s",
 		pool.MaxIdleConns, pool.MaxOpenConns, pool.MaxLifetime, pool.MaxIdleTime)
 
+	// Bug fix: when no explicit replicas are configured, fall back to appDSN
+	// (not the raw `dsn` argument) so the replica also uses the app role.
 	var replicas []gorm.Dialector
 	if len(replicaDialectors) > 0 {
 		replicas = replicaDialectors
 	} else {
-		replicas = []gorm.Dialector{postgresDialector(dsn)}
+		replicas = []gorm.Dialector{postgresDialector(appDSN)}
 	}
 
 	// Register DBResolver with explicit source/replica splitting for CQRS
@@ -88,8 +118,47 @@ func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
 
 	DB = db
 	log.Printf("Database connection established with Read-Write splitting and Monitoring.")
-
 	log.Println("Database ready. Schema changes are controlled by explicit migration flags.")
+
+	return db, nil
+}
+
+// ConnectForMigration creates a connection with migration_user role for schema changes.
+// NOTE: this does NOT set the global DB variable — migration connections are
+// intentionally kept separate from the application connection pool.
+func ConnectForMigration(dsn string) (*gorm.DB, error) {
+	// Use migration role for schema changes.
+	migrationDSN, err := GetMigrationDSN()
+	if err != nil {
+		log.Printf("[WARN] Failed to get migration DSN, falling back to provided DSN: %v", err)
+		migrationDSN = dsn
+	} else {
+		log.Printf("[DB] Using migration_user role for schema changes")
+	}
+
+	db, err := gorm.Open(postgres.Open(migrationDSN), &gorm.Config{
+		Logger:         buildGormLogger(),
+		PrepareStmt:    !usesPgBouncer(migrationDSN),
+		NamingStrategy: LegacySchemaNamingStrategy{},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+
+	pool := getPoolSettings()
+	sqlDB.SetMaxIdleConns(pool.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(pool.MaxOpenConns)
+	sqlDB.SetConnMaxLifetime(pool.MaxLifetime)
+	sqlDB.SetConnMaxIdleTime(pool.MaxIdleTime)
+
+	// Do NOT assign to DB — migration connections are independent of the
+	// application read/write pool to avoid corrupting the CQRS routing.
+	log.Printf("Database connection established for migrations with migration_user role")
 
 	return db, nil
 }
@@ -147,7 +216,13 @@ func WithWriteTx(fn func(tx *gorm.DB) error, ctxs ...context.Context) error {
 }
 
 func getGormLogLevel() logger.LogLevel {
-	if (os.Getenv("DB_LOG_LEVEL") == "info" || os.Getenv("DB_DEBUG") == "true") && os.Getenv("NODE_ENV") != "production" {
+	// APP_ENV / GO_ENV are the idiomatic Go environment variables.
+	// NODE_ENV is a Node.js convention and must not be used here.
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = os.Getenv("GO_ENV")
+	}
+	if (os.Getenv("DB_LOG_LEVEL") == "info" || os.Getenv("DB_DEBUG") == "true") && env != "production" {
 		return logger.Info
 	}
 	return logger.Warn
@@ -158,7 +233,7 @@ func getReplicaDialectors() []gorm.Dialector {
 	var replicaDialectors []gorm.Dialector
 	if replicas != "" {
 		for _, replicaDSN := range strings.Split(replicas, ",") {
-			replicaDialectors = append(replicaDialectors, postgresDialector(replicaDSN))
+			replicaDialectors = append(replicaDialectors, postgresDialector(strings.TrimSpace(replicaDSN)))
 		}
 	}
 	return replicaDialectors
@@ -212,141 +287,68 @@ func getPoolSettings() poolSettings {
 			MaxLifetime:  1 * time.Minute,  // Force quick release; Lambda reuse is short-lived
 			MaxIdleTime:  30 * time.Second, // Release idle conns before Lambda is frozen
 		}
-		log.Println("[DB Pool] Serverless environment detected — using minimal connection pool (MaxOpen=5, MaxIdle=2)")
 	} else {
-		// Traditional always-on server: larger pool is fine.
+		// Traditional always-on server: standard connection pool.
 		settings = poolSettings{
-			MaxIdleConns: 10,
+			MaxIdleConns: 25,
 			MaxOpenConns: 50,
 			MaxLifetime:  15 * time.Minute,
 			MaxIdleTime:  5 * time.Minute,
 		}
-		log.Println("[DB Pool] Traditional server environment — using standard connection pool (MaxOpen=50, MaxIdle=10)")
 	}
 
 	// Allow explicit overrides from environment variables in all cases.
+	hasIdle := false
 	if v, val := getEnvInt("DB_MAX_IDLE_CONNS"); v {
 		settings.MaxIdleConns = val
+		hasIdle = true
 	}
 	if v, val := getEnvInt("DB_MAX_OPEN_CONNS"); v {
 		settings.MaxOpenConns = val
+		if !hasIdle {
+			settings.MaxIdleConns = val / 2
+			if settings.MaxIdleConns < 2 {
+				settings.MaxIdleConns = 2
+			}
+		}
 	}
-	if v, val := getEnvInt("DB_CONN_MAX_LIFETIME_MINUTES"); v {
-		settings.MaxLifetime = time.Duration(val) * time.Minute
+	if v, val := getEnvDuration("DB_MAX_LIFETIME"); v {
+		settings.MaxLifetime = val
 	}
-	if v, val := getEnvInt("DB_CONN_MAX_IDLE_MINUTES"); v {
-		settings.MaxIdleTime = time.Duration(val) * time.Minute
+	if v, val := getEnvDuration("DB_MAX_IDLE_TIME"); v {
+		settings.MaxIdleTime = val
+	}
+
+	if serverless {
+		log.Printf("[DB Pool] Serverless environment detected — using connection pool (MaxOpen=%d, MaxIdle=%d)", settings.MaxOpenConns, settings.MaxIdleConns)
+	} else {
+		log.Printf("[DB Pool] Traditional server environment — using connection pool (MaxOpen=%d, MaxIdle=%d)", settings.MaxOpenConns, settings.MaxIdleConns)
 	}
 
 	return settings
 }
 
 func getEnvInt(key string) (bool, int) {
-	if v := os.Getenv(key); v != "" {
-		if val, err := strconv.Atoi(v); err == nil && val > 0 {
-			return true, val
-		}
+	val := os.Getenv(key)
+	if val == "" {
+		return false, 0
 	}
-	return false, 0
+	var intVal int
+	_, err := fmt.Sscanf(val, "%d", &intVal)
+	if err != nil {
+		return false, 0
+	}
+	return true, intVal
 }
 
-// Seed populates the database with initial data
-func Seed() error {
-	if DB == nil {
-		return nil
+func getEnvDuration(key string) (bool, time.Duration) {
+	val := os.Getenv(key)
+	if val == "" {
+		return false, 0
 	}
-	log.Println("Seeding database...")
-
-	seedCategories()
-	seedSystemSettings()
-	return seedAdminUser()
-}
-
-func tableExists(tableName string) bool {
-	var count int64
-	result := DB.Raw(`
-		SELECT COUNT(*) FROM information_schema.tables 
-		WHERE table_schema = 'public' AND table_name = ?
-	`, tableName).Scan(&count)
-	return result.Error == nil && count > 0
-}
-
-func seedCategories() {
-	if !tableExists("Category") {
-		log.Println("Category table not found, skipping category seeding")
-		return
+	duration, err := time.ParseDuration(val)
+	if err != nil {
+		return false, 0
 	}
-
-	libraryCategories := []models.Category{
-		{Name: "كتب مدرسية", Slug: "textbooks", Type: models.CategoryTypeLibrary},
-		{Name: "ملخصات", Slug: "summaries", Type: models.CategoryTypeLibrary},
-		{Name: "مراجعات نهائية", Slug: "final-reviews", Type: models.CategoryTypeLibrary},
-		{Name: "أسئلة واختبارات", Slug: "questions-and-exams", Type: models.CategoryTypeLibrary},
-	}
-
-	for _, cat := range libraryCategories {
-		var existing models.Category
-		if err := DB.Where("slug = ? AND type = ?", cat.Slug, cat.Type).First(&existing).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				DB.Create(&cat)
-				log.Printf("Created library category: %s", cat.Name)
-			}
-		}
-	}
-}
-
-func seedSystemSettings() {
-	if !tableExists("SystemSetting") {
-		log.Println("SystemSetting table not found, skipping settings seeding")
-		return
-	}
-
-	var settings models.SystemSetting
-	if err := DB.Where("key = ?", "admin_settings").First(&settings).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			defaultSettings := `{"siteName":"Thanawy","siteDescription":"منصة تعليمية لإدارة التعلم والمحتوى.","features":{"registration":true,"emailVerification":true,"engagement":true,"forum":true,"blog":true,"events":true,"aiAssistant":true}}`
-			DB.Create(&models.SystemSetting{
-				Key:   "admin_settings",
-				Value: defaultSettings,
-			})
-			log.Println("Created default admin settings")
-		}
-	}
-}
-
-func seedAdminUser() error {
-	if !tableExists("User") {
-		log.Println("User table not found, skipping admin user seeding")
-		return nil
-	}
-
-	email := os.Getenv("DEFAULT_ADMIN_EMAIL")
-	if email == "" {
-		email = "admin@thanawy.app"
-	}
-
-	password := os.Getenv("DEFAULT_ADMIN_PASSWORD")
-	if password == "" {
-		log.Println("WARNING: DEFAULT_ADMIN_PASSWORD not set. Skipping default admin user creation.")
-		return nil
-	}
-
-	var admin models.User
-	if err := DB.Unscoped().Where("email = ?", email).First(&admin).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), 12)
-			admin = models.User{
-				Email:        email,
-				PasswordHash: string(hashedPassword),
-				Role:         models.RoleAdmin,
-				Status:       models.StatusActive,
-			}
-			DB.Create(&admin)
-			log.Printf("Created default admin user: %s", email)
-		}
-		return nil
-	}
-
-	log.Printf("Default admin user already exists: %s", email)
-	return nil
+	return true, duration
 }

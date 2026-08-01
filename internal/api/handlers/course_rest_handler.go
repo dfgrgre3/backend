@@ -147,7 +147,7 @@ func (h *CourseRESTHandler) CreateCourse(c *gin.Context) {
 		LongDescription:       req.LongDescription,
 		CoverImageURL:         req.CoverImageURL,
 		PromoVideoURL:         req.PromoVideoURL,
-		Level:                 course.CourseLevel(req.Level),
+		Level:                 req.Level,
 		Language:              req.Language,
 		EstimatedDurationMins: req.EstimatedDurationMins,
 		HasCertificate:        req.HasCertificate,
@@ -221,7 +221,7 @@ func (h *CourseRESTHandler) UpdateCourse(c *gin.Context) {
 		LongDescription:       req.LongDescription,
 		CoverImageURL:         req.CoverImageURL,
 		PromoVideoURL:         req.PromoVideoURL,
-		Level:                 (*course.CourseLevel)(req.Level),
+		Level:                 req.Level,
 		Language:              req.Language,
 		EstimatedDurationMins: req.EstimatedDurationMins,
 		HasCertificate:        req.HasCertificate,
@@ -266,6 +266,11 @@ func (h *CourseRESTHandler) DeleteCourse(c *gin.Context) {
 func (h *CourseRESTHandler) ListCourses(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if offsetVal, err := strconv.Atoi(offsetStr); err == nil && limit > 0 {
+			page = (offsetVal / limit) + 1
+		}
+	}
 	if page < 1 {
 		page = 1
 	}
@@ -273,16 +278,19 @@ func (h *CourseRESTHandler) ListCourses(c *gin.Context) {
 		limit = 20
 	}
 
-	var status *course.CourseStatus
-	if statusStr := c.Query("status"); statusStr != "" {
-		s := course.CourseStatus(statusStr)
-		status = &s
+	if h.listCoursesHandler == nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to list courses: listCoursesHandler not initialized")
+		return
 	}
 
-	var level *course.CourseLevel
+	var status *string
+	if statusStr := c.Query("status"); statusStr != "" {
+		status = &statusStr
+	}
+
+	var level *string
 	if levelStr := c.Query("level"); levelStr != "" {
-		l := course.CourseLevel(levelStr)
-		level = &l
+		level = &levelStr
 	}
 
 	query := querypkg.ListCoursesQuery{
@@ -305,7 +313,10 @@ func (h *CourseRESTHandler) ListCourses(c *gin.Context) {
 		return
 	}
 
-	totalPages := (total + limit - 1) / limit
+	totalPages := 0
+	if limit > 0 {
+		totalPages = (int(total) + limit - 1) / limit
+	}
 
 	api_response.Success(c, gin.H{
 		"courses": courses,
@@ -525,9 +536,9 @@ func (h *CourseRESTHandler) GetCoursesPendingReview(c *gin.Context) {
 	}
 
 	// Use the query handler to get courses with UNDER_REVIEW status
-	status := course.CourseStatusUnderReview
+	statusStr := "UNDER_REVIEW"
 	filter := querypkg.ListCoursesQuery{
-		Status: &status,
+		Status: &statusStr,
 		Page:   page,
 		Limit:  limit,
 	}
@@ -544,7 +555,7 @@ func (h *CourseRESTHandler) GetCoursesPendingReview(c *gin.Context) {
 			"page":       page,
 			"limit":      limit,
 			"total":      total,
-			"totalPages": (total + limit - 1) / limit,
+			"totalPages": (int(total) + limit - 1) / limit,
 		},
 	})
 }

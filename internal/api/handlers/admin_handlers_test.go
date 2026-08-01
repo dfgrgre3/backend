@@ -5,15 +5,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -21,14 +23,19 @@ import (
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Discard,
 	})
 	require.NoError(t, err)
 
-	err = db.AutoMigrate(
+	sqlDB, err := database.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+
+	err = database.AutoMigrate(
 		&models.Category{},
 		&models.User{},
+		&models.UserCredential{},
 		&models.Achievement{},
 		&models.Reward{},
 		&models.Season{},
@@ -45,12 +52,87 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	)
 	require.NoError(t, err)
 
-	return db
+	return database
 }
 
 func setupTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	return gin.New()
+}
+
+func TestCreateUser_CreatesCredential(t *testing.T) {
+	testDB := setupTestDB(t)
+	db.DB = testDB
+
+	router := setupTestRouter()
+	router.POST("/users", CreateUser)
+
+	body := map[string]interface{}{
+		"email":    "new.user@example.com",
+		"name":     "New User",
+		"password": "secure-password",
+		"role":     "STUDENT",
+	}
+	bodyBytes, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var user models.User
+	require.NoError(t, testDB.Where("email = ?", body["email"]).First(&user).Error)
+
+	var credential models.UserCredential
+	require.NoError(t, testDB.Where("user_id = ?", user.ID).First(&credential).Error)
+	assert.True(t, credential.CheckPassword(body["password"].(string)))
+	assert.NotEqual(t, body["password"], credential.PasswordHash)
+}
+
+func TestCreateUser_InvalidPasswordDoesNotCreateUser(t *testing.T) {
+	testCases := []struct {
+		name     string
+		password interface{}
+	}{
+		{name: "missing", password: nil},
+		{name: "too short", password: "short"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			testDB := setupTestDB(t)
+			db.DB = testDB
+
+			router := setupTestRouter()
+			router.POST("/users", CreateUser)
+
+			body := map[string]interface{}{
+				"email": "invalid.password@example.com",
+				"name":  "Invalid Password",
+			}
+			if testCase.password != nil {
+				body["password"] = testCase.password
+			}
+			bodyBytes, err := json.Marshal(body)
+			require.NoError(t, err)
+
+			req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewBuffer(bodyBytes))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+
+			var userCount int64
+			require.NoError(t, testDB.Model(&models.User{}).Where("email = ?", body["email"]).Count(&userCount).Error)
+			assert.Zero(t, userCount)
+		})
+	}
 }
 
 func TestCreateCategory_Success(t *testing.T) {
@@ -335,11 +417,10 @@ func TestCreateTeacher_Duplicate(t *testing.T) {
 	db.DB = testDB
 
 	testDB.Create(&models.User{
-		Email:        "john.doe@thanawy.local",
-		Name:         ptr("John Doe"),
-		Username:     ptr("John Doe"),
-		Role:         models.RoleTeacher,
-		PasswordHash: "hashed",
+		Email:    "john.doe@thanawy.local",
+		Name:     ptr("John Doe"),
+		Username: ptr("John Doe"),
+		Role:     models.RoleTeacher,
 	})
 
 	router := setupTestRouter()
@@ -383,10 +464,9 @@ func TestGetTeachers_Success(t *testing.T) {
 	db.DB = testDB
 
 	testDB.Create(&models.User{
-		Email:        "teacher1@thanawy.local",
-		Name:         ptr("Teacher One"),
-		Role:         models.RoleTeacher,
-		PasswordHash: "hashed",
+		Email: "teacher1@thanawy.local",
+		Name:  ptr("Teacher One"),
+		Role:  models.RoleTeacher,
 	})
 
 	router := setupTestRouter()
@@ -405,10 +485,9 @@ func TestUpdateTeacher_Success(t *testing.T) {
 	db.DB = testDB
 
 	teacher := models.User{
-		Email:        "teacher@thanawy.local",
-		Name:         ptr("Old Name"),
-		Role:         models.RoleTeacher,
-		PasswordHash: "hashed",
+		Email: "teacher@thanawy.local",
+		Name:  ptr("Old Name"),
+		Role:  models.RoleTeacher,
 	}
 	testDB.Create(&teacher)
 
@@ -457,10 +536,9 @@ func TestDeleteTeacher_Success(t *testing.T) {
 	db.DB = testDB
 
 	teacher := models.User{
-		Email:        "todelete@thanawy.local",
-		Name:         ptr("To Delete"),
-		Role:         models.RoleTeacher,
-		PasswordHash: "hashed",
+		Email: "todelete@thanawy.local",
+		Name:  ptr("To Delete"),
+		Role:  models.RoleTeacher,
 	}
 	testDB.Create(&teacher)
 
@@ -655,7 +733,7 @@ func TestAdminCreateCoupon_Duplicate(t *testing.T) {
 	testDB.Create(&models.Coupon{
 		Code:          "SAVE10",
 		DiscountType:  "percentage",
-		DiscountValue: 10.0,
+		DiscountValue: decimal.NewFromFloat(10.0),
 		IsActive:      true,
 	})
 
@@ -956,10 +1034,14 @@ func TestBookListOrder_UsesLegacyTimestampWhenNeeded(t *testing.T) {
 	testDB := setupTestDB(t)
 	db.DB = testDB
 
-	assert.Equal(t, "created_at DESC", bookListOrder())
+	bookListOrderOnce = sync.Once{}
+	resolveBookListOrder()
+	assert.Equal(t, "created_at DESC", bookListOrderValue)
 
 	require.NoError(t, testDB.Migrator().DropColumn(&models.Book{}, "created_at"))
-	assert.Equal(t, `"createdAt" DESC`, bookListOrder())
+	bookListOrderOnce = sync.Once{}
+	resolveBookListOrder()
+	assert.Equal(t, `"createdAt" DESC`, bookListOrderValue)
 }
 
 func TestAdminUpdateBook_Success(t *testing.T) {
@@ -1071,7 +1153,7 @@ func TestAdminGetCoupons_Success(t *testing.T) {
 	testDB.Create(&models.Coupon{
 		Code:          "TEST10",
 		DiscountType:  "percentage",
-		DiscountValue: 10.0,
+		DiscountValue: decimal.NewFromFloat(10.0),
 		IsActive:      true,
 	})
 
@@ -1296,7 +1378,7 @@ func TestAdminUpdateCoupon_Success(t *testing.T) {
 	coupon := models.Coupon{
 		Code:          "OLD10",
 		DiscountType:  "percentage",
-		DiscountValue: 10.0,
+		DiscountValue: decimal.NewFromFloat(10.0),
 		IsActive:      true,
 	}
 	testDB.Create(&coupon)
@@ -1465,8 +1547,8 @@ func TestAdminDeleteReward_Success(t *testing.T) {
 
 	reward := models.Reward{
 		Title: "To Delete",
-		Cost: 100,
-		Type: "discount",
+		Cost:  100,
+		Type:  "discount",
 	}
 	testDB.Create(&reward)
 
@@ -1509,7 +1591,7 @@ func TestAdminDeleteCoupon_Success(t *testing.T) {
 	coupon := models.Coupon{
 		Code:          "DEL10",
 		DiscountType:  "percentage",
-		DiscountValue: 10.0,
+		DiscountValue: decimal.NewFromFloat(10.0),
 		IsActive:      true,
 	}
 	testDB.Create(&coupon)

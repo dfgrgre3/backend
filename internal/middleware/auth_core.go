@@ -313,14 +313,16 @@ func OptionalAuth() gin.HandlerFunc {
 }
 
 // GuestOnly ensures that the request is made by a guest (unauthenticated user).
+// It blocks authenticated users from accessing auth handshake routes (login, register, etc.)
+// by returning a 409 Conflict — indicating the request conflicts with the current auth state.
 func GuestOnly() gin.HandlerFunc {
 	tokenSvc := services.NewAuthTokenService()
 	return func(c *gin.Context) {
 		tokenString := extractBearerToken(c)
 		if tokenString != "" {
 			if _, err := tokenSvc.ValidateAccessToken(tokenString); err == nil {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-					"error": "Already authenticated",
+				c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+					"error": "User is already authenticated. Please log out before attempting to log in again.",
 					"code":  "already_authenticated",
 				})
 				return

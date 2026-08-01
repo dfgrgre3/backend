@@ -1,4 +1,0 @@
-{
-  "buildCommand": "GOOS=linux go build -buildvcs=false -ldflags=\"-s -w\" -o $VERCEL_OUTPUT_FILE ./cmd/api",
-  "outputDirectory": "api"
-}

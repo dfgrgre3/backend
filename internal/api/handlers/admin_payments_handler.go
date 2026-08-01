@@ -162,7 +162,8 @@ func AdminRefundPayment(c *gin.Context) {
 		return
 	}
 
-	if input.Amount > payment.Amount {
+	paymentAmount, _ := payment.Amount.Float64()
+	if input.Amount > paymentAmount {
 		api_response.Error(c, http.StatusBadRequest, "Refund amount exceeds the original payment amount")
 		return
 	}

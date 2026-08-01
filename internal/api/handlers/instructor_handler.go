@@ -17,6 +17,7 @@ import (
 	"thanawy-backend/internal/models"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -617,7 +618,8 @@ func GetInstructors(c *gin.Context) {
 		totalPages = 1
 	}
 
-	apiresponse.Success(c, gin.H{
+	c.JSON(http.StatusOK, gin.H{
+		"success":     true,
 		"instructors": items,
 		"summary":     summary,
 		"pagination": gin.H{
@@ -777,7 +779,7 @@ func CreateInstructor(c *gin.Context) {
 		return
 	}
 
-	passwordHash, err := hashPassword(randomPassword)
+	_, err = hashPassword(randomPassword)
 	if err != nil {
 		apiresponse.Error(c, http.StatusInternalServerError, "Failed to create instructor")
 		return
@@ -787,10 +789,9 @@ func CreateInstructor(c *gin.Context) {
 		Email:                 email,
 		Name:                  &name,
 		Username:              &username,
-		PasswordHash:          passwordHash,
 		Role:                  models.RoleTeacher,
 		InstructorStatus:      status,
-		CommissionRate:        commissionRate,
+		CommissionRate:        decimal.NewFromFloat(commissionRate),
 		InstructorSpecialties: models.JSONStringArray(specialties),
 		InstructorLanguages:   models.JSONStringArray(languages),
 		EmailVerified:         false,
@@ -908,7 +909,10 @@ func UpdateInstructor(c *gin.Context) {
 		}
 	}
 
-	apiresponse.Success(c, gin.H{"instructor": buildInstructorResponse(&user)})
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"instructor": buildInstructorResponse(&user),
+	})
 }
 
 func DeleteInstructor(c *gin.Context) {
@@ -1069,26 +1073,27 @@ func ReviewInstructorDocument(c *gin.Context) {
 	}
 
 	logEntry := models.AuditLog{
-		UserID:      &user.ID,
-		EventType:   "instructor_document_review",
-		Action:      "review",
-		Resource:    "instructor_document",
-		ResourceID:  documentID,
-		Changes:     input.Notes,
-		Metadata:    `{"status":"` + status + `"}`,
-		CreatedAt:   time.Now(),
+		UserID:     &user.ID,
+		EventType:  "instructor_document_review",
+		Action:     "review",
+		Resource:   "instructor_document",
+		ResourceID: documentID,
+		Changes:    input.Notes,
+		Metadata:   `{"status":"` + status + `"}`,
+		CreatedAt:  time.Now(),
 	}
 	if err := SafeCreate(database, &logEntry); err != nil {
 		apiresponse.Error(c, http.StatusInternalServerError, "Failed to record document review")
 		return
 	}
 
-	apiresponse.Success(c, gin.H{
-		"documentId": documentID,
+	c.JSON(http.StatusOK, gin.H{
+		"success":      true,
+		"documentId":   documentID,
 		"instructorId": user.ID,
-		"status": status,
-		"notes": input.Notes,
-		"reviewedAt": logEntry.CreatedAt,
+		"status":       status,
+		"notes":        input.Notes,
+		"reviewedAt":   logEntry.CreatedAt,
 	})
 }
 
@@ -1170,7 +1175,6 @@ func CreateInstructorContract(c *gin.Context) {
 	})
 }
 
-
 func GetInstructorPerformance(c *gin.Context) {
 	apiresponse.Success(c, gin.H{"performance": []gin.H{}})
 }
@@ -1222,21 +1226,22 @@ func CreateInstructorViolation(c *gin.Context) {
 	}
 
 	logEntry := models.AuditLog{
-		UserID:      &user.ID,
-		EventType:   "instructor_violation",
-		Action:      "create",
-		Resource:    "instructor_violation",
-		ResourceID:  user.ID,
-		Changes:     description,
-		Metadata:    `{"type":"` + typeValue + `","severity":"` + severity + `"}`,
-		CreatedAt:   time.Now(),
+		UserID:     &user.ID,
+		EventType:  "instructor_violation",
+		Action:     "create",
+		Resource:   "instructor_violation",
+		ResourceID: user.ID,
+		Changes:    description,
+		Metadata:   `{"type":"` + typeValue + `","severity":"` + severity + `"}`,
+		CreatedAt:  time.Now(),
 	}
 	if err := SafeCreate(database, &logEntry); err != nil {
 		apiresponse.Error(c, http.StatusInternalServerError, "Failed to record instructor violation")
 		return
 	}
 
-	apiresponse.Success(c, gin.H{
+	c.JSON(http.StatusCreated, gin.H{
+		"success":      true,
 		"id":           logEntry.ID,
 		"instructorId": user.ID,
 		"type":         typeValue,
@@ -1430,13 +1435,14 @@ func ExportInstructors(c *gin.Context) {
 	for i := range users {
 		user := users[i]
 
+		commissionRate, _ := user.CommissionRate.Float64()
 		record := []string{
 			fmt.Sprintf("%v", user.ID),
 			stringPtrToString(user.Name),
 			user.Email,
 			stringPtrToString(user.Username),
 			getInstructorStatus(&user),
-			strconv.FormatFloat(user.CommissionRate, 'f', -1, 64),
+			strconv.FormatFloat(commissionRate, 'f', -1, 64),
 			stringPtrToString(user.Phone),
 			stringPtrToString(user.Country),
 			fmt.Sprintf("%v", user.CreatedAt),

@@ -81,7 +81,7 @@ func (s *WorkflowService) transition(subjectID, userID string, targetStatus mode
 		return nil, err
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	updates := map[string]interface{}{
 		"status":     targetStatus,
 		"updated_at": now,
@@ -158,7 +158,7 @@ func (s *WorkflowService) transitionWithRejection(subjectID, reviewerID, reason 
 			"reviewer_id":       reviewerID,
 			"reviewer_notes":    reason,
 			"rejection_reasons": reasonsJSON,
-			"reviewed_at":       time.Now(),
+			"reviewed_at":       time.Now().UTC(),
 		})
 
 	return result, nil
@@ -169,10 +169,10 @@ func (s *WorkflowService) recordChange(subjectID, changeType, userID string, cha
 	changelog := models.SubjectChangelog{
 		ID:         uuid.New().String(),
 		SubjectID:  subjectID,
-		Version:    time.Now().Format("2006-01-02"),
+		Version:    time.Now().UTC().Format("2006-01-02"),
 		ChangeType: changeType,
 		Changes:    changesJSON,
-		CreatedAt:  time.Now(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	if userID != "" {
 		changelog.ChangedBy = &userID

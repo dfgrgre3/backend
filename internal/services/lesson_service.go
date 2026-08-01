@@ -63,7 +63,7 @@ func (s *LessonService) CheckLessonEligibility(userID, subTopicID string) (*Less
 	}
 
 	// Check availability windows
-	now := time.Now()
+	now := time.Now().UTC()
 	if subject.AvailableFrom != nil && now.Before(*subject.AvailableFrom) {
 		result.Eligible = false
 		result.Locked = true
@@ -154,7 +154,7 @@ func (s *LessonService) GetAvailableLessons(userID, subjectID string) ([]models.
 	// Check enrollment
 	isEnrolled := db.DB.Where("user_id = ? AND subject_id = ?", userID, subjectID).First(&models.Enrollment{}).Error == nil
 
-	enrolledAt := time.Now()
+	enrolledAt := time.Now().UTC()
 	if isEnrolled {
 		var enrollment models.Enrollment
 		db.DB.Select("created_at").Where("user_id = ? AND subject_id = ?", userID, subjectID).First(&enrollment)
@@ -183,7 +183,7 @@ func (s *LessonService) GetAvailableLessons(userID, subjectID string) ([]models.
 
 // UpdateLessonViewStats updates the view statistics for a lesson
 func (s *LessonService) UpdateLessonViewStats(userID, subTopicID string, watchTime, lastPosition int, completed bool) error {
-	now := time.Now()
+	now := time.Now().UTC()
 
 	var stat models.LessonViewStat
 	exists := db.DB.Where("sub_topic_id = ? AND user_id = ?", subTopicID, userID).First(&stat).Error == nil

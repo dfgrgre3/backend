@@ -54,9 +54,12 @@ func (h *MFAHandler) SetupMFA(c *gin.Context) {
 		return
 	}
 
-	// Store secret temporarily (user must verify to enable)
-	user.TwoFactorSecret = &secret
-	if err := db.DB.WithContext(c.Request.Context()).Save(&user).Error; err != nil {
+	// Store secret in TwoFactorCredential table
+	twoFactorCredential := models.TwoFactorCredential{
+		UserID: userID.(string),
+		Secret: secret,
+	}
+	if err := db.DB.WithContext(c.Request.Context()).Save(&twoFactorCredential).Error; err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to update security settings")
 		return
 	}
@@ -82,18 +85,13 @@ func (h *MFAHandler) EnableMFA(c *gin.Context) {
 		return
 	}
 
-	var user models.User
-	if err := db.DB.WithContext(c.Request.Context()).Where("id = ?", userID).First(&user).Error; err != nil {
-		response.Error(c, http.StatusInternalServerError, "User not found")
+	var twoFactorCredential models.TwoFactorCredential
+	if err := db.DB.WithContext(c.Request.Context()).Where("user_id = ?", userID).First(&twoFactorCredential).Error; err != nil {
+		response.Error(c, http.StatusInternalServerError, "MFA setup has not been initiated")
 		return
 	}
 
-	if user.TwoFactorSecret == nil || *user.TwoFactorSecret == "" {
-		response.Error(c, http.StatusBadRequest, "MFA setup has not been initiated")
-		return
-	}
-
-	if !h.mfaService.ValidateTOTP(*user.TwoFactorSecret, req.Code) {
+	if !h.mfaService.ValidateTOTP(twoFactorCredential.Secret, req.Code) {
 		response.Error(c, http.StatusBadRequest, "Invalid verification code")
 		return
 	}
@@ -106,10 +104,10 @@ func (h *MFAHandler) EnableMFA(c *gin.Context) {
 		hashedBackupCodes[i] = hex.EncodeToString(hash[:])
 	}
 
-	user.TwoFactorEnabled = true
-	user.BackupCodes = strings.Join(hashedBackupCodes, ",")
+	twoFactorCredential.Enabled = true
+	twoFactorCredential.BackupCodes = strings.Join(hashedBackupCodes, ",")
 
-	if err := db.DB.WithContext(c.Request.Context()).Save(&user).Error; err != nil {
+	if err := db.DB.WithContext(c.Request.Context()).Save(&twoFactorCredential).Error; err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to enable MFA")
 		return
 	}
@@ -135,32 +133,32 @@ func (h *MFAHandler) DisableMFA(c *gin.Context) {
 		return
 	}
 
-	var user models.User
-	if err := db.DB.WithContext(c.Request.Context()).Where("id = ?", userID).First(&user).Error; err != nil {
-		response.Error(c, http.StatusInternalServerError, "User not found")
+	var twoFactorCredential models.TwoFactorCredential
+	if err := db.DB.WithContext(c.Request.Context()).Where("user_id = ?", userID).First(&twoFactorCredential).Error; err != nil {
+		response.Error(c, http.StatusInternalServerError, "MFA is not enabled")
 		return
 	}
 
-	if !user.TwoFactorEnabled {
+	if !twoFactorCredential.Enabled {
 		response.Error(c, http.StatusBadRequest, "MFA is not enabled")
 		return
 	}
 
 	// Validate TOTP or Backup Code
 	valid := false
-	if user.TwoFactorSecret != nil && h.mfaService.ValidateTOTP(*user.TwoFactorSecret, req.Code) {
+	if h.mfaService.ValidateTOTP(twoFactorCredential.Secret, req.Code) {
 		valid = true
 	} else {
 		// Check backup codes
 		hash := sha256.Sum256([]byte(req.Code))
 		hashedCode := hex.EncodeToString(hash[:])
-		codes := strings.Split(user.BackupCodes, ",")
+		codes := strings.Split(twoFactorCredential.BackupCodes, ",")
 		for i, c := range codes {
 			if c == hashedCode {
 				valid = true
 				// Remove used backup code
 				codes = append(codes[:i], codes[i+1:]...)
-				user.BackupCodes = strings.Join(codes, ",")
+				twoFactorCredential.BackupCodes = strings.Join(codes, ",")
 				break
 			}
 		}
@@ -171,11 +169,11 @@ func (h *MFAHandler) DisableMFA(c *gin.Context) {
 		return
 	}
 
-	user.TwoFactorEnabled = false
-	user.TwoFactorSecret = nil
-	user.BackupCodes = ""
+	twoFactorCredential.Enabled = false
+	twoFactorCredential.Secret = ""
+	twoFactorCredential.BackupCodes = ""
 
-	if err := db.DB.WithContext(c.Request.Context()).Save(&user).Error; err != nil {
+	if err := db.DB.WithContext(c.Request.Context()).Save(&twoFactorCredential).Error; err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to disable MFA")
 		return
 	}
@@ -210,28 +208,28 @@ func (h *MFAHandler) VerifyMFA(c *gin.Context) {
 	// Delete ticket immediately to prevent replay
 	db.Redis.Del(ctx, ticketKey)
 
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("id = ?", userID).First(&user).Error; err != nil {
+	var twoFactorCredential models.TwoFactorCredential
+	if err := db.DB.WithContext(ctx).Where("user_id = ?", userID).First(&twoFactorCredential).Error; err != nil {
 		response.Error(c, http.StatusUnauthorized, "User not found")
 		return
 	}
 
 	// Verify TOTP or Backup Code
 	valid := false
-	if user.TwoFactorSecret != nil && h.mfaService.ValidateTOTP(*user.TwoFactorSecret, req.Code) {
+	if h.mfaService.ValidateTOTP(twoFactorCredential.Secret, req.Code) {
 		valid = true
 	} else {
 		// Check backup codes
 		hash := sha256.Sum256([]byte(req.Code))
 		hashedCode := hex.EncodeToString(hash[:])
-		codes := strings.Split(user.BackupCodes, ",")
+		codes := strings.Split(twoFactorCredential.BackupCodes, ",")
 		for i, codeVal := range codes {
 			if codeVal == hashedCode {
 				valid = true
 				// Remove used backup code
 				codes = append(codes[:i], codes[i+1:]...)
-				user.BackupCodes = strings.Join(codes, ",")
-				db.DB.WithContext(ctx).Save(&user)
+				twoFactorCredential.BackupCodes = strings.Join(codes, ",")
+				db.DB.WithContext(ctx).Save(&twoFactorCredential)
 				break
 			}
 		}
@@ -239,6 +237,13 @@ func (h *MFAHandler) VerifyMFA(c *gin.Context) {
 
 	if !valid {
 		response.Error(c, http.StatusUnauthorized, "Invalid MFA code")
+		return
+	}
+
+	// Get user for token generation
+	var user models.User
+	if err := db.DB.WithContext(ctx).Where("id = ?", userID).First(&user).Error; err != nil {
+		response.Error(c, http.StatusUnauthorized, "User not found")
 		return
 	}
 

@@ -2,23 +2,24 @@ package models
 
 import (
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"time"
 )
 
 type Coupon struct {
-	ID             string     `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	Code           string     `gorm:"uniqueIndex;not null;column:code" json:"code"`
-	Description    string     `gorm:"column:description" json:"description"`
-	DiscountType   string     `gorm:"default:'PERCENTAGE';column:discount_type" json:"discountType"`
-	DiscountValue  float64    `gorm:"not null;column:discount_value" json:"discountValue"`
-	MinOrderAmount float64    `gorm:"default:0;column:min_order_amount" json:"minOrderAmount"`
-	MaxUses        *int       `gorm:"column:max_uses" json:"maxUses"`
-	UsedCount      int        `gorm:"default:0;column:used_count" json:"usedCount"`
-	ExpiryDate     *time.Time `gorm:"column:expiry_date" json:"expiryDate"`
-	IsActive       bool       `gorm:"default:true;column:is_active" json:"isActive"`
-	CreatedAt      time.Time  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt      time.Time  `gorm:"column:updated_at" json:"updatedAt"`
+	ID             string          `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	Code           string          `gorm:"uniqueIndex;not null;column:code" json:"code"`
+	Description    string          `gorm:"column:description" json:"description"`
+	DiscountType   string          `gorm:"default:'PERCENTAGE';column:discount_type" json:"discountType"`
+	DiscountValue  decimal.Decimal `gorm:"not null;type:numeric(19,4);column:discount_value" json:"discountValue"`
+	MinOrderAmount decimal.Decimal `gorm:"default:0;type:numeric(19,4);column:min_order_amount" json:"minOrderAmount"`
+	MaxUses        *int            `gorm:"column:max_uses" json:"maxUses"`
+	UsedCount      int             `gorm:"default:0;column:used_count" json:"usedCount"`
+	ExpiryDate     *time.Time      `gorm:"column:expiry_date" json:"expiryDate"`
+	IsActive       bool            `gorm:"default:true;column:is_active" json:"isActive"`
+	CreatedAt      time.Time       `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt      time.Time       `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 type Automation struct {

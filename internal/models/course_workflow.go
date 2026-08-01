@@ -34,17 +34,17 @@ type CourseAssistantPermissions struct {
 // CourseAssistant represents co-instructors and teaching assistants
 type CourseAssistant struct {
 	ID          string                     `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	SubjectID   string                     `gorm("index;type:uuid;column:subject_id" json:"subjectId"`
-	UserID      string                     `gorm("index;type:uuid;column:user_id" json:"userId"`
-	Role        CourseAssistantRole        `gorm("default:'ASSISTANT';column:role" json:"role"`
-	Permissions CourseAssistantPermissions `gorm("type:jsonb;default:'{\"edit_content\":false,\"manage_students\":false,\"view_analytics\":true,\"manage_quizzes\":false}';column:permissions" json:"permissions"`
-	InvitedBy   *string                    `gorm("type:uuid;column:invited_by" json:"invitedBy,omitempty"`
-	Status      string                     `gorm("default:'PENDING';column:status" json:"status"` // PENDING, ACTIVE, REVOKED
-	InvitedAt   time.Time                  `gorm("column:invited_at" json:"invitedAt"`
-	AcceptedAt  *time.Time                 `gorm("column:accepted_at" json:"acceptedAt,omitempty"`
-	RevokedAt   *time.Time                 `gorm("column:revoked_at" json:"revokedAt,omitempty"`
-	CreatedAt   time.Time                  `gorm("column:created_at" json:"createdAt"`
-	UpdatedAt   time.Time                  `gorm("column:updated_at" json:"updatedAt"`
+	SubjectID   string                     `gorm:"index;type:uuid;column:subject_id" json:"subjectId"`
+	UserID      string                     `gorm:"index;type:uuid;column:user_id" json:"userId"`
+	Role        CourseAssistantRole        `gorm:"default:'ASSISTANT';column:role" json:"role"`
+	Permissions CourseAssistantPermissions `gorm:"type:jsonb;default='{\"edit_content\":false,\"manage_students\":false,\"view_analytics\":true,\"manage_quizzes\":false}';column:permissions" json:"permissions"`
+	InvitedBy   *string                    `gorm:"type:uuid;column:invited_by" json:"invitedBy,omitempty"`
+	Status      string                     `gorm:"default:'PENDING';column:status" json:"status"` // PENDING, ACTIVE, REVOKED
+	InvitedAt   time.Time                  `gorm:"column:invited_at" json:"invitedAt"`
+	AcceptedAt  *time.Time                 `gorm:"column:accepted_at" json:"acceptedAt,omitempty"`
+	RevokedAt   *time.Time                 `gorm:"column:revoked_at" json:"revokedAt,omitempty"`
+	CreatedAt   time.Time                  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt   time.Time                  `gorm:"column:updated_at" json:"updatedAt"`
 
 	// Relations
 	Subject *Subject `gorm:"foreignKey:SubjectID;constraint:OnDelete:CASCADE" json:"subject,omitempty"`

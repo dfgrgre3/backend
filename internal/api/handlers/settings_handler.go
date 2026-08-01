@@ -24,7 +24,7 @@ type userSettingsL1Entry struct {
 
 var (
 	userSettingsL1    sync.Map
-	userSettingsL1TTL = 5 * time.Minute
+	userSettingsL1TTL = 1 * time.Hour
 )
 
 // GetSettings retrieves user settings/preferences
@@ -44,12 +44,31 @@ func GetSettings(c *gin.Context) {
 		return
 	}
 
+	// Try Redis L2 Cache (1 hour TTL)
+	cacheKey := fmt.Sprintf("user:settings:%s", uid)
+	if db.Redis != nil {
+		cachedData, err := db.Redis.Get(c.Request.Context(), cacheKey).Result()
+		if err == nil {
+			var cachedSettings models.UserSettings
+			if json.Unmarshal([]byte(cachedData), &cachedSettings) == nil {
+				userSettingsL1.Store(uid, &userSettingsL1Entry{settings: cachedSettings, expiresAt: time.Now().Add(userSettingsL1TTL)})
+				api_response.Success(c, gin.H{"settings": cachedSettings})
+				return
+			}
+		}
+	}
+
 	settings, ok := fetchOrCreateSettingsForGet(c, uid)
 	if !ok {
 		return
 	}
 
 	userSettingsL1.Store(uid, &userSettingsL1Entry{settings: settings, expiresAt: time.Now().Add(userSettingsL1TTL)})
+	if db.Redis != nil {
+		if bytes, err := json.Marshal(settings); err == nil {
+			db.Redis.Set(c.Request.Context(), cacheKey, bytes, 1*time.Hour)
+		}
+	}
 	api_response.Success(c, gin.H{"settings": settings})
 }
 
@@ -208,7 +227,14 @@ func UpdateSettings(c *gin.Context) {
 	}
 
 	log.Printf("INFO: UpdateSettings - Successfully updated settings for user %v", userID)
-	userSettingsL1.Store(userID.(string), &userSettingsL1Entry{settings: settings, expiresAt: time.Now().Add(userSettingsL1TTL)})
+	uidStr := userID.(string)
+	userSettingsL1.Store(uidStr, &userSettingsL1Entry{settings: settings, expiresAt: time.Now().Add(userSettingsL1TTL)})
+	if db.Redis != nil {
+		cacheKey := fmt.Sprintf("user:settings:%s", uidStr)
+		if bytes, err := json.Marshal(settings); err == nil {
+			db.Redis.Set(c.Request.Context(), cacheKey, bytes, 1*time.Hour)
+		}
+	}
 	api_response.Success(c, gin.H{"settings": settings})
 }
 
@@ -440,10 +466,31 @@ func buildDefaultSystemSettings() map[string]interface{} {
 	}
 }
 
+var (
+	settingsCacheMu  sync.RWMutex
+	cachedSettings   map[string]interface{}
+	cachedSettingsAt time.Time
+	settingsCacheTTL = 30 * time.Second
+)
+
+func InvalidateSettingsCache() {
+	settingsCacheMu.Lock()
+	cachedSettings = nil
+	settingsCacheMu.Unlock()
+}
+
 func fetchSystemSettings(database *gorm.DB, defaultSettings map[string]interface{}) map[string]interface{} {
+	settingsCacheMu.RLock()
+	if cachedSettings != nil && time.Since(cachedSettingsAt) < settingsCacheTTL {
+		res := cachedSettings
+		settingsCacheMu.RUnlock()
+		return res
+	}
+	settingsCacheMu.RUnlock()
+
 	var dbSetting models.SystemSetting
 
-	err := database.Where("key = ?", "admin_settings").First(&dbSetting).Error
+	err := database.Where("key = ?", "admin_settings").Take(&dbSetting).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			log.Printf("ERROR: Failed to fetch admin_settings from DB: %v. Using defaults.", err)
@@ -461,6 +508,11 @@ func fetchSystemSettings(database *gorm.DB, defaultSettings map[string]interface
 	if settings == nil {
 		return defaultSettings
 	}
+
+	settingsCacheMu.Lock()
+	cachedSettings = settings
+	cachedSettingsAt = time.Now()
+	settingsCacheMu.Unlock()
 
 	return settings
 }

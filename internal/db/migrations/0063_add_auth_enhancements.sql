@@ -219,9 +219,15 @@ ALTER TABLE verification_codes ADD COLUMN IF NOT EXISTS last_attempted_at TIMEST
 -- ─────────────────────────────────────────────
 --  13. تحديث profiles - إضافة أعمدة جديدة
 -- ─────────────────────────────────────────────
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'ar';
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'Africa/Cairo';
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS two_factor_method VARCHAR(20) DEFAULT 'none';
+-- Skip if profiles table doesn't exist
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'profiles' AND table_schema = 'public') THEN
+        ALTER TABLE profiles ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'ar';
+        ALTER TABLE profiles ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'Africa/Cairo';
+        ALTER TABLE profiles ADD COLUMN IF NOT EXISTS two_factor_method VARCHAR(20) DEFAULT 'none';
+    END IF;
+END $$;
 
 -- ─────────────────────────────────────────────
 --  14. إضافة المعرفة (Comments) للتوثيق
@@ -232,7 +238,15 @@ COMMENT ON COLUMN login_history.mfa_used IS 'هل تم استخدام MFA';
 COMMENT ON COLUMN "UserSession".remember_me IS 'هل المستخدم اختار "تذكرني"';
 COMMENT ON COLUMN "UserSession".fingerprint_hash IS 'بصمة الجهاز';
 COMMENT ON COLUMN "UserSession".absolute_expires_at IS 'الحد الأقصى لصلاحية الجلسة';
-COMMENT ON COLUMN profiles.two_factor_method IS 'طريقة MFA: app, sms, email, none';
+
+-- Comment on profiles columns only if table exists
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'profiles' AND table_schema = 'public') THEN
+        COMMENT ON COLUMN profiles.two_factor_method IS 'طريقة MFA: app, sms, email, none';
+    END IF;
+END $$;
+
 COMMENT ON COLUMN verification_codes.max_attempts IS 'الحد الأقصى لمحاولات التحقق';
 COMMENT ON COLUMN verification_codes.attempt_count IS 'عدد محاولات التحقق الحالية';
 

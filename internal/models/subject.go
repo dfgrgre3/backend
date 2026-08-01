@@ -1,9 +1,12 @@
 package models
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -17,16 +20,16 @@ const (
 
 type Subject struct {
 	ID                     string  `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	Name                   string  `gorm:"uniqueIndex;not null;index;column:name" json:"name"`
-	NameAr                 *string `gorm:"index;column:name_ar" json:"nameAr"`
-	Code                   *string `gorm:"uniqueIndex;index;column:code" json:"code"`
-	Description            *string `gorm:"column:description" json:"description"`
-	Icon                   *string `gorm:"column:icon" json:"icon"`
-	Color                  *string `gorm:"default:'#3b82f6';column:color" json:"color"`
+	Name                   string  `gorm:"uniqueIndex;not null;index;column:name" json:"name" binding:"required,min=3,max=200"`
+	NameAr                 *string `gorm:"index;column:name_ar" json:"nameAr" binding:"omitempty,min=3,max=200"`
+	Code                   *string `gorm:"uniqueIndex;index;column:code" json:"code" binding:"omitempty,min=2,max=20"`
+	Description            *string `gorm:"column:description" json:"description" binding:"omitempty,max=5000"`
+	Icon                   *string `gorm:"column:icon" json:"icon" binding:"omitempty,url"`
+	Color                  *string `gorm:"default:'#3b82f6';column:color" json:"color" binding:"omitempty,len=7"`
 	IsActive               bool    `gorm:"default:true;index;column:is_active" json:"isActive"`
 	IsPublished            bool    `gorm:"default:false;index;column:is_published" json:"isPublished"`
-	Price                  float64 `gorm:"default:0;index;column:price" json:"price"`
-	Rating                 float64 `gorm:"default:0;column:rating" json:"rating"`
+	Price                  decimal.Decimal `gorm:"default:0;type:numeric(19,4);check:price >= 0;index;column:price" json:"price" binding:"required,gt=0"`
+	Rating                 decimal.Decimal `gorm:"default:0;type:numeric(5,2);check:rating >= 0 AND rating <= 5;column:rating" json:"rating" binding:"required,gte=0,lte=5"`
 	EnrolledCount          int     `gorm:"default:0;column:enrolled_count" json:"enrolledCount"`
 	ThumbnailUrl           *string `gorm:"column:thumbnail_url" json:"thumbnailUrl"`
 	TrailerUrl             *string `gorm:"column:trailer_url" json:"trailerUrl"`
@@ -48,7 +51,7 @@ type Subject struct {
 	CoursePrerequisites PGStringArray `gorm:"type:text[];column:course_prerequisites" json:"coursePrerequisites"`
 	TargetAudience      PGStringArray `gorm:"type:text[];column:target_audience" json:"targetAudience"`
 	WhatYouLearn        PGStringArray `gorm:"type:text[];column:what_you_learn" json:"whatYouLearn"`
-	CompletionRate      float64       `gorm:"default:0;column:completion_rate" json:"completionRate"`
+	CompletionRate      decimal.Decimal `gorm:"default:0;type:numeric(5,2);check:completion_rate >= 0 AND completion_rate <= 100;column:completion_rate" json:"completionRate"`
 	VideoCount          int           `gorm:"default:0;column:video_count" json:"videoCount"`
 	Type                string        `gorm:"default:'COURSE';column:type" json:"type"`
 	LastContentUpdate   *time.Time    `gorm:"column:last_content_update" json:"lastContentUpdate"`
@@ -197,6 +200,30 @@ func (Subject) TableName() string {
 func (s *Subject) BeforeCreate(tx *gorm.DB) (err error) {
 	if s.ID == "" {
 		s.ID = uuid.New().String()
+	}
+	// Trim name
+	s.Name = strings.TrimSpace(s.Name)
+	// Ensure price is non-negative
+	if s.Price.LessThan(decimal.Zero) {
+		return fmt.Errorf("subject price cannot be negative")
+	}
+	return
+}
+
+func (s *Subject) BeforeUpdate(tx *gorm.DB) (err error) {
+	// Trim name on update
+	if tx.Statement.Changed("Name") {
+		s.Name = strings.TrimSpace(s.Name)
+	}
+	// Ensure price is non-negative
+	if tx.Statement.Changed("Price") && s.Price.LessThan(decimal.Zero) {
+		return fmt.Errorf("subject price cannot be negative")
+	}
+	// Ensure rating is between 0 and 5
+	if tx.Statement.Changed("Rating") {
+		if s.Rating.LessThan(decimal.Zero) || s.Rating.GreaterThan(decimal.NewFromInt(5)) {
+			return fmt.Errorf("subject rating must be between 0 and 5")
+		}
 	}
 	return
 }

@@ -35,7 +35,7 @@ func (h *SessionCleanupHandler) ProcessTask(ctx context.Context, t *asynq.Task) 
 	}
 
 	log.Println("[SessionCleanupWorker] Starting session cleanup...")
-	now := time.Now()
+	now := time.Now().UTC()
 	// Mark expired sessions as inactive/expired
 	result := db.DB.WithContext(ctx).Model(&models.UserSession{}).
 		Where("expires_at < ? AND is_active = ?", now, true).

@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const createdAtDesc = "created_at DESC"
+const createdAtDesc = "\"created_at\" DESC"
 const msgMethodNotAllowed = "Method not allowed"
 const queryStatus = "status = ?"
 
@@ -95,7 +95,7 @@ func AdminSettings(c *gin.Context) {
 
 	// Overlay settings from database
 	if db.DB != nil {
-		if err := db.DB.Where("key = ?", "admin_settings").First(&dbSetting).Error; err == nil {
+		if err := db.DB.Where("key = ?", "admin_settings").Take(&dbSetting).Error; err == nil {
 			var dbMap map[string]interface{}
 			if err := json.Unmarshal([]byte(dbSetting.Value), &dbMap); err == nil {
 				mergeMaps(settings, dbMap)
@@ -116,6 +116,7 @@ func AdminSettings(c *gin.Context) {
 			api_response.Error(c, http.StatusInternalServerError, "Failed to save settings")
 			return
 		}
+		InvalidateSettingsCache()
 	}
 
 	api_response.Success(c, gin.H{"settings": settings})
@@ -463,7 +464,7 @@ func handleContestsGet(c *gin.Context, page, limit int) {
 	var total int64
 
 	db.DB.Model(&models.Contest{}).Count(&total)
-	if err := db.DB.Limit(limit).Offset((page - 1) * limit).Order(createdAtDesc).Find(&contests).Error; err != nil {
+	if err := db.DB.Limit(limit).Offset((page - 1) * limit).Order("\"createdAt\" DESC").Find(&contests).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch contests")
 		return
 	}

@@ -304,9 +304,13 @@ func calculateActivityMetrics(from, to time.Time) ActivityMetrics {
 		Where("started_at >= ? AND started_at <= ?", from, to).
 		Count(&totalSessions)
 
-	db.ReadDB().Model(&models.UserJourney{}).
-		Where("started_at >= ? AND started_at <= ? AND (SELECT COUNT(*) FROM user_journey_steps WHERE journey_id = user_journeys.id AND deleted_at IS NULL) = 1", from, to).
-		Count(&bouncedSessions)
+	db.ReadDB().Raw(`
+		SELECT COUNT(*) FROM user_journeys j
+		JOIN user_journey_steps s ON s.journey_id = j.id AND s.deleted_at IS NULL
+		WHERE j.started_at >= ? AND j.started_at <= ? AND j.deleted_at IS NULL
+		GROUP BY j.id
+		HAVING COUNT(s.id) = 1
+	`, from, to).Scan(&bouncedSessions)
 
 	if totalSessions > 0 {
 		metrics.BounceRate = float64(bouncedSessions) / float64(totalSessions) * 100

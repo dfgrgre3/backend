@@ -28,7 +28,6 @@ func TestGetInstructors_ReturnsInstructorList(t *testing.T) {
 		Email:                 "alice@thanawy.local",
 		Name:                  &name,
 		Username:              &name,
-		PasswordHash:          "hashed",
 		Role:                  models.RoleTeacher,
 		Bio:                   &bio,
 		InstructorStatus:      "PENDING",
@@ -60,7 +59,6 @@ func TestApproveInstructor_UpdatesStatus(t *testing.T) {
 		Email:            "bob@thanawy.local",
 		Name:             &name,
 		Username:         &name,
-		PasswordHash:     "hashed",
 		Role:             models.RoleTeacher,
 		InstructorStatus: "PENDING",
 	}
@@ -103,7 +101,6 @@ func TestUpdateInstructor_PreservesUsernameWhenNameOnlyIsProvided(t *testing.T) 
 		Email:            "carol@thanawy.local",
 		Name:             &name,
 		Username:         &username,
-		PasswordHash:     "hashed",
 		Role:             models.RoleTeacher,
 		InstructorStatus: "PENDING",
 	}
@@ -136,7 +133,6 @@ func TestUpdateInstructor_ReturnsUpdatedInstructorPayload(t *testing.T) {
 		Email:            "dina@thanawy.local",
 		Name:             &name,
 		Username:         &username,
-		PasswordHash:     "hashed",
 		Role:             models.RoleTeacher,
 		InstructorStatus: "PENDING",
 	}
@@ -170,7 +166,6 @@ func TestReviewInstructorDocument_ReturnsReviewedPayload(t *testing.T) {
 		Email:            "eve@thanawy.local",
 		Name:             &name,
 		Username:         &name,
-		PasswordHash:     "hashed",
 		Role:             models.RoleTeacher,
 		InstructorStatus: "PENDING",
 	}
@@ -203,7 +198,6 @@ func TestCreateInstructorViolation_ReturnsViolationPayload(t *testing.T) {
 		Email:            "frank@thanawy.local",
 		Name:             &name,
 		Username:         &name,
-		PasswordHash:     "hashed",
 		Role:             models.RoleTeacher,
 		InstructorStatus: "APPROVED",
 	}

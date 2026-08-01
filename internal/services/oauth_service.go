@@ -405,7 +405,6 @@ func CreateUserFromOAuth(ctx context.Context, oauthInfo *OAuthUserInfo) (*models
 	// Create new user
 	user := models.User{
 		Email:         oauthInfo.Email,
-		PasswordHash:  "", // No password for OAuth users
 		Role:          models.RoleStudent,
 		Status:        models.StatusActive,
 		Name:          &oauthInfo.Name,

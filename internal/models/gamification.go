@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"time"
 )
@@ -92,18 +93,18 @@ type UserChallenge struct {
 }
 
 type CustomGoal struct {
-	ID           string     `gorm:"primaryKey;column:id" json:"id"`
-	UserID       string     `gorm:"index;not null;column:userId" json:"userId"`
-	Title        string     `gorm:"not null;column:title" json:"title"`
-	Description  string     `gorm:"column:description" json:"description,omitempty"`
-	TargetValue  float64    `gorm:"not null;column:targetValue" json:"targetValue"`
-	CurrentValue float64    `gorm:"default:0;column:currentValue" json:"currentValue"`
-	Unit         string     `gorm:"not null;column:unit" json:"unit,omitempty"`
-	Category     string     `gorm:"not null;column:category" json:"category,omitempty"`
-	IsCompleted  bool       `gorm:"default:false;column:isCompleted" json:"isCompleted"`
-	CreatedAt    time.Time  `gorm:"column:createdAt" json:"createdAt"`
-	CompletedAt  *time.Time `gorm:"column:completedAt" json:"completedAt,omitempty"`
-	XPReward     int        `gorm:"default:10;column:xpReward" json:"xpReward,omitempty"`
+	ID           string          `gorm:"primaryKey;column:id" json:"id"`
+	UserID       string          `gorm:"index;not null;column:userId" json:"userId"`
+	Title        string          `gorm:"not null;column:title" json:"title"`
+	Description  string          `gorm:"column:description" json:"description,omitempty"`
+	TargetValue  decimal.Decimal `gorm:"not null;type:numeric(19,4);column:targetValue" json:"targetValue"`
+	CurrentValue decimal.Decimal `gorm:"default:0;type:numeric(19,4);column:currentValue" json:"currentValue"`
+	Unit         string          `gorm:"not null;column:unit" json:"unit,omitempty"`
+	Category     string          `gorm:"not null;column:category" json:"category,omitempty"`
+	IsCompleted  bool            `gorm:"default:false;column:isCompleted" json:"isCompleted"`
+	CreatedAt    time.Time       `gorm:"column:createdAt" json:"createdAt"`
+	CompletedAt  *time.Time      `gorm:"column:completedAt" json:"completedAt,omitempty"`
+	XPReward     int             `gorm:"default:10;column:xpReward" json:"xpReward,omitempty"`
 }
 
 func (Achievement) TableName() string { return "Achievement" }

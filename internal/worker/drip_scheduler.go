@@ -77,6 +77,11 @@ func HandleDripContentRelease(task *asynq.Task) error {
 		return err
 	}
 
+	// If payload has no SubTopicID (e.g. periodic fallback check), return gracefully
+	if payload.SubTopicID == "" {
+		return nil
+	}
+
 	// Get subject ID from SubTopic
 	var subTopic models.SubTopic
 	if err := db.DB.Preload("Topic").First(&subTopic, "id = ?", payload.SubTopicID).Error; err != nil {
@@ -153,7 +158,10 @@ func ScheduleCourseAvailability(subjectID, courseName, action, windowType string
 		return err
 	}
 
-	log.Printf("[AvailabilityScheduler] Scheduled %s for course %s at %s", action, subjectID, at.Format(time.RFC3339))
+	log.Printf("[AvailabilityScheduler] Scheduled %s for course %s at %s (local: %s)",
+		action, subjectID,
+		at.UTC().Format(time.RFC3339),
+		at.In(SchedulerLocation()).Format("2006-01-02 15:04:05 MST"))
 	return nil
 }
 
@@ -169,7 +177,7 @@ func HandleCourseAvailability(task *asynq.Task) error {
 		return err
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	updates := map[string]interface{}{"updated_at": now}
 
 	switch payload.Action {
@@ -205,12 +213,7 @@ func getRedisAddr() string {
 }
 
 func getRedisConnOpt() asynq.RedisConnOpt {
-	redisAddr := getRedisAddr()
-	if redisAddr == "" {
-		return asynq.RedisClientOpt{}
-	}
-	opts, _ := asynq.ParseRedisURI(redisAddr)
-	return opts
+	return parseAsynqRedisConnOpt(getRedisAddr())
 }
 
 var asynqConfig = struct {

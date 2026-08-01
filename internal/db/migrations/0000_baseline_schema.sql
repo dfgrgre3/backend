@@ -415,6 +415,7 @@ CREATE TABLE public."SubjectEnrollment" (
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone,
     progress double precision DEFAULT 0,
+    "isDeleted" boolean DEFAULT false NOT NULL,
     deleted_at timestamp with time zone
 );
 
@@ -493,7 +494,7 @@ CREATE TABLE public."User" (
     referred_by_id uuid,
     additional_ai_credits integer DEFAULT 0 NOT NULL,
     additional_exam_credits integer DEFAULT 0 NOT NULL,
-    is_deleted boolean DEFAULT false NOT NULL,
+    "isDeleted" boolean DEFAULT false NOT NULL,
     last_usage_reset timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     monthly_ai_message_count integer DEFAULT 0 NOT NULL,
     monthly_exam_count integer DEFAULT 0 NOT NULL,
@@ -595,7 +596,7 @@ CREATE VIEW public.ActiveUsers AS
     referred_by_id,
     additional_ai_credits,
     additional_exam_credits,
-    is_deleted,
+    "isDeleted",
     last_usage_reset,
     monthly_ai_message_count,
     monthly_exam_count,
@@ -1159,7 +1160,7 @@ CREATE TABLE public."CustomGoal" (
 -- Name: DeletedRecordArchive; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.deleted_record_archive (
+CREATE TABLE public."DeletedRecordArchive" (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     table_name character varying(255) NOT NULL,
     record_id text NOT NULL,
@@ -5248,14 +5249,14 @@ CREATE UNIQUE INDEX idx_user_email_unique ON public."User" USING btree (email);
 -- Name: idx_user_github_id_unique; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX idx_user_github_id_unique ON public."User" USING btree ("githubId");
+CREATE UNIQUE INDEX idx_user_github_id_unique ON public."User" USING btree (github_id);
 
 
 --
 -- Name: idx_user_google_id_unique; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX idx_user_google_id_unique ON public."User" USING btree ("googleId");
+CREATE UNIQUE INDEX idx_user_google_id_unique ON public."User" USING btree (google_id);
 
 
 --
@@ -5269,7 +5270,7 @@ CREATE INDEX "User_isDeleted_status_role_idx" ON public."User" USING btree ("isD
 -- Name: idx_user_referral_code_unique; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX idx_user_referral_code_unique ON public."User" USING btree ("referralCode");
+CREATE UNIQUE INDEX idx_user_referral_code_unique ON public."User" USING btree (referral_code);
 
 
 --
@@ -5778,7 +5779,7 @@ CREATE INDEX "idx_SecurityLog_event_type" ON public."SecurityLog" USING btree (e
 -- Name: idx_Session_deleted_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX "idx_Session_deleted_at" ON public."Session" USING btree ("deletedAt");
+CREATE INDEX "idx_Session_deleted_at" ON public."Session" USING btree (deleted_at);
 
 
 --
@@ -6123,7 +6124,7 @@ CREATE INDEX "idx_UserChallenge_user_id" ON public."UserChallenge" USING btree (
 -- Name: idx_UserSettings_deleted_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX "idx_UserSettings_deleted_at" ON public."UserSettings" USING btree ("deletedAt");
+CREATE INDEX "idx_UserSettings_deleted_at" ON public."UserSettings" USING btree (deleted_at);
 
 
 --
@@ -6162,7 +6163,7 @@ CREATE INDEX "idx_User_email_verified" ON public."User" USING btree (email_verif
 -- Name: idx_User_grade_level; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX "idx_User_grade_level" ON public."User" USING btree ("gradeLevel");
+CREATE INDEX "idx_User_grade_level" ON public."User" USING btree (grade_level);
 
 
 
@@ -6593,7 +6594,7 @@ CREATE INDEX idx_reminder_active_time ON public."Reminder" USING btree (is_activ
 -- Name: idx_reminder_deleted_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_reminder_deleted_at ON public."Reminder" USING btree ("deletedAt");
+CREATE INDEX idx_reminder_deleted_at ON public."Reminder" USING btree (deleted_at);
 
 
 --
@@ -6628,14 +6629,14 @@ CREATE INDEX idx_resource_type_free ON public."Resource" USING btree (type, free
 -- Name: idx_reward_deleted_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_reward_deleted_at ON public."Reward" USING btree ("deletedAt");
+CREATE INDEX idx_reward_deleted_at ON public."Reward" USING btree (deleted_at);
 
 
 --
 -- Name: idx_schedule_deleted_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_schedule_deleted_at ON public."Schedule" USING btree ("deletedAt");
+CREATE INDEX idx_schedule_deleted_at ON public."Schedule" USING btree (deleted_at);
 
 
 --
@@ -6656,7 +6657,7 @@ CREATE INDEX idx_schedule_user_updated_desc ON public."Schedule" USING btree (us
 -- Name: idx_season_deleted_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_season_deleted_at ON public."Season" USING btree ("deletedAt");
+CREATE INDEX idx_season_deleted_at ON public."Season" USING btree (deleted_at);
 
 
 --

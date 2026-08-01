@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -371,7 +372,7 @@ type LmsPricing struct {
 	ID                       uuid.UUID      `gorm:"primaryKey;type:uuid;column:id" json:"id"`
 	CourseID                 uuid.UUID      `gorm:"not null;type:uuid;index;column:course_id;constraint:OnDelete:CASCADE" json:"courseId"`
 	Type                     PriceType      `gorm:"default:'FREE';index;column:type" json:"type"`
-	Amount                   float64        `gorm:"default:0;column:amount" json:"amount"`
+	Amount                   decimal.Decimal `gorm:"default:0;type:numeric(19,4);column:amount" json:"amount"`
 	CurrencyCode             string         `gorm:"default:'USD';index;column:currency_code" json:"currencyCode"`
 	SubscriptionDurationDays *int           `gorm:"column:subscription_duration_days" json:"subscriptionDurationDays,omitempty"`
 	IsActive                 bool           `gorm:"default:true;column:is_active" json:"isActive"`
@@ -398,7 +399,7 @@ type LmsBundle struct {
 	Slug         string         `gorm:"uniqueIndex;not null;column:slug" json:"slug"`
 	Description  *string        `gorm:"type:text;column:description" json:"description,omitempty"`
 	CoverURL     *string        `gorm:"column:cover_url" json:"coverUrl,omitempty"`
-	Price        float64        `gorm:"default:0;column:price" json:"price"`
+	Price        decimal.Decimal `gorm:"default:0;type:numeric(19,4);column:price" json:"price"`
 	CurrencyCode string         `gorm:"default:'USD';column:currency_code" json:"currencyCode"`
 	IsActive     bool           `gorm:"default:true;index;column:is_active" json:"isActive"`
 	CreatedAt    time.Time      `gorm:"index;column:created_at" json:"createdAt"`
@@ -540,7 +541,7 @@ type LmsEnrollment struct {
 	ID          uuid.UUID      `gorm:"primaryKey;type:uuid;column:id" json:"id"`
 	CourseID    uuid.UUID      `gorm:"not null;type:uuid;index:idx_lms_enroll_user_course,unique;column:course_id;constraint:OnDelete:CASCADE" json:"courseId"`
 	UserID      uuid.UUID      `gorm:"not null;type:uuid;index:idx_lms_enroll_user_course,unique;column:user_id;constraint:OnDelete:CASCADE" json:"userId"`
-	Progress    float64        `gorm:"default:0;column:progress" json:"progress"`
+	Progress    decimal.Decimal `gorm:"default:0;type:numeric(5,2);check:progress >= 0 AND progress <= 100;column:progress" json:"progress"`
 	EnrolledAt  time.Time      `gorm:"index;column:enrolled_at" json:"enrolledAt"`
 	CompletedAt *time.Time     `gorm:"column:completed_at" json:"completedAt,omitempty"`
 	BundleID    *uuid.UUID     `gorm:"type:uuid;index;column:bundle_id" json:"bundleId,omitempty"`

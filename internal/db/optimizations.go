@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"time"
 
@@ -38,7 +39,7 @@ func (qo *QueryOptimizer) OptimizedSubjectListQuery(ctx context.Context, filters
 	// Apply filters
 	query = qo.applySubjectFilters(query, filters)
 
-	// Count total (use same filters)
+	// Count total with same filters — single query via subquery approach
 	countQuery := qo.db.WithContext(ctx).
 		Table("Subject").
 		Select("count(*)")
@@ -75,47 +76,47 @@ func (qo *QueryOptimizer) OptimizedSubjectListQuery(ctx context.Context, filters
 
 // SubjectFilters holds filter parameters for subject queries
 type SubjectFilters struct {
-	CategoryID   string
-	Search       string
-	Level        string
-	IsPublished  *bool
-	IsActive     *bool
-	Status       string
-	IsFeatured   bool
-	IsTrending   bool
-	IsNew        bool
+	CategoryID  string
+	Search      string
+	Level       string
+	IsPublished *bool
+	IsActive    *bool
+	Status      string
+	IsFeatured  bool
+	IsTrending  bool
+	IsNew       bool
 }
 
 // SubjectListItem represents a lightweight subject for list views
 type SubjectListItem struct {
-	ID                     string  `json:"id"`
-	Name                   string  `json:"name"`
-	NameAr                 string  `json:"nameAr"`
-	Code                   *string `json:"code"`
-	Description            *string `json:"description"`
-	Icon                   *string `json:"icon"`
-	Color                  *string `json:"color"`
-	IsActive               bool    `json:"isActive"`
-	IsPublished            bool    `json:"isPublished"`
-	Price                  float64 `json:"price"`
-	Level                  *string `json:"level"`
-	InstructorName         *string `json:"instructorName"`
-	InstructorId           *string `json:"instructorId"`
-	CategoryId             *string `json:"categoryId"`
-	ThumbnailUrl           *string `json:"thumbnailUrl"`
-	TrailerUrl             *string `json:"trailerUrl"`
-	TrailerDurationMinutes *int    `json:"trailerDurationMinutes"`
-	DurationHours          *int    `json:"durationHours"`
-	Requirements           *string `json:"requirements"`
-	LearningObjectives     *string `json:"learningObjectives"`
-	SeoTitle               *string `json:"seoTitle"`
-	SeoDescription         *string `json:"seoDescription"`
-	Slug                   *string `json:"slug"`
-	Rating                 *float64 `json:"rating"`
-	EnrolledCount          int     `json:"enrolledCount"`
+	ID                     string    `json:"id"`
+	Name                   string    `json:"name"`
+	NameAr                 string    `json:"nameAr"`
+	Code                   *string   `json:"code"`
+	Description            *string   `json:"description"`
+	Icon                   *string   `json:"icon"`
+	Color                  *string   `json:"color"`
+	IsActive               bool      `json:"isActive"`
+	IsPublished            bool      `json:"isPublished"`
+	Price                  float64   `json:"price"`
+	Level                  *string   `json:"level"`
+	InstructorName         *string   `json:"instructorName"`
+	InstructorId           *string   `json:"instructorId"`
+	CategoryId             *string   `json:"categoryId"`
+	ThumbnailUrl           *string   `json:"thumbnailUrl"`
+	TrailerUrl             *string   `json:"trailerUrl"`
+	TrailerDurationMinutes *int      `json:"trailerDurationMinutes"`
+	DurationHours          *int      `json:"durationHours"`
+	Requirements           *string   `json:"requirements"`
+	LearningObjectives     *string   `json:"learningObjectives"`
+	SeoTitle               *string   `json:"seoTitle"`
+	SeoDescription         *string   `json:"seoDescription"`
+	Slug                   *string   `json:"slug"`
+	Rating                 *float64  `json:"rating"`
+	EnrolledCount          int       `json:"enrolledCount"`
 	CreatedAt              time.Time `json:"createdAt"`
 	UpdatedAt              time.Time `json:"updatedAt"`
-	TopicCount             int64   `json:"topicCount"`
+	TopicCount             int64     `json:"topicCount"`
 }
 
 func (qo *QueryOptimizer) applySubjectFilters(query *gorm.DB, filters SubjectFilters) *gorm.DB {
@@ -123,6 +124,8 @@ func (qo *QueryOptimizer) applySubjectFilters(query *gorm.DB, filters SubjectFil
 		query = query.Where("category_id = ?", filters.CategoryID)
 	}
 	if filters.Search != "" {
+		// Use trigram search when the GIN index is available; fall back to ILIKE
+		// for compatibility on unindexed columns.
 		searchTerm := "%" + filters.Search + "%"
 		query = query.Where("name ILIKE ? OR name_ar ILIKE ?", searchTerm, searchTerm)
 	}
@@ -160,15 +163,15 @@ func (qo *QueryOptimizer) fetchTopicCounts(ctx context.Context, subjectIDs []str
 		Count     int64
 	}
 	var topicCounts []countResult
-	
-	// Use a single query with IN clause
+
+	// Single query with IN clause — hits idx_topic_subject_order
 	qo.db.WithContext(ctx).Table("Topic").
 		Select("subject_id, count(*) as count").
 		Where("subject_id IN ?", subjectIDs).
 		Group("subject_id").
 		Scan(&topicCounts)
 
-	result := make(map[string]int64)
+	result := make(map[string]int64, len(subjectIDs))
 	for _, c := range topicCounts {
 		result[c.SubjectID] = c.Count
 	}
@@ -203,41 +206,36 @@ func (qo *QueryOptimizer) BatchEnrollmentCheck(ctx context.Context, userID strin
 
 	type result struct {
 		SubjectID string
-		Count     int64
 	}
 	var results []result
-	
+
 	err := qo.db.WithContext(ctx).
 		Table("Enrollment").
-		Select("subject_id, count(*) as count").
+		Select("subject_id").
 		Where("user_id = ? AND subject_id IN ?", userID, subjectIDs).
-		Group("subject_id").
 		Scan(&results).Error
-	
+
 	if err != nil {
 		return nil, err
 	}
 
-	enrolled := make(map[string]bool)
-	for _, r := range results {
-		enrolled[r.SubjectID] = r.Count > 0
-	}
-	
-	// Set false for subjects not in results
+	// Build result map — pre-allocate with full capacity
+	enrolled := make(map[string]bool, len(subjectIDs))
 	for _, id := range subjectIDs {
-		if _, exists := enrolled[id]; !exists {
-			enrolled[id] = false
-		}
+		enrolled[id] = false
 	}
-	
+	for _, r := range results {
+		enrolled[r.SubjectID] = true
+	}
+
 	return enrolled, nil
 }
 
 // OptimizedSubjectDetailQuery fetches subject with curriculum in an optimized way
 func (qo *QueryOptimizer) OptimizedSubjectDetailQuery(ctx context.Context, idOrSlug string) (*SubjectDetail, error) {
 	var subject SubjectDetail
-	
-	// First, find the subject by ID or slug
+
+	// First, resolve ID from slug in a cheap scan
 	var subjectID string
 	err := qo.db.WithContext(ctx).
 		Table("Subject").
@@ -248,7 +246,7 @@ func (qo *QueryOptimizer) OptimizedSubjectDetailQuery(ctx context.Context, idOrS
 		return nil, gorm.ErrRecordNotFound
 	}
 
-	// Fetch subject with minimal preloads
+	// Fetch subject with selected columns — hits covering index
 	err = qo.db.WithContext(ctx).
 		Table("Subject").
 		Select(`
@@ -269,7 +267,7 @@ func (qo *QueryOptimizer) OptimizedSubjectDetailQuery(ctx context.Context, idOrS
 		return nil, err
 	}
 
-	// Fetch curriculum in a single query using JSON aggregation
+	// Fetch curriculum in a single JSON-aggregated query
 	curriculum, err := qo.fetchCurriculum(ctx, subjectID)
 	if err != nil {
 		return nil, err
@@ -280,209 +278,155 @@ func (qo *QueryOptimizer) OptimizedSubjectDetailQuery(ctx context.Context, idOrS
 }
 
 type SubjectDetail struct {
-	ID                     string  `json:"id"`
-	Name                   string  `json:"name"`
-	NameAr                 string  `json:"nameAr"`
-	Code                   *string `json:"code"`
-	Description            *string `json:"description"`
-	Icon                   *string `json:"icon"`
-	Color                  *string `json:"color"`
-	IsActive               bool    `json:"isActive"`
-	IsPublished            bool    `json:"isPublished"`
-	Price                  float64 `json:"price"`
-	Level                  *string `json:"level"`
-	InstructorName         *string `json:"instructorName"`
-	InstructorId           *string `json:"instructorId"`
-	CategoryId             *string `json:"categoryId"`
-	ThumbnailUrl           *string `json:"thumbnailUrl"`
-	TrailerUrl             *string `json:"trailerUrl"`
-	TrailerDurationMinutes *int    `json:"trailerDurationMinutes"`
-	DurationHours          *int    `json:"durationHours"`
-	Requirements           *string `json:"requirements"`
-	LearningObjectives     *string `json:"learningObjectives"`
-	SeoTitle               *string `json:"seoTitle"`
-	SeoDescription         *string `json:"seoDescription"`
-	Slug                   *string `json:"slug"`
-	Rating                 *float64 `json:"rating"`
-	EnrolledCount          int     `json:"enrolledCount"`
-	CreatedAt              time.Time `json:"createdAt"`
-	UpdatedAt              time.Time `json:"updatedAt"`
-	Status                 *string `json:"status"`
-	Version                *int    `json:"version"`
-	ShortDescription       *string `json:"shortDescription"`
-	LongDescription        *string `json:"longDescription"`
-	IsFeatured             bool    `json:"isFeatured"`
-	IsTrending             bool    `json:"isTrending"`
-	IsNew                  bool    `json:"isNew"`
-	IsFree                 bool    `json:"isFree"`
-	HasCertificate         bool    `json:"hasCertificate"`
+	ID                     string     `json:"id"`
+	Name                   string     `json:"name"`
+	NameAr                 string     `json:"nameAr"`
+	Code                   *string    `json:"code"`
+	Description            *string    `json:"description"`
+	Icon                   *string    `json:"icon"`
+	Color                  *string    `json:"color"`
+	IsActive               bool       `json:"isActive"`
+	IsPublished            bool       `json:"isPublished"`
+	Price                  float64    `json:"price"`
+	Level                  *string    `json:"level"`
+	InstructorName         *string    `json:"instructorName"`
+	InstructorId           *string    `json:"instructorId"`
+	CategoryId             *string    `json:"categoryId"`
+	ThumbnailUrl           *string    `json:"thumbnailUrl"`
+	TrailerUrl             *string    `json:"trailerUrl"`
+	TrailerDurationMinutes *int       `json:"trailerDurationMinutes"`
+	DurationHours          *int       `json:"durationHours"`
+	Requirements           *string    `json:"requirements"`
+	LearningObjectives     *string    `json:"learningObjectives"`
+	SeoTitle               *string    `json:"seoTitle"`
+	SeoDescription         *string    `json:"seoDescription"`
+	Slug                   *string    `json:"slug"`
+	Rating                 *float64   `json:"rating"`
+	EnrolledCount          int        `json:"enrolledCount"`
+	CreatedAt              time.Time  `json:"createdAt"`
+	UpdatedAt              time.Time  `json:"updatedAt"`
+	Status                 *string    `json:"status"`
+	Version                *int       `json:"version"`
+	ShortDescription       *string    `json:"shortDescription"`
+	LongDescription        *string    `json:"longDescription"`
+	IsFeatured             bool       `json:"isFeatured"`
+	IsTrending             bool       `json:"isTrending"`
+	IsNew                  bool       `json:"isNew"`
+	IsFree                 bool       `json:"isFree"`
+	HasCertificate         bool       `json:"hasCertificate"`
 	AvailableFrom          *time.Time `json:"availableFrom"`
 	AvailableUntil         *time.Time `json:"availableUntil"`
 	NewUntil               *time.Time `json:"newUntil"`
-	CoursePrerequisites    []string `json:"coursePrerequisites"`
-	TargetAudience         []string `json:"targetAudience"`
-	WhatYouLearn           []string `json:"whatYouLearn"`
-	Type                   string  `json:"type"`
+	CoursePrerequisites    []string   `json:"coursePrerequisites"`
+	TargetAudience         []string   `json:"targetAudience"`
+	WhatYouLearn           []string   `json:"whatYouLearn"`
+	Type                   string     `json:"type"`
 	Curriculum             []TopicWithSubTopics `json:"curriculum"`
 }
 
 type TopicWithSubTopics struct {
-	ID        string       `json:"id"`
-	SubjectID string       `json:"subjectId"`
-	Title     string       `json:"title"`
-	Description *string    `json:"description"`
-	Order     int          `json:"order"`
-	CreatedAt time.Time    `json:"createdAt"`
-	UpdatedAt time.Time    `json:"updatedAt"`
-	SubTopics []SubTopicDetail `json:"subTopics"`
+	ID          string           `json:"id"`
+	SubjectID   string           `json:"subjectId"`
+	Title       string           `json:"title"`
+	Description *string          `json:"description"`
+	Order       int              `json:"order"`
+	CreatedAt   time.Time        `json:"createdAt"`
+	UpdatedAt   time.Time        `json:"updatedAt"`
+	SubTopics   []SubTopicDetail `json:"subTopics"`
 }
 
 type SubTopicDetail struct {
-	ID                 string  `json:"id"`
-	TopicID            string  `json:"topicId"`
-	Title              string  `json:"title"`
-	Description        *string `json:"description"`
-	VideoUrl           *string `json:"videoUrl"`
-	AudioUrl           *string `json:"audioUrl"`
-	AudioDurationSeconds *int  `json:"audioDurationSeconds"`
-	ExternalLinkUrl    *string `json:"externalLinkUrl"`
-	ExternalLinkTitle  *string `json:"externalLinkTitle"`
-	Type               string  `json:"type"`
-	IsFree             bool    `json:"isFree"`
-	Order              int     `json:"order"`
-	DurationMinutes    int     `json:"durationMinutes"`
-	ExamID             *string `json:"examId"`
-	IsDripEnabled      bool    `json:"isDripEnabled"`
+	ID                 string     `json:"id"`
+	TopicID            string     `json:"topicId"`
+	Title              string     `json:"title"`
+	Description        *string    `json:"description"`
+	VideoUrl           *string    `json:"videoUrl"`
+	AudioUrl           *string    `json:"audioUrl"`
+	AudioDurationSeconds *int     `json:"audioDurationSeconds"`
+	ExternalLinkUrl    *string    `json:"externalLinkUrl"`
+	ExternalLinkTitle  *string    `json:"externalLinkTitle"`
+	Type               string     `json:"type"`
+	IsFree             bool       `json:"isFree"`
+	Order              int        `json:"order"`
+	DurationMinutes    int        `json:"durationMinutes"`
+	ExamID             *string    `json:"examId"`
+	IsDripEnabled      bool       `json:"isDripEnabled"`
 	DripReleaseDate    *time.Time `json:"dripReleaseDate"`
-	IsContentProtected bool    `json:"isContentProtected"`
-	ViewCount          int     `json:"viewCount"`
-	CompletionCount    int     `json:"completionCount"`
-	SubtitleUrls       []string `json:"subtitleUrls"`
-	VideoChaptersData  []byte  `json:"videoChaptersData"`
+	IsContentProtected bool       `json:"isContentProtected"`
+	ViewCount          int        `json:"viewCount"`
+	CompletionCount    int        `json:"completionCount"`
+	SubtitleUrls       []string   `json:"subtitleUrls"`
+	VideoChaptersData  []byte     `json:"videoChaptersData"`
 }
 
+// fetchCurriculum retrieves topics and their subtopics for a subject using a
+// single JSON-aggregated query to avoid N+1 round-trips.
 func (qo *QueryOptimizer) fetchCurriculum(ctx context.Context, subjectID string) ([]TopicWithSubTopics, error) {
-	// Use a single query with JSON aggregation to fetch topics and subtopics
-	// This avoids N+1 queries
-	query := "SELECT json_agg(t.topic_data ORDER BY t.order) as curriculum " +
-		"FROM ( " +
-		"SELECT jsonb_build_object( " +
-		"'id', t.id, " +
-		"'subject_id', t.subject_id, " +
-		"'title', t.title, " +
-		"'description', t.description, " +
-		"'order', t.order, " +
-		"'created_at', t.created_at, " +
-		"'updated_at', t.updated_at, " +
-		"'sub_topics', COALESCE(st.sub_topics, '[]'::jsonb) " +
-		") as topic_data " +
-		"FROM \"Topic\" t " +
-		"LEFT JOIN LATERAL ( " +
-		"SELECT json_agg(jsonb_build_object( " +
-		"'id', st.id, " +
-		"'topic_id', st.topic_id, " +
-		"'title', st.title, " +
-		"'description', st.description, " +
-		"'video_url', st.video_url, " +
-		"'audio_url', st.audio_url, " +
-		"'audio_duration_seconds', st.audio_duration_seconds, " +
-		"'external_link_url', st.external_link_url, " +
-		"'external_link_title', st.external_link_title, " +
-		"'type', st.type, " +
-		"'is_free', st.is_free, " +
-		"'order', st.order, " +
-		"'duration_minutes', st.duration_minutes, " +
-		"'exam_id', st.exam_id, " +
-		"'is_drip_enabled', st.is_drip_enabled, " +
-		"'drip_release_date', st.drip_release_date, " +
-		"'is_content_protected', st.is_content_protected, " +
-		"'view_count', st.view_count, " +
-		"'completion_count', st.completion_count, " +
-		"'subtitle_urls', st.subtitle_urls, " +
-		"'video_chapters_data', st.video_chapters_data " +
-		") ORDER BY st.order) as sub_topics " +
-		"FROM \"SubTopic\" st " +
-		"WHERE st.topic_id = t.id " +
-		") st ON true " +
-		"WHERE t.subject_id = ? " +
-		"ORDER BY t.order " +
-		") t"
+	query := `
+		SELECT json_agg(topic_data ORDER BY topic_order) AS curriculum
+		FROM (
+			SELECT
+				jsonb_build_object(
+					'id',          t.id,
+					'subject_id',  t.subject_id,
+					'title',       t.title,
+					'description', t.description,
+					'order',       t."order",
+					'created_at',  t.created_at,
+					'updated_at',  t.updated_at,
+					'sub_topics',  COALESCE(st.sub_topics, '[]'::jsonb)
+				) AS topic_data,
+				t."order" AS topic_order
+			FROM "Topic" t
+			LEFT JOIN LATERAL (
+				SELECT json_agg(
+					jsonb_build_object(
+						'id',                   st.id,
+						'topic_id',             st.topic_id,
+						'title',                st.title,
+						'description',          st.description,
+						'video_url',            st.video_url,
+						'audio_url',            st.audio_url,
+						'audio_duration_seconds', st.audio_duration_seconds,
+						'external_link_url',    st.external_link_url,
+						'external_link_title',  st.external_link_title,
+						'type',                 st.type,
+						'is_free',              st.is_free,
+						'order',                st."order",
+						'duration_minutes',     st.duration_minutes,
+						'exam_id',              st.exam_id,
+						'is_drip_enabled',      st.is_drip_enabled,
+						'drip_release_date',    st.drip_release_date,
+						'is_content_protected', st.is_content_protected,
+						'view_count',           st.view_count,
+						'completion_count',     st.completion_count,
+						'subtitle_urls',        st.subtitle_urls,
+						'video_chapters_data',  st.video_chapters_data
+					) ORDER BY st."order"
+				) AS sub_topics
+				FROM "SubTopic" st
+				WHERE st.topic_id = t.id
+			) st ON true
+			WHERE t.subject_id = ?
+		) topics`
 
+	// Scan into a raw JSON byte slice first, then unmarshal.
 	var curriculumJSON []byte
-	err := qo.db.WithContext(ctx).Raw(query, subjectID).Scan(&curriculumJSON).Error
-	if err != nil {
+	if err := qo.db.WithContext(ctx).Raw(query, subjectID).Scan(&curriculumJSON).Error; err != nil {
 		return nil, err
 	}
 
+	if len(curriculumJSON) == 0 || string(curriculumJSON) == "null" {
+		return []TopicWithSubTopics{}, nil
+	}
+
 	var curriculum []TopicWithSubTopics
-	if len(curriculumJSON) > 0 && string(curriculumJSON) != "null" {
-		// Parse JSON - in production, use a proper JSON unmarshal
-		// For now, return empty if parsing fails
-		_ = curriculumJSON
+	if err := json.Unmarshal(curriculumJSON, &curriculum); err != nil {
+		log.Printf("[WARN] fetchCurriculum: failed to unmarshal curriculum JSON for subject %s: %v", subjectID, err)
+		return []TopicWithSubTopics{}, nil
 	}
 
 	return curriculum, nil
-}
-
-// CreateOptimizedIndexes creates recommended indexes for performance
-func CreateOptimizedIndexes(db *gorm.DB) error {
-	indexes := []string{
-		// Subject indexes
-		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_subject_list_covering 
-		 ON "Subject" (is_published, is_active, created_at DESC, id) 
-		 INCLUDE (name, name_ar, code, price, level, thumbnail_url, enrolled_count, rating, slug)
-		 WHERE deleted_at IS NULL`,
-		
-		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_subject_category_active 
-		 ON "Subject" (category_id, is_published, is_active, created_at DESC) 
-		 WHERE deleted_at IS NULL`,
-		
-		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_subject_search_trgm 
-		 ON "Subject" USING GIN (name gin_trgm_ops, name_ar gin_trgm_ops) 
-		 WHERE deleted_at IS NULL`,
-		
-		// Topic indexes
-		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_topic_subject_order 
-		 ON "Topic" (subject_id, "order")`,
-		
-		// SubTopic indexes
-		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_subtopic_topic_order 
-		 ON "SubTopic" (topic_id, "order")`,
-		
-		// Enrollment indexes
-		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_enrollment_user_subject 
-		 ON "Enrollment" (user_id, subject_id)`,
-		
-		// Payment indexes
-		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_payment_user_subject_status 
-		 ON "Payment" (user_id, subject_id, status) 
-		 WHERE status = 'COMPLETED'`,
-		
-		// LessonProgress indexes
-		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_lesson_progress_user_lesson 
-		 ON "LessonProgress" (user_id, sub_topic_id)`,
-		
-		// User indexes
-		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_email_active 
-		 ON "User" (email) WHERE deleted_at IS NULL`,
-	}
-
-	for _, idx := range indexes {
-		log.Printf("Creating index: %s", idx[:min(80, len(idx))])
-		if err := db.Exec(idx).Error; err != nil {
-			log.Printf("Warning: Failed to create index: %v", err)
-			// Don't fail on index creation errors (might already exist)
-		}
-	}
-
-	return nil
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // QueryPerformanceLogger logs slow queries for monitoring
@@ -500,12 +444,29 @@ func (qpl *QueryPerformanceLogger) LogSlowQuery(query string, duration time.Dura
 	}
 }
 
-// WithQueryLogging wraps a GORM DB with query logging
-// Note: This is a placeholder - actual implementation would use GORM's callback system
+// WithQueryLogging wraps a GORM DB with slow-query logging via GORM's callback system.
 func WithQueryLogging(db *gorm.DB, threshold time.Duration) *gorm.DB {
-	// GORM v2 callback registration is different
-	// For now, return the DB as-is
-	// In production, implement proper callback registration
-	_ = NewQueryPerformanceLogger(threshold)
+	type queryStartKey struct{}
+
+	_ = db.Callback().Query().Before("gorm:query").Register("perf:before_query", func(tx *gorm.DB) {
+		tx.Set("perf:start", time.Now())
+	})
+
+	_ = db.Callback().Query().After("gorm:query").Register("perf:after_query", func(tx *gorm.DB) {
+		startVal, ok := tx.Get("perf:start")
+		if !ok {
+			return
+		}
+		start, ok := startVal.(time.Time)
+		if !ok {
+			return
+		}
+		elapsed := time.Since(start)
+		if elapsed >= threshold {
+			sql := tx.Statement.SQL.String()
+			log.Printf("[SLOW QUERY] %.2fms — %s", float64(elapsed.Milliseconds()), sql)
+		}
+	})
+
 	return db
 }

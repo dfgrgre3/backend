@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"sync"
+
 	"gorm.io/gorm"
 	"thanawy-backend/internal/models"
 )
@@ -32,11 +34,29 @@ func (r *SecurityLogRepository) FindAll(limit, offset int) ([]models.SecurityLog
 	var logs []models.SecurityLog
 	var count int64
 
-	err := r.db.Model(&models.SecurityLog{}).Count(&count).Error
-	if err != nil {
-		return nil, 0, err
+	var wg sync.WaitGroup
+	var errCount, errFind error
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		errCount = r.db.Model(&models.SecurityLog{}).Count(&count).Error
+	}()
+
+	go func() {
+		defer wg.Done()
+		errFind = r.db.Order("created_at desc").Limit(limit).Offset(offset).Find(&logs).Error
+	}()
+
+	wg.Wait()
+
+	if errCount != nil {
+		return nil, 0, errCount
+	}
+	if errFind != nil {
+		return nil, 0, errFind
 	}
 
-	err = r.db.Order("created_at desc").Limit(limit).Offset(offset).Find(&logs).Error
-	return logs, count, err
+	return logs, count, nil
 }
+

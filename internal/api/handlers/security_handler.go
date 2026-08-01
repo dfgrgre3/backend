@@ -149,3 +149,233 @@ func LogSecurityEvent(userID string, eventType models.SecurityEventType, ip, use
 	}()
 	return nil
 }
+
+// GetAdminSecurityLogs returns overall security logs for admin monitoring
+func GetAdminSecurityLogs(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "100")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 100
+	}
+
+	pageStr := c.DefaultQuery("page", "1")
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page <= 0 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	logs, count, err := getSecurityLogRepo().FindAll(limit, offset)
+	if err != nil {
+		fmt.Printf("Error fetching admin security logs: %v\n", err)
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch security logs")
+		return
+	}
+
+	userIDs := make([]string, 0)
+	for _, l := range logs {
+		if l.UserID != nil && *l.UserID != "" {
+			userIDs = append(userIDs, *l.UserID)
+		}
+	}
+
+	userMap := make(map[string]gin.H)
+	if len(userIDs) > 0 {
+		var users []models.User
+		db.DB.Where("id IN ?", userIDs).Find(&users)
+		for _, u := range users {
+			name := "مستخدم"
+			if u.Name != nil && *u.Name != "" {
+				name = *u.Name
+			}
+			userMap[u.ID] = gin.H{
+				"name":  name,
+				"email": u.Email,
+			}
+		}
+	}
+
+	formattedLogs := make([]gin.H, 0, len(logs))
+	for _, l := range logs {
+		var userInfo interface{}
+		if l.UserID != nil {
+			if u, ok := userMap[*l.UserID]; ok {
+				userInfo = u
+			}
+		}
+		formattedLogs = append(formattedLogs, gin.H{
+			"id":        l.ID,
+			"eventType": l.EventType,
+			"userId":    l.UserID,
+			"user":      userInfo,
+			"ip":        l.IP,
+			"userAgent": l.UserAgent,
+			"location":  l.Location,
+			"metadata":  l.Metadata,
+			"createdAt": l.CreatedAt,
+		})
+	}
+
+	api_response.Success(c, gin.H{
+		"logs":  formattedLogs,
+		"count": count,
+	})
+}
+
+// GetDeviceFingerprints returns list of active/tracked device fingerprints
+func GetDeviceFingerprints(c *gin.Context) {
+	var sessions []models.UserSession
+	err := db.DB.Order("last_accessed DESC").Limit(200).Find(&sessions).Error
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch device fingerprints")
+		return
+	}
+
+	userIDs := make([]string, 0)
+	for _, s := range sessions {
+		if s.UserID != "" {
+			userIDs = append(userIDs, s.UserID)
+		}
+	}
+
+	userMap := make(map[string]string)
+	if len(userIDs) > 0 {
+		var users []models.User
+		db.DB.Where("id IN ?", userIDs).Find(&users)
+		for _, u := range users {
+			if u.Name != nil && *u.Name != "" {
+				userMap[u.ID] = *u.Name
+			}
+		}
+	}
+
+	devices := make([]gin.H, 0)
+	seen := make(map[string]bool)
+
+	for _, s := range sessions {
+		fpKey := s.FingerprintHash
+		if fpKey == "" {
+			fpKey = fmt.Sprintf("%s-%s", s.UserID, s.IP)
+		}
+		if seen[fpKey] {
+			continue
+		}
+		seen[fpKey] = true
+
+		userName := userMap[s.UserID]
+		if userName == "" {
+			userName = "مستخدم"
+		}
+
+		devices = append(devices, gin.H{
+			"id":          s.ID,
+			"userId":      s.UserID,
+			"userName":    userName,
+			"fingerprint": fpKey,
+			"ip":          s.IP,
+			"userAgent":   s.UserAgent,
+			"deviceType":  s.DeviceType,
+			"lastSeen":    s.LastAccessed,
+			"isBlocked":   s.Status == "revoked" || !s.IsActive,
+			"blockReason": nil,
+			"loginCount":  1,
+		})
+	}
+
+	api_response.Success(c, gin.H{
+		"devices": devices,
+	})
+}
+
+// BlockDeviceFingerprint blocks a device fingerprint or session
+func BlockDeviceFingerprint(c *gin.Context) {
+	var req struct {
+		FingerprintID string `json:"fingerprintId"`
+		Reason        string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	db.DB.Model(&models.UserSession{}).Where("id = ? OR fingerprint_hash = ?", req.FingerprintID, req.FingerprintID).Updates(map[string]interface{}{
+		"is_active": false,
+		"status":    "revoked",
+	})
+
+	api_response.Success(c, gin.H{"message": "Device blocked successfully"})
+}
+
+// UnblockDeviceFingerprint unblocks a device fingerprint
+func UnblockDeviceFingerprint(c *gin.Context) {
+	fingerprintID := c.Param("id")
+	if fingerprintID == "" {
+		api_response.Error(c, http.StatusBadRequest, "Fingerprint ID is required")
+		return
+	}
+
+	db.DB.Model(&models.UserSession{}).Where("id = ? OR fingerprint_hash = ?", fingerprintID, fingerprintID).Updates(map[string]interface{}{
+		"is_active": true,
+		"status":    "active",
+	})
+
+	api_response.Success(c, gin.H{"message": "Device unblocked successfully"})
+}
+
+// GetRolePermissions returns role permission mappings and user counts
+func GetRolePermissions(c *gin.Context) {
+	type RoleCount struct {
+		Role  string
+		Count int
+	}
+	var roleCounts []RoleCount
+	db.DB.Model(&models.User{}).Select("role, count(*) as count").Group("role").Scan(&roleCounts)
+
+	countMap := make(map[string]int)
+	for _, rc := range roleCounts {
+		countMap[strings.ToUpper(rc.Role)] = rc.Count
+	}
+
+	roles := []gin.H{
+		{
+			"id":          "super_admin",
+			"name":        "SUPER_ADMIN",
+			"description": "مدير النظام الأعلى - جميع الصلاحيات والإعدادات الحساسة",
+			"permissions": []string{"all", "manage_users", "manage_roles", "manage_backups", "manage_system"},
+			"userCount":   countMap["SUPER_ADMIN"],
+		},
+		{
+			"id":          "admin",
+			"name":        "ADMIN",
+			"description": "مدير - إدارة المستخدمين، المحتوى والتقارير",
+			"permissions": []string{"manage_users", "manage_courses", "manage_analytics", "manage_tickets"},
+			"userCount":   countMap["ADMIN"],
+		},
+		{
+			"id":          "moderator",
+			"name":        "MODERATOR",
+			"description": "مشرف - إدارة المحتوى والمنتديات ودعم المشتركين",
+			"permissions": []string{"manage_courses", "manage_tickets", "moderate_forum"},
+			"userCount":   countMap["MODERATOR"],
+		},
+		{
+			"id":          "teacher",
+			"name":        "TEACHER",
+			"description": "معلم - إنشاء المواد، الاختبارات والأنشطة",
+			"permissions": []string{"create_courses", "manage_exams", "grade_students"},
+			"userCount":   countMap["TEACHER"],
+		},
+		{
+			"id":          "student",
+			"name":        "STUDENT",
+			"description": "طالب - الوصول إلى الدورات، الامتحانات والمنتدى",
+			"permissions": []string{"view_courses", "take_exams", "use_forum"},
+			"userCount":   countMap["STUDENT"],
+		},
+	}
+
+	api_response.Success(c, gin.H{
+		"roles": roles,
+	})
+}
+

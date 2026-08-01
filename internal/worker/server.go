@@ -4,29 +4,20 @@ import (
 	"context"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/hibiken/asynq"
 )
 
-func StartWorker() {
+// StartWorkerWithContext starts the Asynq worker server. It blocks until ctx
+// is cancelled, at which point it performs a graceful shutdown of the server.
+func StartWorkerWithContext(ctx context.Context) {
 	redisAddr := os.Getenv("REDIS_URL")
 	if redisAddr == "" || isRedisDisabled() {
 		log.Println("[Worker] Redis not configured or disabled, skipping worker start")
 		return
 	}
 
-	var opts asynq.RedisConnOpt
-	if strings.HasPrefix(redisAddr, "redis://") || strings.HasPrefix(redisAddr, "rediss://") {
-		parsedOpts, err := asynq.ParseRedisURI(redisAddr)
-		if err != nil {
-			log.Printf("failed to parse redis uri: %v — workers will not start", err)
-			return
-		}
-		opts = parsedOpts
-	} else {
-		opts = asynq.RedisClientOpt{Addr: redisAddr}
-	}
+	opts := parseAsynqRedisConnOpt(redisAddr)
 
 	srv := asynq.NewServer(
 		opts,
@@ -92,8 +83,27 @@ func StartWorker() {
 		return HandleCourseAvailability(task)
 	})
 
-	log.Printf("Worker server starting on Redis %s", redisAddr)
-	if err := srv.Run(mux); err != nil {
-		log.Printf("could not run worker server: %v", err)
+	log.Printf("[Asynq Worker] Server initialized and listening on Redis %s (Concurrency=10)", redisAddr)
+
+	// Run the server in a separate goroutine so we can listen for ctx.Done
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.Run(mux)
+	}()
+
+	select {
+	case <-ctx.Done():
+		log.Println("[Worker] Shutdown signal received — stopping Asynq worker server...")
+		srv.Shutdown()
+		log.Println("[Worker] Asynq worker server stopped")
+	case err := <-errCh:
+		if err != nil {
+			log.Printf("[Worker] Asynq worker server exited with error: %v", err)
+		}
 	}
+}
+
+// StartWorker is kept for backwards-compatibility; it runs until the process exits.
+func StartWorker() {
+	StartWorkerWithContext(context.Background())
 }

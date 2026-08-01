@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
 
@@ -83,10 +84,11 @@ func executeWalletTransaction(
 	}
 
 	// 3. Create the wallet transaction record
+	decimalAmount := decimal.NewFromFloat(amount)
 	record := &models.WalletTransaction{
 		UserID:      userID,
 		Type:        transactionType,
-		Amount:      amount,
+		Amount:      decimalAmount,
 		Currency:    "EGP",
 		WalletType:  walletType,
 		Description: description,
@@ -109,9 +111,10 @@ func validateBalance(user models.User, amount float64, walletType string) error 
 	if amount >= 0 {
 		return nil
 	}
+	decimalAmount := decimal.NewFromFloat(amount)
 	switch walletType {
 	case "BALANCE":
-		if user.Balance+amount < 0 {
+		if user.Balance.Add(decimalAmount).IsNegative() {
 			return ErrInsufficientBalance
 		}
 	case "AI_CREDITS":

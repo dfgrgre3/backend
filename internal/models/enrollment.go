@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"time"
 )
@@ -18,7 +19,7 @@ type Enrollment struct {
 	ID         string         `gorm:"primaryKey;type:uuid;column:id" json:"id"`
 	UserID     string         `gorm:"not null;type:uuid;column:user_id;index:idx_user_subject,unique;constraint:OnDelete:CASCADE" json:"userId"`
 	SubjectID  string         `gorm:"not null;type:uuid;column:subject_id;index:idx_user_subject,unique;constraint:OnDelete:CASCADE" json:"subjectId"`
-	Progress   float64        `gorm:"default:0;index;column:progress" json:"progress"`
+	Progress   decimal.Decimal `gorm:"default:0;type:numeric(5,2);check:progress >= 0 AND progress <= 100;index;column:progress" json:"progress"`
 	EnrolledAt time.Time      `gorm:"index;column:enrolled_at" json:"enrolledAt"`
 	CreatedAt  time.Time      `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt  time.Time      `gorm:"column:updated_at" json:"updatedAt"`
