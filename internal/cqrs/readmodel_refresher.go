@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"thanawy-backend/internal/db"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // RefreshMaterializedViews concurrently refreshes all CQRS read model materialized views.
@@ -31,12 +33,23 @@ func RefreshMaterializedViews() error {
 		},
 	}
 
+	var g errgroup.Group
+
 	for _, v := range views {
-		if err := db.WriteDB().Exec(v.sql).Error; err != nil {
-			return fmt.Errorf("refresh %s: %w", v.name, err)
-		}
-		log.Printf("[CQRS] Materialized view refreshed: %s", v.name)
+		v := v
+		g.Go(func() error {
+			if err := db.WriteDB().Exec(v.sql).Error; err != nil {
+				return fmt.Errorf("refresh %s: %w", v.name, err)
+			}
+			log.Printf("[CQRS] Materialized view refreshed: %s", v.name)
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	return nil
 }
+

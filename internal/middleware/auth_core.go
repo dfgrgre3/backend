@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -42,13 +43,13 @@ func getRolePermsFromCache(userID string) (string, []string, bool) {
 		rolePermsCache.Delete(userID)
 		return "", nil, false
 	}
-	return e.role, e.permissions, true
+	return e.role, slices.Clone(e.permissions), true
 }
 
 func setRolePermsCache(userID, role string, permissions []string) {
 	rolePermsCache.Store(userID, &rolePermsEntry{
 		role:        role,
-		permissions: permissions,
+		permissions: slices.Clone(permissions),
 		expiresAt:   time.Now().Add(rolePermsCacheTTL),
 	})
 }
@@ -61,6 +62,9 @@ func InvalidateRolePermsCache(userID string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 		defer cancel()
 		db.Redis.Del(ctx, fmt.Sprintf("role_perms:%s", userID))
+		// Notify every application instance so a permission change is effective
+		// on the very next authenticated request, not after the local TTL.
+		db.Redis.Publish(ctx, "cache:invalidate:role_perms", userID)
 	}
 }
 

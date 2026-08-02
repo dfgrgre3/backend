@@ -44,13 +44,13 @@ func TestHasPermission_ModuleWildcard(t *testing.T) {
 func TestHasPermission_ManageWildcard(t *testing.T) {
 	user := &User{
 		Role:        RoleTeacher,
-		Permissions: JSONStringArray{"*:manage"},
+		Permissions: JSONStringArray{PermPermissionsCustom, "*:manage"},
 	}
 
 	assert.True(t, user.HasPermission("subjects:manage"))
 	assert.True(t, user.HasPermission("users:manage"))
 	assert.True(t, user.HasPermission("exams:manage"))
-	assert.True(t, user.HasPermission("subjects:view"))
+	assert.False(t, user.HasPermission("subjects:view"))
 }
 
 func TestHasPermission_NoPermissions(t *testing.T) {
@@ -80,6 +80,7 @@ func TestGetEffectivePermissions_Admin(t *testing.T) {
 
 	perms := user.GetEffectivePermissions()
 	assert.Contains(t, perms, "users:view")
+	// Admin role defaults now include admin:bypass
 	assert.Contains(t, perms, PermAdminBypass)
 }
 
@@ -91,7 +92,14 @@ func TestGetEffectivePermissions_AdminWithBypass(t *testing.T) {
 
 	perms := user.GetEffectivePermissions()
 	assert.Contains(t, perms, PermAdminBypass)
-	assert.Len(t, perms, 1)
+	// admin:bypass is already in role defaults, so dedup keeps it once.
+	count := 0
+	for _, p := range perms {
+		if p == PermAdminBypass {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count)
 }
 
 func TestGetEffectivePermissions_Teacher(t *testing.T) {
@@ -101,10 +109,9 @@ func TestGetEffectivePermissions_Teacher(t *testing.T) {
 	}
 
 	perms := user.GetEffectivePermissions()
-	defaultPerms := GetDefaultPermissions(RoleTeacher)
-	for _, dp := range defaultPerms {
-		assert.Contains(t, perms, dp)
-	}
+	// Teacher role defaults are now merged in.
+	assert.Contains(t, perms, "subjects:view")
+	assert.Contains(t, perms, "exams:view")
 }
 
 func TestGetEffectivePermissions_Student(t *testing.T) {
@@ -114,10 +121,9 @@ func TestGetEffectivePermissions_Student(t *testing.T) {
 	}
 
 	perms := user.GetEffectivePermissions()
-	defaultPerms := GetDefaultPermissions(RoleStudent)
-	for _, dp := range defaultPerms {
-		assert.Contains(t, perms, dp)
-	}
+	// Student role defaults are now merged in.
+	assert.Contains(t, perms, "subjects:view")
+	assert.Contains(t, perms, "dashboard:view")
 }
 
 func TestGetDefaultPermissions_Admin(t *testing.T) {
@@ -257,14 +263,18 @@ func TestHasPermission_StudentCannotManage(t *testing.T) {
 	}
 }
 
-func TestHasPermission_TeacherCanViewSubjects(t *testing.T) {
+func TestHasPermission_TeacherGetsRoleDefaults(t *testing.T) {
 	user := &User{
 		Role:        RoleTeacher,
 		Permissions: JSONStringArray{},
 	}
 
+	// Teacher role defaults now include subjects:view and own_subjects:manage
 	assert.True(t, user.HasPermission("subjects:view"))
 	assert.True(t, user.HasPermission("own_subjects:manage"))
+	// But not admin-level permissions
+	assert.False(t, user.HasPermission("users:manage"))
+	assert.False(t, user.HasPermission("admin:bypass"))
 }
 
 func TestJSONStringArray_Conversion(t *testing.T) {
@@ -314,15 +324,32 @@ func TestPermissionGrantMatches_AdminBypassExact(t *testing.T) {
 	assert.True(t, permissionGrantMatches(PermAdminBypass, "system:manage"))
 }
 
-func TestHasPermission_AdminWithoutExplicitBypass(t *testing.T) {
+func TestHasPermission_AdminGetsBypassFromRoleDefaults(t *testing.T) {
 	user := &User{
 		Role:        RoleAdmin,
 		Permissions: JSONStringArray{},
 	}
 
+	// Admin role defaults now include admin:bypass, so an admin with no
+	// explicit permissions still has full access via role defaults.
 	perms := user.GetEffectivePermissions()
 	assert.Contains(t, perms, PermAdminBypass)
 	assert.True(t, user.HasPermission("any:permission"))
+	assert.True(t, user.HasPermission("users:manage"))
+}
+
+func TestHasPermission_CustomModeRestrictsToStoredOnly(t *testing.T) {
+	user := &User{
+		Role:        RoleAdmin,
+		Permissions: JSONStringArray{PermPermissionsCustom, "users:view"},
+	}
+
+	// In custom mode, role defaults are NOT merged — only stored permissions.
+	perms := user.GetEffectivePermissions()
+	assert.Contains(t, perms, "users:view")
+	assert.NotContains(t, perms, PermAdminBypass)
+	assert.False(t, user.HasPermission("any:permission"))
+	assert.True(t, user.HasPermission("users:view"))
 }
 
 func TestGetDefaultPermissions_ReturnsEmptyForUnknown(t *testing.T) {

@@ -3,6 +3,7 @@ package router
 import (
 	"thanawy-backend/internal/api/handlers"
 	"thanawy-backend/internal/middleware"
+	"thanawy-backend/internal/models"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -30,9 +31,12 @@ func SetupAdminRoutes(router *gin.Engine) {
 	admin.Use(middleware.Auth())
 	admin.Use(middleware.AdminOrModerator())
 	admin.Use(middleware.StrictRBAC())
+	admin.Use(middleware.AdminAPIPermissionRequired())
 	// Bound all administrative traffic with the Redis-backed limiter.
 	// GlobalRateLimiter resolves the current Redis client per request and fails closed if unavailable.
-	admin.Use(middleware.GlobalRateLimiter(120, time.Minute))
+	// 300/min is sized for data-heavy admin pages (tables, charts, live dashboards)
+	// that issue many parallel fetches on load.
+	admin.Use(middleware.GlobalRateLimiter(300, time.Minute))
 	// Keep an immutable, server-authoritative audit trail for every admin
 	// operation. This is deliberately registered after authentication so the
 	// logger can associate each event with the authenticated administrator.
@@ -294,12 +298,16 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.GET("/users", handlers.GetUsers)
 		admin.POST("/users", handlers.CreateUser)
 		admin.GET(adminUserIDRoute, handlers.GetUserByID)
-		admin.PATCH(adminUserIDRoute, handlers.UpdateUser)
+		// Permission edits are security-sensitive; role membership alone must not
+		// allow an administrator to alter another account's effective access.
+		admin.PATCH(adminUserIDRoute, middleware.PermissionRequired(models.PermUsersManage), handlers.UpdateUser)
 		sensitive.DELETE(adminUserIDRoute, handlers.DeleteUser) // ADMIN-only
 		admin.GET("/users/analytics", handlers.AdminUsersAnalytics)
 		admin.GET("/users/filter-options", handlers.AdminUsersFilterOptions)
 		admin.GET("/users/:id/enrollments", handlers.GetUserEnrollments)
 		admin.POST("/users/:id/enrollments", handlers.AdminEnrollUser)
+		admin.GET("/users/:id/notifications", handlers.GetUserNotifications)
+		admin.POST("/users/:id/notifications", handlers.SendUserNotification)
 		admin.GET("/users/:id/login-attempts", handlers.GetUserLoginAttempts)
 		admin.GET("/users/:id/video-engagement", handlers.GetUserVideoEngagement)
 		admin.GET("/users/:id/wallet/transactions", handlers.GetUserWalletTransactions)
@@ -309,6 +317,7 @@ func SetupAdminRoutes(router *gin.Engine) {
 		// Bulk User Operations
 		admin.POST("/users/bulk-create", handlers.BulkCreateUsers)
 		admin.POST("/users/bulk-delete", handlers.BulkDeleteUsers)
+		admin.POST("/users/bulk-notify", handlers.AdminBulkSendMessage)
 
 		// User Actions
 		admin.POST("/users/:id/ban", handlers.BanUser)
@@ -316,7 +325,13 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/users/:id/role", handlers.ChangeUserRole)
 		admin.POST("/users/:id/password-reset", handlers.SendPasswordReset)
 		admin.POST("/users/:id/activate", handlers.ActivateUser)
-		admin.POST("/users/reset-all-permissions", handlers.ResetAllPermissions)
+		admin.POST("/users/:id/verify-email", handlers.VerifyUserEmail)
+		admin.POST("/users/:id/verify-phone", handlers.VerifyUserPhone)
+
+		// Administrators are a first-class, server-filtered resource.  Keeping
+		// this separate from the broad users endpoint prevents clients from
+		// downloading a user directory and filtering privileged accounts locally.
+		admin.GET("/admins", middleware.PermissionRequired(models.PermUsersManage), handlers.ListAdmins)
 
 		// Parent Management
 		admin.GET("/parents/statistics", handlers.GetParentStatistics)

@@ -60,26 +60,20 @@ func (s *UserSession) BeforeCreate(tx *gorm.DB) (err error) {
 	// never persisted for security reasons.
 	s.RefreshToken = uuid.New().String()
 
-	// Limit active sessions to 5 per user to prevent session hijacking and resource bloating
-	var activeCount int64
-	tx.Model(&UserSession{}).
-		Where("user_id = ? AND is_active = ?", s.UserID, true).
-		Count(&activeCount)
-
-	if activeCount >= 5 {
-		var oldestSessions []UserSession
-		toRevokeCount := int(activeCount - 4)
-		if err := tx.Where("user_id = ? AND is_active = ?", s.UserID, true).
-			Order("last_accessed ASC").
-			Limit(toRevokeCount).
-			Find(&oldestSessions).Error; err == nil {
-			for _, os := range oldestSessions {
-				tx.Model(&os).Updates(map[string]interface{}{
-					"is_active":  false,
-					"status":     "revoked",
-					"revoked_at": time.Now(),
-				})
-			}
+	// Limit active sessions to 5 per user to prevent session hijacking and resource bloating.
+	// Prefer a single ordered scan over the user-specific active-session index instead of
+	// issuing a full COUNT(*) before the delete, which causes unnecessary table work on every login.
+	var oldestSessions []UserSession
+	if err := tx.Where("user_id = ? AND is_active = ?", s.UserID, true).
+		Order("last_accessed ASC").
+		Find(&oldestSessions).Error; err == nil && len(oldestSessions) > 4 {
+		toRevokeCount := len(oldestSessions) - 4
+		for _, os := range oldestSessions[:toRevokeCount] {
+			tx.Model(&os).Updates(map[string]interface{}{
+				"is_active":  false,
+				"status":     "revoked",
+				"revoked_at": time.Now(),
+			})
 		}
 	}
 	return

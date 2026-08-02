@@ -54,6 +54,69 @@ func getSessionRepo() *repository.SessionRepository {
 	return sessionRepo
 }
 
+type userAggregateCountRow struct {
+	UserID string `gorm:"column:user_id"`
+	Kind   string `gorm:"column:kind"`
+	Count  int64  `gorm:"column:count"`
+}
+
+func aggregateUserCountRows(rows []userAggregateCountRow) (map[string]int64, map[string]int64, map[string]int64, map[string]int64) {
+	taskMap := make(map[string]int64, len(rows))
+	sessionMap := make(map[string]int64, len(rows))
+	achievementMap := make(map[string]int64, len(rows))
+	enrollmentMap := make(map[string]int64, len(rows))
+
+	for _, row := range rows {
+		switch row.Kind {
+		case "tasks":
+			taskMap[row.UserID] = row.Count
+		case "sessions":
+			sessionMap[row.UserID] = row.Count
+		case "achievements":
+			achievementMap[row.UserID] = row.Count
+		case "enrollments":
+			enrollmentMap[row.UserID] = row.Count
+		}
+	}
+
+	return taskMap, sessionMap, achievementMap, enrollmentMap
+}
+
+func fetchUserAggregateCounts(userIDs []string) ([]userAggregateCountRow, error) {
+	if len(userIDs) == 0 {
+		return nil, nil
+	}
+
+	var rows []userAggregateCountRow
+	query := `
+		SELECT user_id, 'tasks' AS kind, COUNT(*) AS count
+		FROM "Task"
+		WHERE user_id IN ? AND deleted_at IS NULL
+		GROUP BY user_id
+		UNION ALL
+		SELECT user_id, 'sessions' AS kind, COUNT(*) AS count
+		FROM "StudySession"
+		WHERE user_id IN ? AND deleted_at IS NULL
+		GROUP BY user_id
+		UNION ALL
+		SELECT user_id, 'achievements' AS kind, COUNT(*) AS count
+		FROM "UserAchievement"
+		WHERE user_id IN ? AND deleted_at IS NULL
+		GROUP BY user_id
+		UNION ALL
+		SELECT user_id, 'enrollments' AS kind, COUNT(*) AS count
+		FROM "SubjectEnrollment"
+		WHERE user_id IN ? AND deleted_at IS NULL
+		GROUP BY user_id
+	`
+
+	if err := db.DB.Raw(query, userIDs, userIDs, userIDs, userIDs).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	return rows, nil
+}
+
 // isProduction checks if the app is running in production mode
 func isProduction() bool {
 	cfg := config.Load()
@@ -285,56 +348,20 @@ func GetUsers(c *gin.Context) {
 	db.DB.Model(&models.User{}).Where("deleted_at IS NULL AND role = ?", models.RoleAdmin).Count(&totalAdmins)
 	db.DB.Model(&models.User{}).Where("deleted_at IS NULL AND level >= ?", 10).Count(&powerUsers)
 
-	// Batch fetch _count data for all users in this page
+	// Batch fetch _count data for all users in this page using one aggregated query
 	userIDs := make([]string, len(users))
 	for i, u := range users {
 		userIDs[i] = u.ID
 	}
 
-	type taskCount struct {
-		UserID string
-		Count  int64
-	}
-	type sessionCount struct {
-		UserID string
-		Count  int64
-	}
-	type achievementCount struct {
-		UserID string
-		Count  int64
-	}
-	type enrollmentCount struct {
-		UserID string
-		Count  int64
-	}
-
-	var taskCounts []taskCount
-	var sessionCounts []sessionCount
-	var achievementCounts []achievementCount
-	var enrollmentCounts []enrollmentCount
-
+	taskMap, sessionMap, achievementMap, enrollmentMap := make(map[string]int64), make(map[string]int64), make(map[string]int64), make(map[string]int64)
 	if len(userIDs) > 0 {
-		db.DB.Model(&models.Task{}).Select("user_id, COUNT(*) as count").Where("user_id IN ? AND deleted_at IS NULL", userIDs).Group("user_id").Scan(&taskCounts)
-		db.DB.Model(&models.StudySession{}).Select("user_id, COUNT(*) as count").Where("user_id IN ? AND deleted_at IS NULL", userIDs).Group("user_id").Scan(&sessionCounts)
-		db.DB.Model(&models.UserAchievement{}).Select("user_id, COUNT(*) as count").Where("user_id IN ? AND deleted_at IS NULL", userIDs).Group("user_id").Scan(&achievementCounts)
-		db.DB.Model(&models.Enrollment{}).Select("user_id, COUNT(*) as count").Where("user_id IN ? AND deleted_at IS NULL", userIDs).Group("user_id").Scan(&enrollmentCounts)
-	}
-
-	taskMap := make(map[string]int64, len(taskCounts))
-	for _, tc := range taskCounts {
-		taskMap[tc.UserID] = tc.Count
-	}
-	sessionMap := make(map[string]int64, len(sessionCounts))
-	for _, sc := range sessionCounts {
-		sessionMap[sc.UserID] = sc.Count
-	}
-	achievementMap := make(map[string]int64, len(achievementCounts))
-	for _, ac := range achievementCounts {
-		achievementMap[ac.UserID] = ac.Count
-	}
-	enrollmentMap := make(map[string]int64, len(enrollmentCounts))
-	for _, ec := range enrollmentCounts {
-		enrollmentMap[ec.UserID] = ec.Count
+		rows, err := fetchUserAggregateCounts(userIDs)
+		if err != nil {
+			log.Printf("[GetUsers] failed to fetch aggregate user counts: %v", err)
+		} else {
+			taskMap, sessionMap, achievementMap, enrollmentMap = aggregateUserCountRows(rows)
+		}
 	}
 
 	items := make([]gin.H, 0, len(users))
@@ -449,6 +476,60 @@ func UpdateUser(c *gin.Context) {
 		}
 	}
 
+	if req.Permissions != nil {
+		// Validate shape only. The frontend matrix legitimately offers keys that
+		// are not in AllPermissions() (e.g. roles:*, taxes:*, learning_paths:*),
+		// so a strict whitelist would reject valid saves. A malformed string is
+		// still rejected because it can never match and only obscures intent.
+		for _, p := range req.Permissions {
+			if p == "" || !strings.Contains(p, ":") {
+				api_response.Error(c, http.StatusBadRequest, fmt.Sprintf("Invalid permission format: %q", p))
+				return
+			}
+			if p == models.PermPermissionsCustom {
+				// Legacy sentinel: never persist it. GetEffectivePermissions
+				// strips it on read, so storing it only creates confusion.
+				api_response.Error(c, http.StatusBadRequest, "permissions:custom is not a grantable permission")
+				return
+			}
+		}
+
+		// Privilege escalation guard: an administrator may only grant permissions
+		// they themselves effectively hold. Without this, any account able to edit
+		// users could award itself (or a confederate) `admin:bypass`.
+		actorPermsRaw, _ := c.Get("permissions")
+		actorPerms, _ := actorPermsRaw.([]string)
+		for _, requested := range req.Permissions {
+			granted := false
+			for _, actorGrant := range actorPerms {
+				if models.PermissionGrantMatches(actorGrant, requested) {
+					granted = true
+					break
+				}
+			}
+			if !granted {
+				api_response.Error(c, http.StatusForbidden,
+					fmt.Sprintf("You cannot grant a permission you do not hold: %s", requested))
+				return
+			}
+		}
+
+		// An admin editing their own row must not be able to widen it.
+		if isSelf {
+			existing := make(map[string]struct{})
+			for _, e := range user.GetEffectivePermissions() {
+				existing[e] = struct{}{}
+			}
+			for _, requested := range req.Permissions {
+				if _, held := existing[requested]; !held {
+					api_response.Error(c, http.StatusForbidden,
+						"You cannot grant yourself additional permissions")
+					return
+				}
+			}
+		}
+	}
+
 	type userUpdates struct {
 		Role          *string                `gorm:"column:role"`
 		Name          *string                `gorm:"column:name"`
@@ -475,6 +556,8 @@ func UpdateUser(c *gin.Context) {
 		updates.Role = &req.Role
 	}
 	if req.Permissions != nil {
+		// An empty list is an intentional deny-all list. Do not add role defaults
+		// or a sentinel marker; authorization reads this persisted list verbatim.
 		updates.Permissions = models.JSONStringArray(req.Permissions)
 	}
 
@@ -2062,12 +2145,56 @@ func ActivateUser(c *gin.Context) {
 	api_response.Success(c, buildUserDetailsPayload(user))
 }
 
-// ResetAllPermissions resets all user permissions to their role defaults
-func ResetAllPermissions(c *gin.Context) {
-	// This would reset all custom permissions back to role defaults
-	// Implementation depends on your permissions system
-	LogAudit(c, "RESET_ALL_PERMISSIONS", "user", "", nil)
-	api_response.Success(c, gin.H{"message": "All permissions reset to defaults"})
+func VerifyUserEmail(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		api_response.Error(c, http.StatusBadRequest, "User ID is required")
+		return
+	}
+
+	var user models.User
+	if err := db.DB.Where(idQuery, userID).First(&user).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
+		return
+	}
+
+	user.EmailVerified = true
+	if err := db.DB.Save(&user).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to verify user email")
+		return
+	}
+
+	middleware.InvalidateRolePermsCache(userID)
+	getUserRepo().InvalidateCache(userID)
+
+	LogAudit(c, "VERIFY_USER_EMAIL", "user", userID, nil)
+	api_response.Success(c, buildUserDetailsPayload(user))
+}
+
+func VerifyUserPhone(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		api_response.Error(c, http.StatusBadRequest, "User ID is required")
+		return
+	}
+
+	var user models.User
+	if err := db.DB.Where(idQuery, userID).First(&user).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errUserNotFound)
+		return
+	}
+
+	user.PhoneVerified = true
+	if err := db.DB.Save(&user).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to verify user phone")
+		return
+	}
+
+	middleware.InvalidateRolePermsCache(userID)
+	getUserRepo().InvalidateCache(userID)
+
+	LogAudit(c, "VERIFY_USER_PHONE", "user", userID, nil)
+	api_response.Success(c, buildUserDetailsPayload(user))
 }
 
 // Helper function to generate random tokens

@@ -472,53 +472,47 @@ func (s *authService) ChangePassword(ctx context.Context, userID, oldPassword, n
 }
 
 func (s *authService) RefreshToken(ctx context.Context, refreshToken, userAgent, ip string) (*dto.RefreshTokenResponse, error) {
-	// Replay Attack Protection: Check if this token was already revoked/rotated.
-	// Look up by hash to avoid querying with the raw refresh token.
-	var oldSession models.UserSession
-	oldHash := models.ComputeRefreshTokenHash(refreshToken)
-	if err := db.DB.WithContext(ctx).Where("refresh_token_hash = ?", oldHash).First(&oldSession).Error; err == nil {
-		if !oldSession.IsActive {
-			// Check if it was revoked/rotated within the 10-second grace period (e.g. slow client double-requests)
-			if oldSession.Status == "revoked" && oldSession.RevokedAt != nil && time.Since(*oldSession.RevokedAt) <= 10*time.Second {
-				var replacementSession models.UserSession
-				err := db.DB.WithContext(ctx).
-					Where("user_id = ? AND is_active = ? AND created_at >= ?", oldSession.UserID, true, oldSession.RevokedAt.Add(-2*time.Second)).
-					Order("created_at DESC").
-					First(&replacementSession).Error
-				if err == nil {
-					var user models.User
-					if err := db.DB.WithContext(ctx).Where("id = ?", oldSession.UserID).First(&user).Error; err == nil {
-						// Generate a new access token for this replacement session
-						accessToken, err := s.tokenService.GenerateAccessTokenForSession(&user, replacementSession.ID)
-						if err == nil {
-							return &dto.RefreshTokenResponse{
-								AccessToken:  accessToken,
-								RefreshToken: replacementSession.RefreshToken,
-							}, nil
-						}
-					}
-				}
-			}
-
-			// Token reuse outside grace period detected! Revoke all sessions for this user immediately!
-			_ = s.authRepo.RevokeAllUserSessions(ctx, oldSession.UserID)
-			return nil, errors.New("security alert: reuse of rotated refresh token detected, all sessions revoked")
-		}
-	}
-
-	// Find session with user in a single query using JOIN to reduce round trips
+	// Replay Attack Protection: fetch the session once by hash and then evaluate
+	// both the active case and the revoked/replayed-token case without issuing a
+	// second lookup on the same refresh token.
 	var session models.UserSession
-	var user models.User
-	err := db.DB.WithContext(ctx).
-		Model(&models.UserSession{}).
-		Where("refresh_token_hash = ? AND is_active = ?",
-			models.ComputeRefreshTokenHash(refreshToken), true).
-		First(&session).Error
-	if err != nil {
+	oldHash := models.ComputeRefreshTokenHash(refreshToken)
+	if err := db.DB.WithContext(ctx).
+		Where("refresh_token_hash = ?", oldHash).
+		Order("updated_at DESC").
+		First(&session).Error; err != nil {
 		return nil, errors.New("invalid or expired refresh token")
 	}
 
-	// Fetch user (we already have user_id from session)
+	if !session.IsActive {
+		// Check if it was revoked/rotated within the 10-second grace period (e.g. slow client double-requests)
+		if session.Status == "revoked" && session.RevokedAt != nil && time.Since(*session.RevokedAt) <= 10*time.Second {
+			var replacementSession models.UserSession
+			err := db.DB.WithContext(ctx).
+				Where("user_id = ? AND is_active = ? AND created_at >= ?", session.UserID, true, session.RevokedAt.Add(-2*time.Second)).
+				Order("created_at DESC").
+				First(&replacementSession).Error
+			if err == nil {
+				var user models.User
+				if err := db.DB.WithContext(ctx).Where("id = ?", session.UserID).First(&user).Error; err == nil {
+					// Generate a new access token for this replacement session
+					accessToken, err := s.tokenService.GenerateAccessTokenForSession(&user, replacementSession.ID)
+					if err == nil {
+						return &dto.RefreshTokenResponse{
+							AccessToken:  accessToken,
+							RefreshToken: replacementSession.RefreshToken,
+						}, nil
+					}
+				}
+			}
+		}
+
+		// Token reuse outside grace period detected! Revoke all sessions for this user immediately!
+		_ = s.authRepo.RevokeAllUserSessions(ctx, session.UserID)
+		return nil, errors.New("security alert: reuse of rotated refresh token detected, all sessions revoked")
+	}
+
+	var user models.User
 	if err := db.DB.WithContext(ctx).Where("id = ?", session.UserID).First(&user).Error; err != nil {
 		return nil, errors.New("user not found")
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,120 @@ const (
 	headerRateLimitReset     = "X-RateLimit-Reset"
 	headerRetryAfter         = "Retry-After"
 )
+
+// ─────────────────────────────────────────────
+//  In-memory fallback rate limiter (used when Redis is unavailable)
+// ─────────────────────────────────────────────
+
+type inMemoryEntry struct {
+	count     int
+	windowEnd time.Time
+}
+
+// InMemoryRateLimiter provides a local, single-instance rate limiter used as a
+// fallback when Redis is not connected. This prevents the API from returning
+// 503 (fail-closed) during local development when Redis is down, while still
+// providing basic per-IP throttling.
+type InMemoryRateLimiter struct {
+	mu    sync.Mutex
+	store map[string]*inMemoryEntry
+}
+
+var (
+	globalInMemoryLimiter = &InMemoryRateLimiter{store: make(map[string]*inMemoryEntry)}
+	inMemoryMu            sync.Mutex
+)
+
+// getInMemoryLimiter returns the shared in-memory limiter singleton.
+func getInMemoryLimiter() *InMemoryRateLimiter {
+	inMemoryMu.Lock()
+	defer inMemoryMu.Unlock()
+	if globalInMemoryLimiter == nil {
+		globalInMemoryLimiter = &InMemoryRateLimiter{store: make(map[string]*inMemoryEntry)}
+	}
+	return globalInMemoryLimiter
+}
+
+// increment records a request for key and returns the count within the window.
+// Expired entries are lazily cleaned up on access.
+func (rl *InMemoryRateLimiter) increment(key string, limit int, window time.Duration) int {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	entry, ok := rl.store[key]
+	if !ok || now.After(entry.windowEnd) {
+		// Start a new window.
+		rl.store[key] = &inMemoryEntry{count: 1, windowEnd: now.Add(window)}
+		return 1
+	}
+
+	entry.count++
+	return entry.count
+}
+
+// RateLimitByIPInMemory enforces a per-IP limit using the in-memory store.
+func RateLimitByIPInMemory(limit int, window time.Duration) gin.HandlerFunc {
+	rl := getInMemoryLimiter()
+	return func(c *gin.Context) {
+		ip := c.ClientIP()
+		key := fmt.Sprintf("rate_limit:ip:%s", ip)
+
+		count := rl.increment(key, limit, window)
+
+		// Set rate limit headers
+		c.Header(headerRateLimitLimit, fmt.Sprintf("%d", limit))
+		c.Header(headerRateLimitRemaining, fmt.Sprintf("%d", max(0, limit-count)))
+		c.Header(headerRateLimitReset, fmt.Sprintf("%d", time.Now().Add(window).Unix()))
+
+		if count > limit {
+			c.Header(headerRetryAfter, fmt.Sprintf("%d", int(window.Seconds())))
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":       "rate limit exceeded",
+				"retry_after": int(window.Seconds()),
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// RateLimitByUserInMemory enforces a per-user limit using the in-memory store.
+func RateLimitByUserInMemory(limit int, window time.Duration) gin.HandlerFunc {
+	rl := getInMemoryLimiter()
+	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.Next()
+			return
+		}
+
+		key := fmt.Sprintf("rate_limit:user:%s", userID)
+		count := rl.increment(key, limit, window)
+
+		c.Header(headerRateLimitLimit, fmt.Sprintf("%d", limit))
+		c.Header(headerRateLimitRemaining, fmt.Sprintf("%d", max(0, limit-count)))
+		c.Header(headerRateLimitReset, fmt.Sprintf("%d", time.Now().Add(window).Unix()))
+
+		if count > limit {
+			c.Header(headerRetryAfter, fmt.Sprintf("%d", int(window.Seconds())))
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":       "user rate limit exceeded",
+				"retry_after": int(window.Seconds()),
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// ─────────────────────────────────────────────
+//  Redis-backed rate limiter
+// ─────────────────────────────────────────────
 
 // RateLimiter holds Redis client for distributed rate limiting
 type RateLimiter struct {
@@ -39,10 +154,9 @@ func (rl *RateLimiter) RateLimitByIP(limit int, window time.Duration) gin.Handle
 
 		count, err := rl.incrementCounter(c.Request.Context(), key, window)
 		if err != nil {
-			// If Redis fails, FAIL CLOSED for security (deny request)
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-				"error": rateLimiterUnavailable,
-			})
+			// If Redis fails, fall back to the in-memory limiter so the API
+			// remains available (fail open with local throttling).
+			RateLimitByIPInMemory(limit, window)(c)
 			return
 		}
 
@@ -80,9 +194,7 @@ func (rl *RateLimiter) RateLimitByUser(limit int, window time.Duration) gin.Hand
 		key := fmt.Sprintf("rate_limit:user:%s", userID)
 		count, err := rl.incrementCounter(c.Request.Context(), key, window)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-				"error": rateLimiterUnavailable,
-			})
+			RateLimitByUserInMemory(limit, window)(c)
 			return
 		}
 
@@ -120,10 +232,9 @@ func (rl *RateLimiter) RateLimitByEndpoint(endpoint string, limit int, window ti
 
 		count, err := rl.incrementCounter(c.Request.Context(), key, window)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-				"error": rateLimiterUnavailable,
-			})
-			return
+			// Fallback: use the same in-memory limiter keyed by endpoint.
+			rlMem := getInMemoryLimiter()
+			count = rlMem.increment(key, limit, window)
 		}
 
 		c.Header(headerRateLimitLimit, fmt.Sprintf("%d", limit))
@@ -171,10 +282,8 @@ func (rl *RateLimiter) incrementCounter(ctx context.Context, key string, window 
 func (rl *RateLimiter) SlidingWindowRateLimit(key string, limit int, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if rl.client == nil {
-			// Fail closed - if Redis is unavailable, deny requests
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-				"error": "rate limiter unavailable",
-			})
+			// Fall back to in-memory if Redis is unavailable.
+			RateLimitByIPInMemory(limit, window)(c)
 			return
 		}
 
@@ -188,9 +297,7 @@ func (rl *RateLimiter) SlidingWindowRateLimit(key string, limit int, window time
 		// Count requests in current window
 		count, err := rl.client.ZCard(ctx, key).Result()
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-				"error": "rate limiter unavailable",
-			})
+			RateLimitByIPInMemory(limit, window)(c)
 			return
 		}
 
@@ -212,91 +319,96 @@ func (rl *RateLimiter) SlidingWindowRateLimit(key string, limit int, window time
 	}
 }
 
+// ─────────────────────────────────────────────
+//  Convenience rate limiters (with in-memory fallback)
+// ─────────────────────────────────────────────
 
-// LoginRateLimiter provides rate limiting for login attempts
-// FAIL CLOSED: if Redis is unavailable, deny requests to prevent brute-force bypass.
+// LoginRateLimiter provides rate limiting for login attempts.
+// If Redis is unavailable, falls back to the in-memory limiter so users can
+// still log in during local development or a Redis outage.
 func LoginRateLimiter() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if db.Redis == nil {
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-				"error": "rate limiter unavailable, please try again later",
-			})
+			RateLimitByIPInMemory(20, time.Minute)(c)
 			return
 		}
 		NewRateLimiter(db.Redis).RateLimitByIP(20, time.Minute)(c)
 	}
 }
 
-// AuthRateLimiter provides rate limiting for authentication-related requests
-// FAIL CLOSED: if Redis is unavailable, deny requests.
+// AuthRateLimiter provides rate limiting for authentication-related requests.
+// Falls back to the in-memory limiter when Redis is unavailable.
 func AuthRateLimiter() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if db.Redis == nil {
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-				"error": "rate limiter unavailable, please try again later",
-			})
+			RateLimitByIPInMemory(60, time.Minute)(c)
 			return
 		}
 		NewRateLimiter(db.Redis).RateLimitByIP(60, time.Minute)(c)
 	}
 }
 
-// GlobalRateLimiter provides rate limiting for all API requests
-// FAIL CLOSED: if Redis is unavailable, deny requests to prevent DDoS bypass.
+// GlobalRateLimiter provides rate limiting for all API requests.
+// Falls back to the in-memory limiter when Redis is unavailable.
 func GlobalRateLimiter(limit int, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if db.Redis == nil {
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-				"error": rateLimiterUnavailable,
-			})
+			RateLimitByIPInMemory(limit, window)(c)
 			return
 		}
 		NewRateLimiter(db.Redis).RateLimitByIP(limit, window)(c)
 	}
 }
 
-// AIRateLimiter provides rate limiting for AI requests
-// FAIL CLOSED: if Redis is unavailable, deny requests to prevent abuse bypass.
+// AIRateLimiter provides rate limiting for AI requests.
+// Falls back to the in-memory limiter when Redis is unavailable.
+// The limit is intentionally generous (30/min) because interactive AI chat
+// sessions involve rapid back-and-forth messages, and the frontend may also
+// poll for async job status (exam generation, summarization, essay grading).
 func AIRateLimiter() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if db.Redis == nil {
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-				"error": rateLimiterUnavailable,
-			})
-			return
-		}
-		rl := NewRateLimiter(db.Redis)
 		userIDValue, exists := c.Get("userId")
 		if exists && userIDValue != nil {
 			if userIDStr, ok := userIDValue.(string); ok && userIDStr != "" {
 				c.Set("user_id", userIDStr)
-				rl.RateLimitByUser(10, time.Minute)(c)
+				if db.Redis == nil {
+					RateLimitByUserInMemory(30, time.Minute)(c)
+					return
+				}
+				NewRateLimiter(db.Redis).RateLimitByUser(30, time.Minute)(c)
 				return
 			}
 		}
-		rl.RateLimitByIP(10, time.Minute)(c)
+
+		if db.Redis == nil {
+			RateLimitByIPInMemory(30, time.Minute)(c)
+			return
+		}
+		NewRateLimiter(db.Redis).RateLimitByIP(30, time.Minute)(c)
 	}
 }
 
-// WebSocketRateLimiter provides rate limiting for WebSocket connections
-// FAIL CLOSED: if Redis is unavailable, deny requests to prevent abuse bypass.
+// WebSocketRateLimiter provides rate limiting for WebSocket connections.
+// Falls back to the in-memory limiter when Redis is unavailable.
 func WebSocketRateLimiter() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if db.Redis == nil {
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-				"error": rateLimiterUnavailable,
-			})
-			return
-		}
-		rl := NewRateLimiter(db.Redis)
 		userIDValue, exists := c.Get("userId")
 		if exists && userIDValue != nil {
 			if userIDStr, ok := userIDValue.(string); ok && userIDStr != "" {
 				c.Set("user_id", userIDStr)
-				rl.RateLimitByUser(5, time.Minute)(c)
+				if db.Redis == nil {
+					RateLimitByUserInMemory(5, time.Minute)(c)
+					return
+				}
+				NewRateLimiter(db.Redis).RateLimitByUser(5, time.Minute)(c)
 				return
 			}
 		}
-		rl.RateLimitByIP(5, time.Minute)(c)
+
+		if db.Redis == nil {
+			RateLimitByIPInMemory(5, time.Minute)(c)
+			return
+		}
+		NewRateLimiter(db.Redis).RateLimitByIP(5, time.Minute)(c)
 	}
 }

@@ -111,6 +111,10 @@ func parseNotificationsPagination(c *gin.Context) (int, int, *time.Time) {
 		}
 	}
 
+	if beforeTime != nil && offset > 0 {
+		offset = 0
+	}
+
 	return limit, offset, beforeTime
 }
 
@@ -169,12 +173,12 @@ func fetchNotificationsFromDB(ctx context.Context, userID string, limit, offset 
 		query = query.Where("created_at < ?", *beforeTime)
 	}
 
-	err := query.
-		Order("created_at DESC").
-		Limit(limit).
-		Offset(offset).
-		Find(&notifications).Error
+	query = query.Order("created_at DESC").Limit(limit)
+	if offset > 0 {
+		query = query.Offset(offset)
+	}
 
+	err := query.Find(&notifications).Error
 	return notifications, err
 }
 
@@ -295,4 +299,4 @@ func CreateNotificationTask(c *gin.Context) {
 	}
 
 	api_response.Success(c, gin.H{"status": "Notification enqueued"})
-}
+}

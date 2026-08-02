@@ -126,7 +126,7 @@ func Load() *Config {
 		}
 	}
 
-	c.RateLimitRequests = getEnvInt("RATE_LIMIT_REQUESTS", 200)
+	c.RateLimitRequests = getEnvInt("RATE_LIMIT_REQUESTS", 500)
 	c.RateLimitWindow = getEnv("RATE_LIMIT_WINDOW", "1m")
 
 	// Cookie Security: default to secure in production to prevent
@@ -230,7 +230,7 @@ func LoadSafe() (*Config, error) {
 		}
 	}
 
-	c.RateLimitRequests = getEnvInt("RATE_LIMIT_REQUESTS", 200)
+	c.RateLimitRequests = getEnvInt("RATE_LIMIT_REQUESTS", 500)
 	c.RateLimitWindow = getEnv("RATE_LIMIT_WINDOW", "1m")
 
 	// Cookie Security: default to secure in production to prevent

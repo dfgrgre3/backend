@@ -2,8 +2,12 @@ package handlers
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -92,6 +96,36 @@ func TestBuildSlug(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestParseNotificationsPagination_UsesCursorWhenBeforeProvided(t *testing.T) {
+	c, _ := gin.CreateTestContext(nil)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/notifications?limit=20&offset=15&before=2026-08-02T00:00:00Z", nil)
+
+	limit, offset, before := parseNotificationsPagination(c)
+	assert.Equal(t, 20, limit)
+	assert.Equal(t, 0, offset)
+	if assert.NotNil(t, before) {
+		assert.Equal(t, "2026-08-02T00:00:00Z", before.Format(time.RFC3339))
+	}
+}
+
+func TestAggregateUserCountRows(t *testing.T) {
+	rows := []userAggregateCountRow{
+		{UserID: "u1", Kind: "tasks", Count: 2},
+		{UserID: "u1", Kind: "sessions", Count: 5},
+		{UserID: "u1", Kind: "achievements", Count: 1},
+		{UserID: "u2", Kind: "enrollments", Count: 3},
+		{UserID: "u2", Kind: "tasks", Count: 1},
+	}
+
+	taskMap, sessionMap, achievementMap, enrollmentMap := aggregateUserCountRows(rows)
+
+	assert.EqualValues(t, 2, taskMap["u1"])
+	assert.EqualValues(t, 1, taskMap["u2"])
+	assert.EqualValues(t, 5, sessionMap["u1"])
+	assert.EqualValues(t, 1, achievementMap["u1"])
+	assert.EqualValues(t, 3, enrollmentMap["u2"])
 }
 
 func ptr(s string) *string {

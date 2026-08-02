@@ -4,7 +4,6 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -163,23 +162,51 @@ func (u *User) HasPermission(permission string) bool {
 }
 
 func (u *User) GetEffectivePermissions() []string {
-	perms := []string(u.Permissions)
-
-	if u.Role == RoleAdmin || u.Role == RoleSuperAdmin {
-		if !slices.Contains(perms, PermAdminBypass) {
-			return append(perms, PermAdminBypass)
+	// The effective permission set is the union of the role defaults and the
+	// persisted user permission set, unless the user is in "custom" mode
+	// (indicated by the `permissions:custom` sentinel), in which case ONLY the
+	// stored permissions are used — enabling restrictive per-user customization.
+	//
+	// This ensures that admin/super-admin users get `admin:bypass` (and other
+	// role defaults) automatically, while still allowing per-user overrides
+	// and restrictive custom sets when the sentinel is present.
+	hasCustomSentinel := false
+	for _, p := range u.Permissions {
+		if p == PermPermissionsCustom {
+			hasCustomSentinel = true
+			break
 		}
-		return perms
 	}
 
-	// Add default permissions based on role
-	defaults := GetDefaultPermissions(u.Role)
-	for _, dp := range defaults {
-		if !slices.Contains(perms, dp) {
-			perms = append(perms, dp)
+	perms := make([]string, 0, len(u.Permissions)+8)
+	seen := make(map[string]struct{}, len(u.Permissions)+8)
+
+	// When NOT in custom mode, seed with role default permissions.
+	if !hasCustomSentinel {
+		for _, permission := range GetDefaultPermissions(u.Role) {
+			if permission == "" || permission == PermPermissionsCustom {
+				continue
+			}
+			if _, exists := seen[permission]; exists {
+				continue
+			}
+			seen[permission] = struct{}{}
+			perms = append(perms, permission)
 		}
 	}
 
+	// Merge persisted permissions (additive on top of role defaults, unless
+	// custom mode where only these are used).
+	for _, permission := range u.Permissions {
+		if permission == "" || permission == PermPermissionsCustom {
+			continue
+		}
+		if _, exists := seen[permission]; exists {
+			continue
+		}
+		seen[permission] = struct{}{}
+		perms = append(perms, permission)
+	}
 	return perms
 }
 

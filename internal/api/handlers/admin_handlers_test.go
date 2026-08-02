@@ -93,6 +93,41 @@ func TestCreateUser_CreatesCredential(t *testing.T) {
 	assert.NotEqual(t, body["password"], credential.PasswordHash)
 }
 
+func TestVerifyUserEmailAndPhone_Success(t *testing.T) {
+	testDB := setupTestDB(t)
+	db.DB = testDB
+
+	user := models.User{
+		Email:         "verify.user@example.com",
+		Name:          ptr("Verify User"),
+		EmailVerified: false,
+		PhoneVerified: false,
+	}
+	require.NoError(t, testDB.Create(&user).Error)
+
+	router := setupTestRouter()
+	router.POST("/users/:id/verify-email", VerifyUserEmail)
+	router.POST("/users/:id/verify-phone", VerifyUserPhone)
+
+	emailReq := httptest.NewRequest(http.MethodPost, "/users/"+user.ID+"/verify-email", nil)
+	emailResp := httptest.NewRecorder()
+	router.ServeHTTP(emailResp, emailReq)
+	assert.Equal(t, http.StatusOK, emailResp.Code)
+
+	var updatedEmailUser models.User
+	require.NoError(t, testDB.First(&updatedEmailUser, "id = ?", user.ID).Error)
+	assert.True(t, updatedEmailUser.EmailVerified)
+
+	phoneReq := httptest.NewRequest(http.MethodPost, "/users/"+user.ID+"/verify-phone", nil)
+	phoneResp := httptest.NewRecorder()
+	router.ServeHTTP(phoneResp, phoneReq)
+	assert.Equal(t, http.StatusOK, phoneResp.Code)
+
+	var updatedPhoneUser models.User
+	require.NoError(t, testDB.First(&updatedPhoneUser, "id = ?", user.ID).Error)
+	assert.True(t, updatedPhoneUser.PhoneVerified)
+}
+
 func TestCreateUser_InvalidPasswordDoesNotCreateUser(t *testing.T) {
 	testCases := []struct {
 		name     string

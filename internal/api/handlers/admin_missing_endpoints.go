@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -45,6 +46,102 @@ func AdminListNotifications(c *gin.Context) {
 		"notifications": notifications,
 		"unreadCount":   unreadCount,
 	}})
+}
+
+func GetUserNotifications(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User id is required"})
+		return
+	}
+
+	limit := parsePositiveInt(c.DefaultQuery("limit", "20"), 20)
+	page := parsePositiveInt(c.DefaultQuery("page", "1"), 1)
+	offset := (page - 1) * limit
+
+	var total int64
+	if err := db.DB.Model(&models.Notification{}).Where(userIDQuery, userID).Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count notifications"})
+		return
+	}
+
+	var notifications []models.Notification
+	if err := db.DB.Where(userIDQuery, userID).
+		Order("created_at DESC").
+		Limit(limit).Offset(offset).
+		Find(&notifications).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notifications"})
+		return
+	}
+
+	items := make([]gin.H, 0, len(notifications))
+	for _, item := range notifications {
+		typeValue := "IN_APP"
+		if len(item.Channels) > 0 {
+			joined := strings.ToLower(strings.Join(item.Channels, ","))
+			switch {
+			case strings.Contains(joined, "email"):
+				typeValue = "EMAIL"
+			case strings.Contains(joined, "sms"):
+				typeValue = "SMS"
+			case strings.Contains(joined, "push"):
+				typeValue = "PUSH"
+			}
+		}
+
+		readAt := interface{}(nil)
+		if item.IsRead {
+			readAt = item.UpdatedAt
+		}
+
+		items = append(items, gin.H{
+			"id":        item.ID,
+			"type":      typeValue,
+			"title":     item.Title,
+			"body":      item.Message,
+			"readAt":    readAt,
+			"createdAt": item.CreatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"total": total, "items": items}})
+}
+
+func SendUserNotification(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User id is required"})
+		return
+	}
+
+	var req struct {
+		Title    string                 `json:"title" binding:"required"`
+		Body     string                 `json:"body" binding:"required"`
+		Channels []string               `json:"channels"`
+		Data     map[string]interface{} `json:"data"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.Channels) == 0 {
+		req.Channels = []string{"in-app"}
+	}
+
+	notification := models.Notification{
+		UserID:   userID,
+		Title:    req.Title,
+		Message:  req.Body,
+		Type:     models.NotificationInfo,
+		Channels: models.StringArray(req.Channels),
+		IsRead:   false,
+	}
+	if err := db.DB.Create(&notification).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create notification"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"success": true, "id": notification.ID}})
 }
 
 func AdminMarkNotificationRead(c *gin.Context) {

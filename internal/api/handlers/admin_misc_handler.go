@@ -29,6 +29,45 @@ import (
 
 const coalesceSumDuration = "COALESCE(SUM(duration_min), 0)"
 
+type dashboardMetricSummary struct {
+	TotalUsers         int64 `gorm:"column:total_users"`
+	NewUsersToday      int64 `gorm:"column:new_users_today"`
+	NewUsersThisWeek   int64 `gorm:"column:new_users_this_week"`
+	TotalSubjects      int64 `gorm:"column:total_subjects"`
+	TotalExams         int64 `gorm:"column:total_exams"`
+	CompletedTasks     int64 `gorm:"column:completed_tasks"`
+	StudyMinutes       int64 `gorm:"column:study_minutes"`
+	ExamsTaken         int64 `gorm:"column:exams_taken"`
+	TotalResources     int64 `gorm:"column:total_resources"`
+	ActiveChallenges   int64 `gorm:"column:active_challenges"`
+	AchievementsEarned int64 `gorm:"column:achievements_earned"`
+}
+
+func fetchDashboardMetricSummary(todayStart, weekAgo time.Time) (dashboardMetricSummary, error) {
+	var summary dashboardMetricSummary
+
+	query := `
+		SELECT
+			(SELECT COUNT(*) FROM "User" WHERE "deleted_at" IS NULL) AS total_users,
+			(SELECT COUNT(*) FROM "User" WHERE "deleted_at" IS NULL AND "created_at" >= ?) AS new_users_today,
+			(SELECT COUNT(*) FROM "User" WHERE "deleted_at" IS NULL AND "created_at" >= ?) AS new_users_this_week,
+			(SELECT COUNT(*) FROM "Subject" WHERE "deleted_at" IS NULL) AS total_subjects,
+			(SELECT COUNT(*) FROM "Exam" WHERE "deleted_at" IS NULL) AS total_exams,
+			(SELECT COUNT(*) FROM "Task" WHERE "status" = 'COMPLETED' AND "deleted_at" IS NULL) AS completed_tasks,
+			(SELECT COALESCE(SUM("duration_min"), 0) FROM "StudySession" WHERE "deleted_at" IS NULL) AS study_minutes,
+			(SELECT COUNT(*) FROM "ExamResult" WHERE "deleted_at" IS NULL) AS exams_taken,
+			(SELECT COUNT(*) FROM "SubTopic" WHERE "type" != 'QUIZ' AND "deleted_at" IS NULL) AS total_resources,
+			(SELECT COUNT(*) FROM "Challenge" WHERE "is_active" = true AND "deleted_at" IS NULL) AS active_challenges,
+			(SELECT COUNT(*) FROM "UserAchievement" WHERE "deleted_at" IS NULL) AS achievements_earned
+	`
+
+	if err := db.DB.Raw(query, todayStart, weekAgo).Scan(&summary).Error; err != nil {
+		return dashboardMetricSummary{}, err
+	}
+
+	return summary, nil
+}
+
 // GetCourseChangelog returns the workflow history for a course.
 func GetCourseChangelog(c *gin.Context) {
 	history, err := services.NewWorkflowService().GetCourseWorkflowHistory(c.Param("id"))
@@ -170,7 +209,8 @@ func AdminAIPost(c *gin.Context) {
 
 func AdminBulkSendMessage(c *gin.Context) {
 	var req struct {
-		Message   string   `json:"message" binding:"required"`
+		Message   string   `json:"message" binding:"required_without=Body"`
+		Body      string   `json:"body"`
 		Title     string   `json:"title"`
 		Type      string   `json:"type"`
 		UserIDs   []string `json:"userIds"`
@@ -181,6 +221,13 @@ func AdminBulkSendMessage(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Message == "" {
+		req.Message = req.Body
+	}
+	if req.Message == "" {
+		api_response.Error(c, http.StatusBadRequest, "Message is required")
 		return
 	}
 
@@ -776,73 +823,22 @@ func GetAdminDashboard(c *gin.Context) {
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	weekAgo := now.AddDate(0, 0, -7)
 
-	type dashboardStats struct {
-		TotalUsers         int64 `gorm:"column:total_users"`
-		NewUsersToday      int64 `gorm:"column:new_users_today"`
-		NewUsersThisWeek   int64 `gorm:"column:new_users_this_week"`
-		TotalSubjects      int64 `gorm:"column:total_subjects"`
-		TotalExams         int64 `gorm:"column:total_exams"`
-		CompletedTasks     int64 `gorm:"column:completed_tasks"`
-		TotalStudySessions int64 `gorm:"column:total_study_sessions"`
-		StudyMinutes       int64 `gorm:"column:study_minutes"`
-		ExamsTaken         int64 `gorm:"column:exams_taken"`
-		TotalResources     int64 `gorm:"column:total_resources"`
-		ActiveChallenges   int64 `gorm:"column:active_challenges"`
-		AchievementsEarned int64 `gorm:"column:achievements_earned"`
+	metrics, err := fetchDashboardMetricSummary(todayStart, weekAgo)
+	if err != nil {
+		log.Printf("[GetAdminDashboard] metric summary query failed: %v", err)
+	} else {
+		totalUsers = metrics.TotalUsers
+		newUsersToday = metrics.NewUsersToday
+		newUsersThisWeek = metrics.NewUsersThisWeek
+		totalSubjects = metrics.TotalSubjects
+		totalExams = metrics.TotalExams
+		completedTasks = metrics.CompletedTasks
+		studyMinutes = metrics.StudyMinutes
+		examsTaken = metrics.ExamsTaken
+		totalResources = metrics.TotalResources
+		activeChallenges = metrics.ActiveChallenges
+		achievementsEarned = metrics.AchievementsEarned
 	}
-
-	// Fetch metrics in parallel for better performance
-	var wgMetrics sync.WaitGroup
-	wgMetrics.Add(9)
-
-	go func() {
-		defer wgMetrics.Done()
-		type userCounts struct {
-			Total     int64 `gorm:"column:total"`
-			Today     int64 `gorm:"column:today"`
-			ThisWeek  int64 `gorm:"column:this_week"`
-		}
-		var uc userCounts
-		db.DB.Model(&models.User{}).
-			Select("COUNT(*) as total, COUNT(*) FILTER (WHERE created_at >= ?) as today, COUNT(*) FILTER (WHERE created_at >= ?) as this_week", todayStart, weekAgo).
-			Scan(&uc)
-		totalUsers = uc.Total
-		newUsersToday = uc.Today
-		newUsersThisWeek = uc.ThisWeek
-	}()
-	go func() {
-		defer wgMetrics.Done()
-		db.DB.Model(&models.Subject{}).Count(&totalSubjects)
-	}()
-	go func() {
-		defer wgMetrics.Done()
-		db.DB.Model(&models.Exam{}).Count(&totalExams)
-	}()
-	go func() {
-		defer wgMetrics.Done()
-		db.DB.Model(&models.Task{}).Where("status = ?", "COMPLETED").Count(&completedTasks)
-	}()
-	go func() {
-		defer wgMetrics.Done()
-		db.DB.Model(&models.StudySession{}).Select("COALESCE(SUM(duration_min), 0)").Scan(&studyMinutes)
-	}()
-	go func() {
-		defer wgMetrics.Done()
-		db.DB.Model(&models.ExamResult{}).Count(&examsTaken)
-	}()
-	go func() {
-		defer wgMetrics.Done()
-		db.DB.Model(&models.SubTopic{}).Where("type != ?", "QUIZ").Count(&totalResources)
-	}()
-	go func() {
-		defer wgMetrics.Done()
-		db.DB.Model(&models.Challenge{}).Where("is_active = ?", true).Count(&activeChallenges)
-	}()
-	go func() {
-		defer wgMetrics.Done()
-		db.DB.Model(&models.UserAchievement{}).Count(&achievementsEarned)
-	}()
-	wgMetrics.Wait()
 
 	// Fetch lists in parallel
 	var wg sync.WaitGroup

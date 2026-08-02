@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	"thanawy-backend/internal/models"
 
@@ -23,6 +24,86 @@ func getUserIDFromContext(c *gin.Context) string {
 		}
 	}
 	return ""
+}
+
+// AdminAPIPermissionRequired applies a server-side, deny-by-default permission
+// check to every administrative endpoint. Route visibility in the frontend is
+// only a convenience; this guard is the API security boundary.
+func AdminAPIPermissionRequired() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		required := adminAPIPermission(c.Request.URL.Path, c.Request.Method)
+		if required == "" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Access denied", "code": "insufficient_permission"})
+			return
+		}
+		permsRaw, _ := c.Get("permissions")
+		perms, _ := permsRaw.([]string)
+		for _, grant := range perms {
+			if models.PermissionGrantMatches(grant, required) {
+				c.Next()
+				return
+			}
+		}
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": fmt.Sprintf("Permission '%s' required", required), "code": "insufficient_permission"})
+	}
+}
+
+func adminAPIPermission(path, method string) string {
+	write := method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions
+	for _, rule := range []struct{ prefix, view, manage string }{
+		{"/api/admin/dashboard", models.PermDashboardView, ""},
+		{"/api/admin/users", models.PermUsersView, models.PermUsersManage},
+		{"/api/admin/admins", models.PermUsersManage, models.PermUsersManage},
+		{"/api/admin/teachers", models.PermTeachersView, models.PermTeachersManage},
+		{"/api/admin/instructors", models.PermTeachersView, models.PermTeachersManage},
+		{"/api/admin/analytics", models.PermAnalyticsView, ""},
+		{"/api/admin/reports", models.PermReportsView, models.PermReportsManage},
+		{"/api/admin/courses", models.PermSubjectsView, models.PermSubjectsManage},
+		{"/api/admin/subjects", models.PermSubjectsView, models.PermSubjectsManage},
+		{"/api/admin/course-categories", models.PermSubjectsView, models.PermSubjectsManage},
+		{"/api/admin/learning-paths", models.PermSubjectsView, models.PermSubjectsManage},
+		{"/api/admin/books", models.PermBooksView, models.PermBooksManage},
+		{"/api/admin/resources", models.PermResourcesView, models.PermResourcesManage},
+		{"/api/admin/exams", models.PermExamsView, models.PermExamsManage},
+		{"/api/admin/bank-questions", models.PermExamsView, models.PermExamsManage},
+		{"/api/admin/challenges", models.PermChallengesView, models.PermChallengesManage},
+		{"/api/admin/achievements", models.PermAchievementsView, models.PermAchievementsManage},
+		{"/api/admin/rewards", models.PermRewardsView, models.PermRewardsManage},
+		{"/api/admin/seasons", models.PermSeasonsView, models.PermSeasonsManage},
+		{"/api/admin/marketing", models.PermMarketingView, models.PermMarketingManage},
+		{"/api/admin/coupons", models.PermMarketingView, models.PermMarketingManage},
+		{"/api/admin/announcements", models.PermAnnouncementsView, models.PermAnnouncementsManage},
+		{"/api/admin/notifications", models.PermNotificationsManage, models.PermNotificationsManage},
+		{"/api/admin/forum", models.PermForumView, models.PermForumManage},
+		{"/api/admin/blog", models.PermBlogView, models.PermBlogManage},
+		{"/api/admin/events", models.PermEventsView, models.PermEventsManage},
+		{"/api/admin/contests", models.PermContestsView, models.PermContestsManage},
+		{"/api/admin/tickets", models.PermTicketsView, models.PermTicketsManage},
+		{"/api/admin/live", models.PermLiveMonitorView, models.PermLiveMonitorView},
+		{"/api/admin/health", models.PermLiveMonitorView, models.PermLiveMonitorView},
+		{"/api/admin/ab-testing", models.PermAbTestingView, models.PermAbTestingView},
+		{"/api/admin/media", models.PermResourcesView, models.PermResourcesManage},
+		{"/api/admin/lessons", models.PermSubjectsView, models.PermSubjectsManage},
+		{"/api/admin/landing", models.PermSettingsView, models.PermSettingsView},
+		{"/api/admin/affiliates", models.PermAnalyticsView, models.PermAnalyticsView},
+		{"/api/admin/dunning", models.PermAnalyticsView, models.PermAnalyticsView},
+		{"/api/admin/security", models.PermSettingsView, models.PermSettingsView},
+		{"/api/admin/audit-logs", models.PermAuditLogsView, ""},
+		{"/api/admin/ai", models.PermAiManage, models.PermAiManage},
+		{"/api/admin/automations", models.PermAdminBypass, models.PermAdminBypass},
+		{"/api/admin/backups", models.PermSettingsView, models.PermSettingsView},
+		{"/api/admin/infrastructure", models.PermSettingsView, models.PermSettingsView},
+	} {
+		if strings.HasPrefix(path, rule.prefix) {
+			if write && rule.manage != "" {
+				return rule.manage
+			}
+			return rule.view
+		}
+	}
+	// New endpoints must be explicitly mapped above. Only an explicitly stored
+	// admin:bypass grant can access an unmapped endpoint.
+	return models.PermAdminBypass
 }
 
 // getRoleFromContext returns the current role from the preferred or legacy gin context keys.
@@ -117,11 +198,18 @@ func PermissionRequired(permission string) gin.HandlerFunc {
 		permsRaw, _ := c.Get("permissions")
 		perms, _ := permsRaw.([]string)
 
-		u := &models.User{Permissions: models.JSONStringArray(perms)}
-		roleStr := getRoleFromContext(c)
-		u.Role = models.UserRole(roleStr)
+		// Auth already resolved the effective permissions from the database. Do
+		// not resolve them again here, or role defaults would be restored for a
+		// deliberately restrictive custom permission set.
+		allowed := false
+		for _, grant := range perms {
+			if models.PermissionGrantMatches(grant, permission) {
+				allowed = true
+				break
+			}
+		}
 
-		if !u.HasPermission(permission) {
+		if !allowed {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error": fmt.Sprintf("Permission '%s' required", permission),
 				"code":  "insufficient_permission",

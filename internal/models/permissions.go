@@ -138,6 +138,13 @@ const (
 
 // ── Misc ────────────────────────────────────
 const (
+	// PermPermissionsCustom is a sentinel marker stored alongside a user's
+	// permissions array. When present, GetEffectivePermissions() returns ONLY
+	// the stored permissions without merging role defaults — enabling
+	// restrictive per-user customization. The sentinel itself is not a real
+	// permission and never matches any permission check.
+	PermPermissionsCustom = "permissions:custom"
+
 	PermAchievementsView    = "achievements:view"
 	PermAchievementsManage  = "achievements:manage"
 	PermRewardsView         = "rewards:view"
@@ -340,9 +347,15 @@ func getStudentPermissions() []string {
 //  Permission Validation & Matching
 // ─────────────────────────────────────────────
 
-// permissionGrantMatches checks if a grant matches a required permission with wildcard support.
-func permissionGrantMatches(grant, required string) bool {
+// PermissionGrantMatches checks if a grant matches a required permission with wildcard support.
+// It is exported so middleware can check the already-resolved effective grant list
+// without resolving role defaults a second time.
+func PermissionGrantMatches(grant, required string) bool {
 	if grant == required || grant == PermAdminBypass {
+		return true
+	}
+	// A module-level manage grant includes read access to that same module.
+	if strings.HasSuffix(grant, ":manage") && required == strings.TrimSuffix(grant, ":manage")+":view" {
 		return true
 	}
 	if grant == "*:manage" {
@@ -353,6 +366,11 @@ func permissionGrantMatches(grant, required string) bool {
 		return strings.HasPrefix(required, mod+":")
 	}
 	return false
+}
+
+// permissionGrantMatches remains for package-local compatibility.
+func permissionGrantMatches(grant, required string) bool {
+	return PermissionGrantMatches(grant, required)
 }
 
 // ─────────────────────────────────────────────
@@ -409,4 +427,3 @@ func PermissionModules() []string {
 		"notifications",
 	}
 }
-
