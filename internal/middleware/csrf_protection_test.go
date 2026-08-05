@@ -85,3 +85,18 @@ func TestCSRFMiddleware_RejectsMismatchedToken(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
+
+func TestCSRFMiddleware_AllowsMissingOriginWhenTokenIsValid(t *testing.T) {
+	r := newCSRFTestRouter()
+	token := validTestCSRFToken()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/resource", nil)
+	req.Header.Set(csrfHeaderName, token)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: "session"})
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: token})
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+}

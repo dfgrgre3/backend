@@ -53,8 +53,9 @@ type UserSubscription struct {
 
 	PaymobSubscriptionID *string `gorm:"index;column:paymob_subscription_id" json:"paymobSubscriptionId"`
 
-	CreatedAt time.Time `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt time.Time `gorm:"column:updated_at" json:"updatedAt"`
+	CreatedAt time.Time      `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt time.Time      `gorm:"column:updated_at" json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
 
 	// Relations
 	User User             `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`

@@ -99,6 +99,14 @@ func (ci *CacheInvalidator) InvalidateTeacher(ctx context.Context, id string) {
 	log.Printf("[Cache] Invalidated teacher cache: %s", id)
 }
 
+func (ci *CacheInvalidator) InvalidateNavigation(ctx context.Context) {
+	if db.GetRedis() == nil {
+		return
+	}
+	ci.invalidatePattern(ctx, "navigation:*")
+	log.Printf("[Cache] Invalidated navigation cache")
+}
+
 // del deletes a single exact key from Redis. Uses the live client so it is
 // always safe even if Redis reconnected after this invalidator was created.
 func (ci *CacheInvalidator) del(ctx context.Context, key string) {

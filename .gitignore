@@ -27,11 +27,14 @@ bin/
 .env.local
 .env.*
 !.env.example
+!.env.docker.example
 
 # Also ensure any .env* in subdirectories is ignored
 **/.env
 **/.env.local
 **/.env.*
+!**/.env.example
+!**/.env.docker.example
 
 # ==========================================
 # Go Specific
@@ -166,3 +169,5 @@ internal/proto/**/*connect*.go
 src/gen/
 # Generated Prisma client
 node_modules/.prisma/
+
+testsprite_tests\tmp\config.json

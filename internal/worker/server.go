@@ -4,9 +4,20 @@ import (
 	"context"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/hibiken/asynq"
 )
+
+// getAsynqConcurrency returns the concurrency setting from env var or default
+func getAsynqConcurrency() int {
+	if val := os.Getenv("ASYNQ_CONCURRENCY"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	return 10 // Default concurrency
+}
 
 // StartWorkerWithContext starts the Asynq worker server. It blocks until ctx
 // is cancelled, at which point it performs a graceful shutdown of the server.
@@ -19,10 +30,11 @@ func StartWorkerWithContext(ctx context.Context) {
 
 	opts := parseAsynqRedisConnOpt(redisAddr)
 
+	concurrency := getAsynqConcurrency()
 	srv := asynq.NewServer(
 		opts,
 		asynq.Config{
-			Concurrency: 10,
+			Concurrency: concurrency,
 			Queues: map[string]int{
 				"critical":     6,
 				"default":      3,
@@ -83,7 +95,7 @@ func StartWorkerWithContext(ctx context.Context) {
 		return HandleCourseAvailability(task)
 	})
 
-	log.Printf("[Asynq Worker] Server initialized and listening on Redis %s (Concurrency=10)", redisAddr)
+	log.Printf("[Worker] Asynq Server initialized (Concurrency=%d)", concurrency)
 
 	// Run the server in a separate goroutine so we can listen for ctx.Done
 	errCh := make(chan error, 1)

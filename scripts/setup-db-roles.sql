@@ -49,7 +49,10 @@ GRANT
     SELECT,
     INSERT,
     UPDATE,
-    DELETE
+    DELETE,
+    TRUNCATE,
+    REFERENCES,
+    TRIGGER
 ON ALL TABLES IN SCHEMA public
 TO app_user;
 
@@ -69,7 +72,10 @@ GRANT
     SELECT,
     INSERT,
     UPDATE,
-    DELETE
+    DELETE,
+    TRUNCATE,
+    REFERENCES,
+    TRIGGER
 ON TABLES
 TO app_user;
 
@@ -89,32 +95,52 @@ TO app_user;
 -- ----------------------------------------------------------------------------
 -- Migration privileges
 -- ----------------------------------------------------------------------------
-GRANT ALL ON SCHEMA public TO migration_user;
+GRANT USAGE, CREATE ON SCHEMA public TO migration_user;
 
-GRANT ALL
+GRANT
+    SELECT,
+    INSERT,
+    UPDATE,
+    DELETE,
+    TRUNCATE,
+    REFERENCES,
+    TRIGGER
 ON ALL TABLES IN SCHEMA public
 TO migration_user;
 
-GRANT ALL
+GRANT
+    USAGE,
+    SELECT
 ON ALL SEQUENCES IN SCHEMA public
 TO migration_user;
 
-GRANT ALL
+GRANT
+    EXECUTE
 ON ALL FUNCTIONS IN SCHEMA public
 TO migration_user;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-GRANT ALL
+GRANT
+    SELECT,
+    INSERT,
+    UPDATE,
+    DELETE,
+    TRUNCATE,
+    REFERENCES,
+    TRIGGER
 ON TABLES
 TO migration_user;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-GRANT ALL
+GRANT
+    USAGE,
+    SELECT
 ON SEQUENCES
 TO migration_user;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-GRANT ALL
+GRANT
+    EXECUTE
 ON FUNCTIONS
 TO migration_user;
 

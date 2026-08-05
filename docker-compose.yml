@@ -1,0 +1,256 @@
+# ==========================================
+# Thanawy - Full Stack Development Environment
+# ==========================================
+# Usage:
+#   docker compose up -d              # Start all services
+#   docker compose up -d --profile dev # Start all services including dev tools (Mailpit)
+#   docker compose down               # Stop all services
+#   docker compose down -v            # Stop and remove volumes (WARNING: deletes data)
+#   docker compose ps                 # Check service status
+#   docker compose logs -f            # Follow logs
+#
+# Services:
+#   postgres  - Main database (port 5432)
+#   redis     - Cache, rate limiting, workers (port 6379)
+#   minio     - S3-compatible storage (ports 9000, 9001)
+#   mailpit   - Email testing UI (ports 1025, 8025) [dev profile]
+#   backend   - Go API server (port 8082)
+#   frontend  - Next.js app (port 3000)
+
+name: thanawy
+
+# ==========================================
+# Shared Configuration
+# ==========================================
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-resource-limits: &default-limits
+  deploy:
+    resources:
+      limits:
+        cpus: "1"
+        memory: 1G
+      reservations:
+        cpus: "0.25"
+        memory: 256M
+
+services:
+  # ==========================================
+  # PostgreSQL - Main Database
+  # ==========================================
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-thanawy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-thanawy}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-thanawy} -d ${POSTGRES_DB:-thanawy}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging: *default-logging
+    <<: *default-limits
+    networks:
+      - thanawy-net
+
+  # ==========================================
+  # Redis - Cache, Rate Limiting, Workers
+  # ==========================================
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --save 60 1000 --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+    <<: *default-limits
+    networks:
+      - thanawy-net
+
+  # ==========================================
+  # MinIO - S3-Compatible Storage
+  # ==========================================
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"    # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # Web Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging: *default-logging
+    <<: *default-limits
+    networks:
+      - thanawy-net
+
+  # Creates the default bucket on MinIO startup
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD};
+      mc mb --ignore-existing local/${MINIO_BUCKET:-thanawy};
+      mc anonymous set download local/${MINIO_BUCKET:-thanawy};
+      exit 0;
+      "
+    logging: *default-logging
+    networks:
+      - thanawy-net
+
+  # ==========================================
+  # Mailpit - Email Testing (Dev Profile)
+  # ==========================================
+  mailpit:
+    image: axllent/mailpit:v1.24
+    restart: unless-stopped
+    profiles:
+      - dev
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"  # SMTP server
+      - "${MAILPIT_UI_PORT:-8025}:8025"    # Web UI
+    volumes:
+      - mailpit_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+    <<: *default-limits
+    networks:
+      - thanawy-net
+
+  # ==========================================
+  # Backend - Go API Server
+  # ==========================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-8082}:8082"
+    environment:
+      NODE_ENV: development
+      APP_ENV: development
+      PORT: 8082
+      GIN_MODE: debug
+      DATABASE_URL: postgresql://${POSTGRES_USER:-thanawy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-thanawy}?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      STORAGE_TYPE: s3
+      S3_ENDPOINT: minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${MINIO_BUCKET:-thanawy}
+      S3_USE_SSL: "false"
+      S3_PUBLIC_URL: http://localhost:${MINIO_API_PORT:-9000}/${MINIO_BUCKET:-thanawy}
+      SMTP_ENABLED: "true"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_USER: ""
+      SMTP_PASS: ""
+      SMTP_FROM: "Thanawy <noreply@thanawy.local>"
+    env_file:
+      - path: .env
+        required: false
+    healthcheck:
+      test: ["CMD", "curl", "--silent", "--fail", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    logging: *default-logging
+    <<: *default-limits
+    networks:
+      - thanawy-net
+
+  # ==========================================
+  # Frontend - Next.js App
+  # ==========================================
+  frontend:
+    build:
+      context: ../thanawy
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-8082}/api
+      INTERNAL_API_URL: http://backend:8082
+      NEXT_TELEMETRY_DISABLED: "1"
+    env_file:
+      - path: ../thanawy/frontend/.env
+        required: false
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    logging: *default-logging
+    <<: *default-limits
+    networks:
+      - thanawy-net
+
+# ==========================================
+# Volumes
+# ==========================================
+volumes:
+  postgres_data:
+    name: thanawy-postgres-data
+  redis_data:
+    name: thanawy-redis-data
+  minio_data:
+    name: thanawy-minio-data
+  mailpit_data:
+    name: thanawy-mailpit-data
+
+# ==========================================
+# Networks
+# ==========================================
+networks:
+  thanawy-net:
+    name: thanawy-net
+    driver: bridge

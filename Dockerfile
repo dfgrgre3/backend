@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 ARG VERSION=dev
 ARG COMMIT=unknown
@@ -13,10 +13,13 @@ RUN apk add --no-cache git
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
-COPY cmd/ ./cmd/
-COPY internal/ ./internal/
-COPY pkg/ ./pkg/
-COPY docs/ ./docs/
+COPY . .
+RUN if [ ! -f docs/docs.go ]; then mkdir -p docs && cat > docs/docs.go <<'EOF'
+package docs
+
+// Placeholder Swagger docs package generated at build time when docs/ is absent.
+EOF
+fi
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X thanawy-backend/pkg/buildinfo.Version=${VERSION} -X thanawy-backend/pkg/buildinfo.Commit=${COMMIT} -X thanawy-backend/pkg/buildinfo.BuildTime=${BUILD_TIME}" -o main ./cmd/api/main.go
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o migrate ./cmd/migrate/main.go
 

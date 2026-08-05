@@ -50,6 +50,12 @@ func AdminAPIPermissionRequired() gin.HandlerFunc {
 
 func adminAPIPermission(path, method string) string {
 	write := method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions
+	if strings.HasPrefix(path, "/api/admin/users/") && strings.Contains(path, "/notifications") {
+		if write {
+			return models.PermUsersSendNotifications
+		}
+		return models.PermUsersView
+	}
 	for _, rule := range []struct{ prefix, view, manage string }{
 		{"/api/admin/dashboard", models.PermDashboardView, ""},
 		{"/api/admin/users", models.PermUsersView, models.PermUsersManage},
@@ -60,6 +66,7 @@ func adminAPIPermission(path, method string) string {
 		{"/api/admin/reports", models.PermReportsView, models.PermReportsManage},
 		{"/api/admin/courses", models.PermSubjectsView, models.PermSubjectsManage},
 		{"/api/admin/subjects", models.PermSubjectsView, models.PermSubjectsManage},
+		{"/api/admin/upload", models.PermResourcesView, models.PermResourcesManage},
 		{"/api/admin/course-categories", models.PermSubjectsView, models.PermSubjectsManage},
 		{"/api/admin/learning-paths", models.PermSubjectsView, models.PermSubjectsManage},
 		{"/api/admin/books", models.PermBooksView, models.PermBooksManage},

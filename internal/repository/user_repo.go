@@ -20,13 +20,36 @@ type InMemoryUserCache struct {
 
 var localUserCache sync.Map
 
+var userDeletedAtOnce sync.Once
+var userDeletedAtColumnExists bool
+
+func hasUserDeletedAtColumn() bool {
+	userDeletedAtOnce.Do(func() {
+		if db.DB != nil {
+			userDeletedAtColumnExists = db.DB.Migrator().HasColumn(&models.User{}, "deleted_at")
+		}
+	})
+	return userDeletedAtColumnExists
+}
+
 type UserRepository struct {
 	db *gorm.DB
 	sf singleflight.Group
+	hasDeletedAtColumn bool
 }
 
 func NewUserRepository(db *gorm.DB) *UserRepository {
-	return &UserRepository{db: db}
+	return &UserRepository{
+		db:                 db,
+		hasDeletedAtColumn: hasUserDeletedAtColumn(),
+	}
+}
+
+func (r *UserRepository) activeUserDB() *gorm.DB {
+	if r.hasDeletedAtColumn {
+		return r.db
+	}
+	return r.db.Unscoped()
 }
 
 const (
@@ -66,8 +89,8 @@ func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 			}
 		}
 
-		// Hit Database (Unscoped to bypass soft delete until deleted_at column is added)
-		err := r.db.Unscoped().Where(queryByEmail, email).Take(&user).Error
+		// Hit Database; use the active-user query path when deleted_at exists.
+		err := r.activeUserDB().Where(queryByEmail, email).Take(&user).Error
 		if err == nil && db.Redis != nil {
 			r.cacheUser(&user)
 		}
@@ -82,8 +105,7 @@ func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 
 func (r *UserRepository) FindByEmailNoCache(email string) (*models.User, error) {
 	var user models.User
-	// Note: Using Unscoped() to bypass soft delete until deleted_at column is added
-	err := r.db.Unscoped().Where(queryByEmail, email).Take(&user).Error
+	err := r.activeUserDB().Where(queryByEmail, email).Take(&user).Error
 	return &user, err
 }
 
@@ -142,9 +164,9 @@ func (r *UserRepository) fetchUserFromStore(cacheKey, id string) (*models.User, 
 		}
 	}
 
-	// Hit Database (Unscoped to bypass soft delete until deleted_at column is added)
+	// Hit Database; use the active-user query path when deleted_at exists.
 	var user models.User
-	err := r.db.Unscoped().Take(&user, queryByID, id).Error
+	err := r.activeUserDB().Take(&user, queryByID, id).Error
 	if err == nil && db.Redis != nil {
 		r.cacheUser(&user)
 	}

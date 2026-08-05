@@ -24,6 +24,7 @@ func SetupPublicRoutes(router *gin.Engine) {
 	router.GET("/api/courses", handlers.GetSubjects)
 	router.GET("/api/courses/popular", handlers.GetPopularCourses)
 	router.GET("/api/courses/:id", handlers.GetSubject)
+	router.GET("/api/homepage", handlers.GetHomepageData)
 	router.GET("/api/courses/:id/lessons", handlers.GetCourseLessons)
 	router.GET("/api/lessons/:lessonId/subtitles", handlers.GetLessonSubtitles) // Public subtitles
 	router.GET("/api/lessons/:lessonId/chapters", handlers.GetVideoChapters)    // Public chapters
@@ -79,7 +80,13 @@ func SetupPublicRoutes(router *gin.Engine) {
 		ai.GET("/grade-essay/status/:jobId", handlers.GetEssayGradeStatus)
 		ai.GET("/recommendations", handlers.GetAIRecommendations)
 		ai.POST("/recommendations/track", handlers.TrackAIRecommendation)
+		ai.POST("/search/track", handlers.TrackSearchHistory)
+		ai.GET("/search/history", handlers.GetUserSearchHistory)
 	}
+
+	// Analytics routes (public - for tracking)
+	router.POST("/api/analytics/promo", handlers.TrackPromoEvent)
+	router.POST("/api/analytics/mega-menu", handlers.TrackMegaMenuEvent)
 
 	// Local authentication endpoints
 	oauthRedirectBase := os.Getenv("OAUTH_REDIRECT_BASE_URL")
@@ -193,4 +200,11 @@ func SetupPublicRoutes(router *gin.Engine) {
 
 	// Public Gamification routes
 	router.GET("/api/gamification/leaderboard", handlers.GetLeaderboard)
+
+	// Navigation / Mega Menu routes
+	router.GET("/api/navigation/menu", handlers.GetNavigationMenu)
+	router.GET("/api/navigation/main", handlers.GetMainNavItems)
+
+	// Public Unified Search (courses, resources, teachers, videos)
+	router.GET("/api/search", handlers.PublicSearch)
 }

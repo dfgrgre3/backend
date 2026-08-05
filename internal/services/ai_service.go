@@ -11,9 +11,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/google/uuid"
 	"thanawy-backend/internal/db"
 	"thanawy-backend/internal/models"
+
+	"github.com/google/uuid"
 )
 
 const errAINotEnabled = "AI service is not enabled"
@@ -178,47 +179,148 @@ func (s *AIService) ReviewContent(ctx context.Context, content, subject string) 
 	return result, nil
 }
 
-// GetStudyRecommendations provides personalized study recommendations
+// GetStudyRecommendations provides personalized study recommendations using AI or fallback
 func (s *AIService) GetStudyRecommendations(ctx context.Context, user models.User) ([]map[string]interface{}, error) {
 	if !s.enabled {
-		return nil, fmt.Errorf(errAINotEnabled)
+		// Return rule-based recommendations when AI is not enabled
+		return s.getFallbackRecommendations(user), nil
 	}
 
-	prompt := fmt.Sprintf(`بناءً على بيانات الطالب:
-- المستوى: %s
+	// Try to get AI-powered recommendations
+	prompt := fmt.Sprintf(`بناءً على بيانات الطالب التالية:
+- المستوى الدراسي: %s
 - نوع التعليم: %s
 - الشعبة: %s
 - إجمالي النقاط: %d
-- مستوى النشاط: %d (مستوى %d)
+- المستوى الحالي: %d
+- سلسلة الحضور اليومي: %d أيام
+- آخر نشاط: %s
 
-اقترح خطة دراسية مخصصة.`,
+اقترح 5-7 دورات دراسية مناسبة لهذا الطالب مع الأسباب.`,
 		safeString(user.GradeLevel), safeString(user.EducationType), safeString(user.Section),
-		user.TotalXP, user.Level, user.CurrentStreak)
+		user.TotalXP, user.Level, user.CurrentStreak, user.UpdatedAt.Format("2006-01-02"))
 
-	systemPrompt := "أنت مستشار تعليمي. اقترح دروس ومواضيع للدراسة بناءً على بيانات الطالب."
+	systemPrompt := "أنت مستشار تعليمي خبير. اقترح دورات دراسية محددة ومفصلة تناسب مستوى الطالب واهتماماته، مع تبرير كل اقتراح."
 
-	aiResponse, err := s.callAI(ctx, systemPrompt, prompt, 0.8, 800)
+	aiResponse, err := s.callAI(ctx, systemPrompt, prompt, 0.7, 1200)
 	if err != nil {
 		// Fallback to rule-based recommendations
 		return s.getFallbackRecommendations(user), nil
 	}
 
-	// Parse AI response - for now return structured data
-	recommendations := []map[string]interface{}{
+	// Parse AI response and combine with database courses
+	aiBasedRecs := s.parseAIRecommendations(aiResponse)
+
+	// Get some actual courses from database to complement AI suggestions
+	dbCourses := s.getDatabaseCourseRecommendations(3)
+
+	// Combine both recommendations
+	recommendations := append(aiBasedRecs, dbCourses...)
+
+	return recommendations, nil
+}
+
+// parseAIRecommendations parses AI response into structured recommendations
+func (s *AIService) parseAIRecommendations(aiResponse string) []map[string]interface{} {
+	// For now, return generic recommendations based on AI response
+	// In production, this would parse the AI response more intelligently
+	reasonText := aiResponse
+	if len(aiResponse) > 100 {
+		reasonText = aiResponse[:100]
+	}
+
+	return []map[string]interface{}{
 		{
-			"type":     "subject",
-			"title":    "الفيزياء - الفصل الأول",
-			"reason":   aiResponse,
-			"priority": "high",
-		},
-		{
-			"type":     "practice",
-			"title":    "تدريبات كيمياء",
-			"reason":   "لتحسين درجاتك",
-			"priority": "medium",
+			"type":      "subject",
+			"subjectId": "", // Would be filled by matching with database
+			"title":     "دورة مراجعة شاملة",
+			"reason":    reasonText,
+			"priority":  "high",
 		},
 	}
-	return recommendations, nil
+}
+
+// getDatabaseCourseRecommendations gets course recommendations from database
+func (s *AIService) getDatabaseCourseRecommendations(limit int) []map[string]interface{} {
+	var subjects []models.Subject
+
+	query := db.DB.Model(&models.Subject{}).
+		Where("is_published = ? AND is_active = ?", true, true).
+		Where("status = ?", "PUBLISHED").
+		Order("is_featured DESC").
+		Order("rating DESC").
+		Limit(limit)
+
+	if err := query.Find(&subjects).Error; err != nil {
+		return []map[string]interface{}{}
+	}
+
+	recommendations := make([]map[string]interface{}, 0, len(subjects))
+	for _, subject := range subjects {
+		recommendations = append(recommendations, map[string]interface{}{
+			"type":      "subject",
+			"subjectId": subject.ID,
+			"title":     getDisplayName(subject),
+			"reason":    "دورة عالية الجودة مناسبة لمستواك",
+			"priority":  "medium",
+		})
+	}
+
+	return recommendations
+}
+
+// getFallbackRecommendations provides rule-based recommendations when AI is unavailable
+func (s *AIService) getFallbackRecommendations(user models.User) []map[string]interface{} {
+	recommendations := []map[string]interface{}{}
+
+	// Get top courses from database as fallback
+	var subjects []models.Subject
+	db.DB.Model(&models.Subject{}).
+		Where("is_published = ? AND is_active = ?", true, true).
+		Where("status = ?", "PUBLISHED").
+		Order("is_featured DESC").
+		Order("rating DESC").
+		Limit(5).
+		Find(&subjects)
+
+	for _, subject := range subjects {
+		recommendations = append(recommendations, map[string]interface{}{
+			"type":      "subject",
+			"subjectId": subject.ID,
+			"title":     getDisplayName(subject),
+			"reason":    "دورة مميزة موصى بها",
+			"priority":  "high",
+		})
+	}
+
+	// Add habit-based recommendations
+	if user.CurrentStreak == 0 {
+		recommendations = append(recommendations, map[string]interface{}{
+			"type":     "habit",
+			"title":    "ابدأ سلسلة حضور يومي",
+			"reason":   "الانتظام في الدراسة مهم للنجاح",
+			"priority": "high",
+		})
+	}
+
+	if user.TotalXP < 100 {
+		recommendations = append(recommendations, map[string]interface{}{
+			"type":     "practice",
+			"title":    "تدريبات أساسية",
+			"reason":   "تحتاج لتعزيز نقاطك",
+			"priority": "medium",
+		})
+	}
+
+	return recommendations
+}
+
+// getDisplayName returns Arabic name if available, otherwise English
+func getDisplayName(subject models.Subject) string {
+	if subject.NameAr != nil && *subject.NameAr != "" {
+		return *subject.NameAr
+	}
+	return subject.Name
 }
 
 // AnalyzeRisk analyzes student risk based on activity
@@ -445,11 +547,17 @@ func (s *AIService) callGeminiWithMessages(ctx context.Context, messages []map[s
 		content := m["content"].(string)
 		switch role {
 		case "system":
-			prompt.WriteString("System: ");prompt.WriteString(content);prompt.WriteString("\n")
+			prompt.WriteString("System: ")
+			prompt.WriteString(content)
+			prompt.WriteString("\n")
 		case "user":
-			prompt.WriteString("User: ");prompt.WriteString(content);prompt.WriteString("\n")
+			prompt.WriteString("User: ")
+			prompt.WriteString(content)
+			prompt.WriteString("\n")
 		default:
-			prompt.WriteString("Assistant: ");prompt.WriteString(content);prompt.WriteString("\n")
+			prompt.WriteString("Assistant: ")
+			prompt.WriteString(content)
+			prompt.WriteString("\n")
 		}
 	}
 
@@ -589,29 +697,4 @@ func (s *AIService) LogAIInteraction(action, userID, input, output string) error
 	}
 
 	return tx.Commit().Error
-}
-
-// getFallbackRecommendations provides rule-based recommendations when AI is unavailable
-func (s *AIService) getFallbackRecommendations(user models.User) []map[string]interface{} {
-	recommendations := []map[string]interface{}{}
-
-	if user.CurrentStreak == 0 {
-		recommendations = append(recommendations, map[string]interface{}{
-			"type":     "habit",
-			"title":    "ابدأ سلسلة حضور يومي",
-			"reason":   "الانتظام في الدراسة مهم للنجاح",
-			"priority": "high",
-		})
-	}
-
-	if user.TotalXP < 100 {
-		recommendations = append(recommendations, map[string]interface{}{
-			"type":     "practice",
-			"title":    "تدريبات أساسية",
-			"reason":   "تحتاج لتعزيز نقاطك",
-			"priority": "medium",
-		})
-	}
-
-	return recommendations
 }

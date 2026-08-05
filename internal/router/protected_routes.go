@@ -97,9 +97,6 @@ func SetupProtectedRoutes(router *gin.Engine) {
 			userRoutes.GET("/subjects", handlers.GetUserSubjects)
 			userRoutes.GET("/my-courses", handlers.GetMyCourses)
 
-			// Search
-			userRoutes.GET("/search", handlers.GlobalSearch)
-
 			// Library
 			userRoutes.GET("/library/books", handlers.GetLibraryBooks)
 			userRoutes.POST("/library/books", handlers.CreateLibraryBook)
@@ -148,6 +145,40 @@ func SetupProtectedRoutes(router *gin.Engine) {
 			// Payment routes
 			userRoutes.POST("/payments/create", handlers.CreatePayment)
 			userRoutes.GET("/payments/history", handlers.GetPaymentHistory)
+		}
+
+		// Teaching Dashboard routes (accessible to teachers, admins, and super_admins)
+		teachingRoutes := protected.Group("/teaching")
+		teachingRoutes.Use(middleware.TeacherRequired())
+		teachingRoutes.Use(middleware.StrictRBAC())
+		{
+			// Dashboard
+			teachingRoutes.GET("/dashboard/stats", handlers.GetTeachingDashboardStats)
+
+			// Course management
+			teachingRoutes.GET("/courses", handlers.TeachingListCourses)
+			teachingRoutes.POST("/courses", handlers.TeachingCreateCourse)
+			teachingRoutes.GET("/courses/:id", handlers.TeachingGetCourse)
+			teachingRoutes.PATCH("/courses/:id", handlers.TeachingUpdateCourse)
+			teachingRoutes.DELETE("/courses/:id", handlers.TeachingDeleteCourse)
+
+			// Students
+			teachingRoutes.GET("/courses/:id/students", handlers.TeachingListStudents)
+			teachingRoutes.GET("/students", handlers.TeachingGetAllStudents)
+
+			// Reviews
+			teachingRoutes.GET("/courses/:id/reviews", handlers.TeachingListReviews)
+			teachingRoutes.GET("/reviews", handlers.TeachingGetAllReviews)
+			teachingRoutes.POST("/reviews/:id/reply", handlers.TeachingReplyToReview)
+
+			// Activities & Notifications
+			teachingRoutes.GET("/activities", handlers.TeachingGetActivities)
+			teachingRoutes.GET("/notifications", handlers.TeachingGetNotifications)
+			teachingRoutes.POST("/notifications/:id/read", handlers.TeachingMarkNotificationRead)
+			teachingRoutes.POST("/notifications/read-all", handlers.TeachingMarkAllNotificationsRead)
+
+			// Instructor application (for non-teachers who want to become teachers)
+			teachingRoutes.POST("/apply", handlers.TeachingApplyForInstructor)
 		}
 	}
 }

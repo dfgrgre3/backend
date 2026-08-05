@@ -194,10 +194,16 @@ func TestPermissionConstants(t *testing.T) {
 	assert.Equal(t, "analytics:view", PermAnalyticsView)
 	assert.Equal(t, "users:view", PermUsersView)
 	assert.Equal(t, "users:manage", PermUsersManage)
+	assert.Equal(t, "users:send:notifications", PermUsersSendNotifications)
 	assert.Equal(t, "subjects:view", PermSubjectsView)
 	assert.Equal(t, "subjects:manage", PermSubjectsManage)
 	assert.Equal(t, "admin:bypass", PermAdminBypass)
 	assert.Equal(t, "system:manage", PermSystemManage)
+}
+
+func TestPermissionGrantMatches_ManageIncludesSubPermissions(t *testing.T) {
+	assert.True(t, permissionGrantMatches("users:manage", "users:send:notifications"))
+	assert.True(t, permissionGrantMatches("resources:manage", "resources:publish"))
 }
 
 func TestHasPermission_MultiplePermissions(t *testing.T) {

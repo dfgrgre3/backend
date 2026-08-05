@@ -47,6 +47,22 @@ import (
 )
 
 func Run() {
+	// Log startup in UTC to avoid timezone confusion in logs
+	log.SetFlags(0) // We control the format below
+	log.Println(strings.Repeat("=", 60))
+	log.Printf("[STARTUP] Thanawy Backend starting at %s (UTC)", time.Now().UTC().Format(time.RFC3339))
+
+	// Log configuration source
+	if os.Getenv("APP_ENV") == "" || os.Getenv("APP_ENV") == "development" {
+		if _, err := os.Stat(".env"); err == nil {
+			log.Println("[CONFIG] Loading configuration from .env file")
+		} else {
+			log.Println("[CONFIG] Using system environment variables (no .env file found)")
+		}
+	} else {
+		log.Println("[CONFIG] Using environment variables (production mode)")
+	}
+
 	// Load environment variables only in development
 	if os.Getenv("APP_ENV") == "" || os.Getenv("APP_ENV") == "development" {
 		if err := godotenv.Load(); err != nil {
@@ -444,8 +460,8 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers) *gin.Engine {
 			redisLatencyMs = 0
 		}
 		c.JSON(200, gin.H{
-			"status":          "UP",
-			"redis_ok":        redisOK,
+			"status":           "UP",
+			"redis_ok":         redisOK,
 			"redis_latency_ms": redisLatencyMs,
 		})
 	})

@@ -92,6 +92,13 @@ func extractBearerToken(c *gin.Context) string {
 	if strings.HasPrefix(authHeader, "Bearer ") {
 		return strings.TrimPrefix(authHeader, "Bearer ")
 	}
+	// WebSocket clients cannot set custom Authorization headers. The browser
+	// client therefore sends the access token as a query parameter when opening
+	// /api/ws. Keep headers/cookies as the preferred sources for normal HTTP
+	// requests, and only use the query parameter as a fallback.
+	if token := c.Query("access_token"); token != "" {
+		return token
+	}
 	if cookie, err := c.Cookie("access_token"); err == nil && cookie != "" {
 		return cookie
 	}

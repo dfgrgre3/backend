@@ -1,4 +1,4 @@
-.PHONY: help build test lint fmt clean migrate-up migrate-down run dev install-deps
+.PHONY: help build test lint fmt clean migrate-up migrate-down run dev install-deps docker-up docker-down docker-down-v docker-ps docker-logs docker-restart backend frontend logs redis-cli postgres clean
 
 # Variables
 APP_NAME=thanawy-backend
@@ -21,6 +21,17 @@ help:
 	@echo "  make run           - Run the API server"
 	@echo "  make dev           - Run in development mode with hot reload"
 	@echo "  make install-deps  - Install Go dependencies"
+	@echo "  make docker-up     - Start infrastructure (Postgres, Redis, MinIO, Mailpit)"
+	@echo "  make docker-down   - Stop infrastructure (keeps data)"
+	@echo "  make docker-down-v - Stop infrastructure and delete data (WARNING)"
+	@echo "  make docker-ps     - Show infrastructure status"
+	@echo "  make docker-logs   - Follow infrastructure logs"
+	@echo "  make docker-restart - Restart infrastructure"
+	@echo "  make backend       - Start backend service"
+	@echo "  make frontend      - Start frontend service"
+	@echo "  make logs          - Follow all service logs"
+	@echo "  make redis-cli     - Open Redis CLI"
+	@echo "  make postgres      - Open PostgreSQL shell"
 
 # Build the application
 build:
@@ -91,6 +102,108 @@ install-deps:
 	$(GO) mod download
 	$(GO) mod tidy
 	@echo "Dependencies installed"
+
+# ==========================================
+# Docker Compose (Development Infrastructure)
+# ==========================================
+# Start all infrastructure services (Postgres, Redis, MinIO, Mailpit)
+docker-up:
+	@echo "Starting infrastructure services (Postgres, Redis, MinIO, Mailpit)..."
+	@if [ -f .env.docker ]; then \
+		docker compose --env-file .env.docker up -d; \
+	else \
+		docker compose up -d; \
+	fi
+	@echo "Services started. Check status with: make docker-ps"
+
+# Stop all infrastructure services (keeps data volumes)
+docker-down:
+	@echo "Stopping infrastructure services..."
+	@if [ -f .env.docker ]; then \
+		docker compose --env-file .env.docker down; \
+	else \
+		docker compose down; \
+	fi
+	@echo "Services stopped. Data volumes preserved."
+
+# Stop services AND remove data volumes (WARNING: deletes all data)
+docker-down-v:
+	@echo "WARNING: This will delete all data volumes!"
+	@read -p "Type 'yes' to confirm: " confirm; \
+	if [ "$$confirm" = "yes" ]; then \
+		if [ -f .env.docker ]; then \
+			docker compose --env-file .env.docker down -v; \
+		else \
+			docker compose down -v; \
+		fi; \
+		echo "Services stopped and volumes removed."; \
+	else \
+		echo "Aborted."; \
+	fi
+
+# Show status of infrastructure services
+docker-ps:
+	@if [ -f .env.docker ]; then \
+		docker compose --env-file .env.docker ps; \
+	else \
+		docker compose ps; \
+	fi
+
+# Follow logs of infrastructure services
+docker-logs:
+	@if [ -f .env.docker ]; then \
+		docker compose --env-file .env.docker logs -f; \
+	else \
+		docker compose logs -f; \
+	fi
+
+# Restart all infrastructure services
+docker-restart:
+	@echo "Restarting infrastructure services..."
+	@if [ -f .env.docker ]; then \
+		docker compose --env-file .env.docker restart; \
+	else \
+		docker compose restart; \
+	fi
+	@echo "Services restarted."
+
+# Start backend service
+backend:
+	@echo "Starting backend service..."
+	@if [ -f .env.docker ]; then \
+		docker compose --env-file .env.docker up -d backend; \
+	else \
+		docker compose up -d backend; \
+	fi
+
+# Start frontend service
+frontend:
+	@echo "Starting frontend service..."
+	@if [ -f .env.docker ]; then \
+		docker compose --env-file .env.docker up -d frontend; \
+	else \
+		docker compose up -d frontend; \
+	fi
+
+# Follow all service logs
+logs:
+	@if [ -f .env.docker ]; then \
+		docker compose --env-file .env.docker logs -f --tail=100; \
+	else \
+		docker compose logs -f --tail=100; \
+	fi
+
+# Open Redis CLI
+redis-cli:
+	@docker exec -it thanawy-redis redis-cli
+
+# Open PostgreSQL shell
+postgres:
+	@if [ -f .env.docker ]; then \
+		docker exec -it thanawy-postgres psql -U $$(grep POSTGRES_USER .env.docker | cut -d= -f2) -d $$(grep POSTGRES_DB .env.docker | cut -d= -f2); \
+	else \
+		docker exec -it thanawy-postgres psql -U thanawy -d thanawy; \
+	fi
 
 # Install development tools
 install-tools:

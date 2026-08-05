@@ -2,9 +2,11 @@ package logger
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"runtime"
 	"strings"
@@ -58,6 +60,13 @@ func init() {
 			Addresses: []string{esURL},
 		}
 
+		// Support TLS connections via ELASTICSEARCH_TLS env var or https:// prefix
+		if os.Getenv("ELASTICSEARCH_TLS") == "true" || strings.HasPrefix(esURL, "https://") {
+			cfg.Transport = &http.Transport{
+				TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+			}
+		}
+
 		if user := os.Getenv("ELASTICSEARCH_USERNAME"); user != "" {
 			cfg.Username = user
 			cfg.Password = os.Getenv("ELASTICSEARCH_PASSWORD")
@@ -66,7 +75,8 @@ func init() {
 		client, err := elasticsearch.NewClient(cfg)
 		if err == nil {
 			defaultLogger.esClient = client
-			log.Printf("Elasticsearch logger initialized for Go at %s", esURL)
+			// Log without sensitive endpoint details - only indicate initialization success
+			log.Println("Elasticsearch logger initialized successfully")
 		} else {
 			log.Printf("Failed to initialize Elasticsearch client: %v", err)
 		}

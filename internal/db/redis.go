@@ -63,13 +63,13 @@ func ConnectRedis(ctx context.Context, url string) error {
 	// Configure Redis connection pooling for massive scale. Defaults are safe for
 	// a few app replicas and can be tuned per deployment without code changes.
 	poolSize, minIdleConns := redisPoolDefaults()
-	opts.PoolSize        = getRedisInt("REDIS_POOL_SIZE", poolSize)
-	opts.MinIdleConns    = getRedisInt("REDIS_MIN_IDLE_CONNS", minIdleConns)
-	opts.MaxRetries      = getRedisInt("REDIS_MAX_RETRIES", 5)
-	opts.DialTimeout     = 5 * time.Second
-	opts.ReadTimeout     = 2 * time.Second
-	opts.WriteTimeout    = 2 * time.Second
-	opts.PoolTimeout     = 4 * time.Second
+	opts.PoolSize = getRedisInt("REDIS_POOL_SIZE", poolSize)
+	opts.MinIdleConns = getRedisInt("REDIS_MIN_IDLE_CONNS", minIdleConns)
+	opts.MaxRetries = getRedisInt("REDIS_MAX_RETRIES", 5)
+	opts.DialTimeout = 5 * time.Second
+	opts.ReadTimeout = 2 * time.Second
+	opts.WriteTimeout = 2 * time.Second
+	opts.PoolTimeout = 4 * time.Second
 	opts.ConnMaxLifetime = 30 * time.Minute
 	// Release idle connections after 10 minutes to avoid holding connections
 	// that the Redis server may have already closed server-side.
@@ -88,12 +88,24 @@ func ConnectRedis(ctx context.Context, url string) error {
 			redisMu.Lock()
 			Redis = client
 			redisMu.Unlock()
-			log.Printf("Redis connection established (PoolSize=%d, MinIdleConns=%d)", opts.PoolSize, opts.MinIdleConns)
+			// Sanitize URL for logging - don't expose credentials
+			safeURL := sanitizeRedisURL(url)
+			tlsInfo := ""
+			if opts.TLSConfig != nil || strings.HasPrefix(url, "rediss://") {
+				tlsInfo = " (TLS enabled)"
+			}
+			if attempt > 1 {
+				log.Printf("Redis reconnection successful%s (attempt %d, PoolSize=%d, MinIdleConns=%d) [source: %s]",
+					tlsInfo, attempt, opts.PoolSize, opts.MinIdleConns, safeURL)
+			} else {
+				log.Printf("Redis connection established%s (PoolSize=%d, MinIdleConns=%d) [source: %s]",
+					tlsInfo, opts.PoolSize, opts.MinIdleConns, safeURL)
+			}
 			checkRedisVersion(ctx, client)
 			return nil
 		}
 		if attempt < attempts {
-			log.Printf("Redis is not ready (attempt %d/%d): %v. Retrying in %s...", attempt, attempts, lastErr, delay)
+			log.Printf("Redis connection attempt %d/%d failed: %v. Retrying in %s...", attempt, attempts, lastErr, delay)
 			select {
 			case <-ctx.Done():
 				_ = client.Close()
@@ -152,8 +164,24 @@ func checkRedisVersion(ctx context.Context, client *redis.Client) {
 					return
 				}
 			}
+			// Only log at debug level to avoid exposing version in production logs
 			log.Printf("Redis server version: %s", versionStr)
 			return
 		}
 	}
+}
+
+// sanitizeRedisURL removes credentials from Redis URL for safe logging
+func sanitizeRedisURL(url string) string {
+	if url == "" {
+		return "<not set>"
+	}
+	// If URL contains @, it likely has credentials embedded
+	if strings.Contains(url, "@") {
+		// Try to parse and reconstruct safely
+		if u, err := redis.ParseURL(url); err == nil {
+			return fmt.Sprintf("redis://%s/%d", u.Addr, u.DB)
+		}
+	}
+	return url
 }

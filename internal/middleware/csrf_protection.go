@@ -207,11 +207,11 @@ func validateOrigin(c *gin.Context) bool {
 		origin = c.GetHeader("Referer")
 	}
 	if origin == "" {
-		return true // Fallback for client requests without headers
+		return false // Require a browser-originating request for state-changing operations.
 	}
 
 	parsedOrigin, err := url.Parse(origin)
-	if err != nil {
+	if err != nil || parsedOrigin.Host == "" {
 		return false
 	}
 
@@ -253,16 +253,20 @@ func CSRFMiddleware() gin.HandlerFunc {
 
 		// Apply CSRF protection for state-changing requests in production
 		if shouldEnforceCSRF(c) {
-			if !validateOrigin(c) {
+			if !validateCSRFToken(c) {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-					"error": "CSRF origin validation failed",
+					"error": "CSRF token validation failed",
 				})
 				return
 			}
 
-			if !validateCSRFToken(c) {
+			origin := c.GetHeader("Origin")
+			if origin == "" {
+				origin = c.GetHeader("Referer")
+			}
+			if origin != "" && !validateOrigin(c) {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-					"error": "CSRF token validation failed",
+					"error": "CSRF origin validation failed",
 				})
 				return
 			}
@@ -271,3 +275,4 @@ func CSRFMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+

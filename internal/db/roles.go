@@ -2,10 +2,8 @@ package db
 
 import (
 	"fmt"
-	"log"
 	"net/url"
 	"os"
-	"strings"
 )
 
 // DBRole represents the database role to use for connections
@@ -16,8 +14,6 @@ const (
 	RoleApp DBRole = "app_user"
 	// RoleMigration is the privileged role for schema migrations
 	RoleMigration DBRole = "migration_user"
-	// RoleAdmin is the superuser role for administrative tasks
-	RoleAdmin DBRole = "postgres"
 )
 
 // GetDSNForRole returns the DSN with the `role` query parameter set to the
@@ -41,16 +37,6 @@ func GetDSNForRole(baseDSN string, role DBRole) (string, error) {
 	u.RawQuery = q.Encode()
 
 	return u.String(), nil
-}
-
-// extractRole extracts the role parameter from a DSN string for logging purposes.
-// It uses url.Parse for safety, falling back to an empty string on any error.
-func extractRole(dsn string) string {
-	u, err := url.Parse(dsn)
-	if err != nil {
-		return ""
-	}
-	return u.Query().Get("role")
 }
 
 // GetAppDSN returns the DSN configured for application operations
@@ -82,44 +68,4 @@ func GetMigrationDSN() (string, error) {
 	}
 
 	return GetDSNForRole(baseDSN, RoleMigration)
-}
-
-// GetAdminDSN returns the DSN configured for administrative operations
-func GetAdminDSN() (string, error) {
-	if adminDSN := os.Getenv("DATABASE_ADMIN_DSN"); adminDSN != "" {
-		return adminDSN, nil
-	}
-
-	baseDSN := os.Getenv("DATABASE_URL")
-	if baseDSN == "" {
-		baseDSN = os.Getenv("DATABASE_WRITE_DSN")
-	}
-	if baseDSN == "" {
-		return "", fmt.Errorf("DATABASE_URL or DATABASE_WRITE_DSN must be set")
-	}
-
-	return GetDSNForRole(baseDSN, RoleAdmin)
-}
-
-// SetupDatabaseRoles logs the role configuration during application initialisation.
-func SetupDatabaseRoles() {
-	appDSN, err := GetAppDSN()
-	if err != nil {
-		log.Printf("[WARN] Failed to get app DSN: %v", err)
-	} else {
-		log.Printf("[DB Roles] App DSN configured with role: %s", extractRole(appDSN))
-	}
-
-	migrationDSN, err := GetMigrationDSN()
-	if err != nil {
-		log.Printf("[WARN] Failed to get migration DSN: %v", err)
-	} else {
-		// Avoid logging the full DSN; show only the role for safety.
-		role := extractRole(migrationDSN)
-		if role == "" {
-			// DATABASE_MIGRATION_DSN may not have a role parameter
-			role = "(dedicated migration DSN)"
-		}
-		log.Printf("[DB Roles] Migration DSN configured with role: %s", strings.TrimSpace(role))
-	}
 }

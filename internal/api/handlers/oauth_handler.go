@@ -274,7 +274,7 @@ func (h *OAuthHandler) OAuthCallback(c *gin.Context) {
 	// Set cookies
 	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie("access_token", tokenPair.AccessToken, 15*60, "/", "", secureCookie(c), true)
-	c.SetCookie("refresh_token", tokenPair.RefreshToken, 30*24*60*60, "/api/auth", "", secureCookie(c), true)
+	c.SetCookie("refresh_token", tokenPair.RefreshToken, 30*24*60*60, "/", "", secureCookie(c), true)
 
 	// Redirect to frontend dashboard or return payload
 	frontendURL := os.Getenv("FRONTEND_DASHBOARD_URL")

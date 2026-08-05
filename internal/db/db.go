@@ -61,7 +61,7 @@ func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
 			log.Printf("[DB] Using app role connection to respect RLS policies")
 		}
 	} else {
-		log.Printf("[DB] Using direct database connection (app role disabled)")
+		log.Printf("[DB] Using direct database connection (app role disabled). Set DATABASE_USE_APP_ROLE=true to enable Row Level Security.")
 	}
 
 	db, err := gorm.Open(postgres.Open(appDSN), &gorm.Config{
@@ -118,47 +118,18 @@ func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
 
 	DB = db
 	log.Printf("Database connection established with Read-Write splitting and Monitoring.")
-	log.Println("Database ready. Schema changes are controlled by explicit migration flags.")
 
-	return db, nil
-}
-
-// ConnectForMigration creates a connection with migration_user role for schema changes.
-// NOTE: this does NOT set the global DB variable — migration connections are
-// intentionally kept separate from the application connection pool.
-func ConnectForMigration(dsn string) (*gorm.DB, error) {
-	// Use migration role for schema changes.
-	migrationDSN, err := GetMigrationDSN()
-	if err != nil {
-		log.Printf("[WARN] Failed to get migration DSN, falling back to provided DSN: %v", err)
-		migrationDSN = dsn
-	} else {
-		log.Printf("[DB] Using migration_user role for schema changes")
-	}
-
-	db, err := gorm.Open(postgres.Open(migrationDSN), &gorm.Config{
-		Logger:         buildGormLogger(),
-		PrepareStmt:    !usesPgBouncer(migrationDSN),
-		NamingStrategy: LegacySchemaNamingStrategy{},
-	})
-	if err != nil {
-		return nil, err
-	}
-
+	// Verify connection with immediate Ping (fail-fast)
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
 	}
-
-	pool := getPoolSettings()
-	sqlDB.SetMaxIdleConns(pool.MaxIdleConns)
-	sqlDB.SetMaxOpenConns(pool.MaxOpenConns)
-	sqlDB.SetConnMaxLifetime(pool.MaxLifetime)
-	sqlDB.SetConnMaxIdleTime(pool.MaxIdleTime)
-
-	// Do NOT assign to DB — migration connections are independent of the
-	// application read/write pool to avoid corrupting the CQRS routing.
-	log.Printf("Database connection established for migrations with migration_user role")
+	pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := sqlDB.PingContext(pingCtx); err != nil {
+		return nil, fmt.Errorf("database ping failed - connection is not functional: %w", err)
+	}
+	log.Println("Database ready. Schema changes are controlled by explicit migration flags.")
 
 	return db, nil
 }

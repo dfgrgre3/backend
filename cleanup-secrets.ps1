@@ -6,31 +6,39 @@ param(
     [string]$RepoPath = (Get-Location).Path,
     
     [switch]$Force,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$SkipBackup
 )
 
 $DebugPreference = "Continue"
 Write-Host "🔒 Security Incident Response Script" -ForegroundColor Cyan
 Write-Host "=====================================`n" -ForegroundColor Cyan
 
-# Step 1: Backup .env files (for reference only)
-Write-Host "📦 Step 1: Backing up .env files..." -ForegroundColor Yellow
-$backupDir = "$RepoPath\.env_backup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-
-if (-not (Test-Path $backupDir)) {
-    New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+if (-not $SkipBackup) {
+    Write-Host "📦 Step 1: Skipping .env backup by default to avoid local secret exposure." -ForegroundColor Yellow
+    Write-Host "   Use -Force only when a temporary secure copy is required." -ForegroundColor Yellow
+} else {
+    Write-Host "📦 Step 1: Backing up .env files to a secure temporary location..." -ForegroundColor Yellow
 }
 
-$envFiles = Get-ChildItem -Path $RepoPath -Name ".env*" -ErrorAction SilentlyContinue
-if ($envFiles) {
-    foreach ($file in $envFiles) {
-        $srcPath = Join-Path $RepoPath $file
-        $dstPath = Join-Path $backupDir $file
-        Copy-Item -Path $srcPath -Destination $dstPath -Force
-        Write-Host "  ✓ Backed up: $file → $backupDir" -ForegroundColor Green
+$backupDir = ""
+if ($SkipBackup -and $Force) {
+    $backupDir = Join-Path $env:TEMP ".env_backup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+    if (-not (Test-Path $backupDir)) {
+        New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
     }
-} else {
-    Write-Host "  ℹ No .env files found to backup" -ForegroundColor Gray
+
+    $envFiles = Get-ChildItem -Path $RepoPath -Name ".env*" -ErrorAction SilentlyContinue
+    if ($envFiles) {
+        foreach ($file in $envFiles) {
+            $srcPath = Join-Path $RepoPath $file
+            $dstPath = Join-Path $backupDir $file
+            Copy-Item -Path $srcPath -Destination $dstPath -Force
+            Write-Host "  ✓ Backed up: $file → $backupDir" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "  ℹ No .env files found to backup" -ForegroundColor Gray
+    }
 }
 
 # Step 2: Remove .env files locally

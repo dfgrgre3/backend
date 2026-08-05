@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,7 +18,8 @@ import (
 
 func GetCategories(c *gin.Context) {
 	categoryType := c.Query("type")
-	cacheKey := fmt.Sprintf("category:list:type:%s", categoryType)
+	limitStr := c.Query("limit")
+	cacheKey := fmt.Sprintf("category:list:type:%s:limit:%s", categoryType, limitStr)
 
 	if db.Redis != nil {
 		cached, err := db.Redis.Get(c.Request.Context(), cacheKey).Result()
@@ -39,6 +41,13 @@ func GetCategories(c *gin.Context) {
 	query := database.Select("id", "name", "slug", "icon", "description", "type", "created_at")
 	if categoryType != "" {
 		query = query.Where("type = ?", categoryType)
+	}
+
+	// Apply limit if provided
+	if limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			query = query.Limit(limit)
+		}
 	}
 
 	if err := query.Order("created_at desc").Find(&categories).Error; err != nil {

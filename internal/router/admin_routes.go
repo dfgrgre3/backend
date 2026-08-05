@@ -274,6 +274,15 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST("/media", handlers.AdminCreateMedia)
 		admin.GET("/media/tags", handlers.AdminGetMediaTags)
 
+		// Upload
+		admin.POST("/upload/presign", handlers.PresignUpload)
+		admin.POST("/upload", handlers.Upload)
+		admin.DELETE("/upload", handlers.DeleteUpload)
+		admin.POST("/upload/chunked", handlers.UploadChunked)
+		admin.PUT("/upload/chunked", handlers.UploadChunked)
+		admin.PATCH("/upload/chunked", handlers.UploadChunked)
+		admin.GET("/upload/chunked/:uploadId/status", handlers.GetUploadStatus)
+
 		// Landing Page
 		admin.GET("/landing", handlers.AdminListLandingSections)
 		admin.POST("/landing", handlers.AdminUpsertLandingSection)

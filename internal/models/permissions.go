@@ -45,6 +45,7 @@ const (
 	PermUsersImpersonate = "users:impersonate"
 	PermUsersExport      = "users:export"
 	PermUsersImport      = "users:import"
+	PermUsersSendNotifications = "users:send:notifications"
 	PermStudentsView     = "students:view"
 	PermStudentsManage   = "students:manage"
 	PermTeachersView     = "teachers:view"
@@ -275,7 +276,7 @@ func getModeratorPermissions() []string {
 		PermRewardsView,
 		PermLiveMonitorView, PermMarketingView,
 		PermSettingsView,
-		PermNotificationsSend,
+		PermNotificationsSend, PermNotificationsManage,
 	}
 }
 
@@ -354,9 +355,13 @@ func PermissionGrantMatches(grant, required string) bool {
 	if grant == required || grant == PermAdminBypass {
 		return true
 	}
-	// A module-level manage grant includes read access to that same module.
-	if strings.HasSuffix(grant, ":manage") && required == strings.TrimSuffix(grant, ":manage")+":view" {
-		return true
+	// A module-level manage grant includes read access to that same module and
+	// grants more specific submodule actions under the same module.
+	if strings.HasSuffix(grant, ":manage") {
+		module := strings.TrimSuffix(grant, ":manage")
+		if required == module+":view" || strings.HasPrefix(required, module+":") {
+			return true
+		}
 	}
 	if grant == "*:manage" {
 		return strings.HasSuffix(required, ":manage")
@@ -406,6 +411,7 @@ func AllPermissions() []string {
 		PermAbTestingView, PermSettingsView,
 		PermSeasonsView, PermSeasonsManage,
 		PermNotificationsSend, PermNotificationsManage,
+		PermUsersSendNotifications,
 	}
 }
 

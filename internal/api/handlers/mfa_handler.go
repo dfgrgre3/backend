@@ -297,7 +297,7 @@ func (h *MFAHandler) VerifyMFA(c *gin.Context) {
 	secureCookie := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
 	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie("access_token", tokenPair.AccessToken, 15*60, "/", "", secureCookie, true)
-	c.SetCookie("refresh_token", tokenPair.RefreshToken, 30*24*60*60, "/api/auth", "", secureCookie, true)
+	c.SetCookie("refresh_token", tokenPair.RefreshToken, 30*24*60*60, "/", "", secureCookie, true)
 
 	response.Success(c, gin.H{
 		"accessToken": tokenPair.AccessToken,

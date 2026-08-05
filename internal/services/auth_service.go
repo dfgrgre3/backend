@@ -858,8 +858,9 @@ func (s *authService) ResendVerificationEmail(ctx context.Context, userID string
 }
 
 func (s *authService) GetCurrentUser(ctx context.Context, userID string) (*dto.UserDTO, error) {
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("id = ? AND deleted_at IS NULL", userID).First(&user).Error; err != nil {
+	userRepo := repository.NewUserRepository(db.DB)
+	user, err := userRepo.FindByID(userID)
+	if err != nil {
 		return nil, errors.New("user not found")
 	}
 

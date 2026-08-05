@@ -183,12 +183,15 @@ func (s *authTokenService) ValidateAccessToken(tokenString string) (*CustomClaim
 	claims = &CustomClaims{}
 	var token *jwt.Token
 	token, err = jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		if token.Method == nil || token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return []byte(s.cfg.JWTSecretKey), nil
-	}, jwt.WithAudience("thanawy-api"))
-	if err == nil && token.Valid {
+	}, jwt.WithAudience("thanawy-api"), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	if err == nil && token != nil && token.Valid {
+		if claims.ExpiresAt == nil {
+			return nil, errors.New("token missing exp claim")
+		}
 		if claims.UserID == "" {
 			claims.UserID = claims.Subject
 		}
@@ -201,16 +204,19 @@ func (s *authTokenService) ValidateAccessToken(tokenString string) (*CustomClaim
 		if parseErr == nil {
 			claims = &CustomClaims{}
 			token, err = jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-				if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+				if token.Method == nil || token.Method.Alg() != jwt.SigningMethodRS256.Alg() {
 					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 				}
 				return publicKey, nil
-			}, jwt.WithIssuer(s.cfg.JWTIssuerURL), jwt.WithAudience("thanawy-api"))
+			}, jwt.WithIssuer(s.cfg.JWTIssuerURL), jwt.WithAudience("thanawy-api"), jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}))
 			if err != nil {
 				return nil, err
 			}
-			if !token.Valid {
+			if token == nil || !token.Valid {
 				return nil, errors.New("invalid token")
+			}
+			if claims.ExpiresAt == nil {
+				return nil, errors.New("token missing exp claim")
 			}
 			if claims.Subject == "" {
 				return nil, errors.New("missing subject")
@@ -220,7 +226,6 @@ func (s *authTokenService) ValidateAccessToken(tokenString string) (*CustomClaim
 			return nil, fmt.Errorf("invalid JWT secret key: %w", parseErr)
 		}
 	} else {
-		// JWTIssuerURL is not set, propagate the original HMAC error
 		return nil, err
 	}
 

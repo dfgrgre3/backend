@@ -18,7 +18,7 @@ type MailTask struct {
 	To        string         `gorm:"index;size:255" json:"to"`
 	Subject   string         `gorm:"size:255" json:"subject"`
 	Body      string         `gorm:"type:text" json:"body"`
-	Status    string         `gorm:"index;size:50;default:'pending'" json:"status"` // pending, sent, failed, retry
+	Status    string         `gorm:"index;size:50;default:'pending'" json:"status"` // pending, processing, sent, failed, retry
 	Attempts  int            `gorm:"default:0" json:"attempts"`
 	MaxRetry  int            `gorm:"default:3" json:"maxRetry"`
 	LastError string         `gorm:"type:text" json:"lastError"`
@@ -26,6 +26,19 @@ type MailTask struct {
 	UpdatedAt time.Time      `json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
+
+// Polling behaviour. When the queue is empty the worker backs off
+// exponentially up to maxPollInterval instead of hammering the database every
+// 10s, and drops straight back to minPollInterval as soon as work appears.
+const (
+	minPollInterval = 10 * time.Second
+	maxPollInterval = 5 * time.Minute
+	claimBatchSize  = 100
+
+	// A task claimed by a worker that then crashed stays in 'processing'
+	// forever. Anything stuck for longer than this is returned to the queue.
+	processingStaleAfter = 10 * time.Minute
+)
 
 type MailQueueWorker struct {
 	mu     sync.Mutex
@@ -101,81 +114,184 @@ func (w *MailQueueWorker) Enqueue(to, subject, body string) error {
 }
 
 func (w *MailQueueWorker) run() {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+	interval := minPollInterval
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-w.quit:
 			return
-		case <-ticker.C:
-			w.processPendingTasks()
+		case <-timer.C:
+			processed := w.processPendingTasks()
+
+			// Back off while the queue is empty, reset the moment it is not.
+			if processed > 0 {
+				interval = minPollInterval
+			} else if interval < maxPollInterval {
+				interval *= 2
+				if interval > maxPollInterval {
+					interval = maxPollInterval
+				}
+			}
+			timer.Reset(interval)
 		}
 	}
 }
 
-func (w *MailQueueWorker) processPendingTasks() {
+// processPendingTasks claims a batch of due tasks and dispatches them.
+// It returns the number of tasks dispatched so the caller can adjust its poll
+// interval.
+func (w *MailQueueWorker) processPendingTasks() int {
 	if db.DB == nil {
-		return
+		return 0
 	}
 
-	var tasks []MailTask
-	// Use context with timeout to prevent slow queries from blocking
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	w.requeueStaleTasks()
 
-	// Fetch only needed columns, filter by status and deleted_at, order by created_at ASC
-	err := db.DB.WithContext(ctx).
-		Unscoped().
-		Select("id, \"to\", subject, body, status, attempts, max_retry, last_error, created_at, updated_at").
-		Where("status IN ? AND deleted_at IS NULL", []string{"pending", "retry"}).
-		Order("created_at ASC").
-		Limit(100).
-		Find(&tasks).Error
-
+	tasks, err := w.claimTasks()
 	if err != nil {
-		log.Printf("[MailWorker] Failed to query email tasks: %v", err)
-		return
+		log.Printf("[MailWorker] Failed to claim email tasks: %v", err)
+		return 0
 	}
-
 	if len(tasks) == 0 {
-		return
+		return 0
 	}
 
 	emailSvc := GetEmailService()
 
 	for _, task := range tasks {
-		// Calculate backoff if retrying
-		if task.Attempts > 0 {
-			// Exponential backoff: check if enough time has passed
-			// attempt 1: wait 30s, attempt 2: wait 2m, attempt 3: wait 5m
-			backoff := time.Duration(task.Attempts*task.Attempts*30) * time.Second
-			if time.Since(task.UpdatedAt) < backoff {
-				continue
-			}
-		}
-
-		task.Attempts++
 		log.Printf("[MailWorker] Dispatching email task %d to %s (Attempt %d)", task.ID, task.To, task.Attempts)
 
-		sendErr := emailSvc.SendEmail(task.To, task.Subject, task.Body, true)
-		if sendErr != nil {
+		status := "sent"
+		lastError := ""
+		if sendErr := emailSvc.SendEmail(task.To, task.Subject, task.Body, true); sendErr != nil {
 			log.Printf("[MailWorker] Failed to send email to %s: %v", task.To, sendErr)
-			task.LastError = sendErr.Error()
-
+			lastError = sendErr.Error()
 			if task.Attempts >= task.MaxRetry {
-				task.Status = "failed"
+				status = "failed"
 			} else {
-				task.Status = "retry"
+				status = "retry"
 			}
 		} else {
 			log.Printf("[MailWorker] Email task %d sent successfully to %s", task.ID, task.To)
-			task.Status = "sent"
-			task.LastError = ""
 		}
 
-		if saveErr := db.DB.Save(&task).Error; saveErr != nil {
-			log.Printf("[MailWorker] Failed to update email task %d status: %v", task.ID, saveErr)
-		}
+		w.finalizeTask(task.ID, status, lastError)
+	}
+
+	return len(tasks)
+}
+
+// claimTasks atomically moves a batch of due tasks from pending/retry into
+// 'processing' and returns them. FOR UPDATE SKIP LOCKED means concurrent
+// workers (rolling deploys, multiple APP_MODE=worker replicas) each get a
+// disjoint batch instead of racing to send the same email twice.
+//
+// The retry backoff is evaluated in SQL — attempt 1 waits 30s, attempt 2 waits
+// 2m, attempt 3 waits 4m30s — so rows that are not due yet are never fetched.
+func (w *MailQueueWorker) claimTasks() ([]MailTask, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	const claimSQL = `
+		WITH due AS (
+			SELECT id
+			FROM "MailTask"
+			WHERE deleted_at IS NULL
+			  AND status IN ('pending', 'retry')
+			  AND (
+			        attempts = 0
+			     OR updated_at <= NOW() - make_interval(secs => attempts * attempts * 30)
+			  )
+			ORDER BY created_at ASC
+			LIMIT ?
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE "MailTask" AS t
+		SET status     = 'processing',
+		    attempts   = t.attempts + 1,
+		    updated_at = NOW()
+		FROM due
+		WHERE t.id = due.id
+		RETURNING t.id, t."to", t.subject, t.body, t.status,
+		          t.attempts, t.max_retry, t.last_error,
+		          t.created_at, t.updated_at`
+
+	var tasks []MailTask
+	// The queue must always be read from the write source: a replica may not
+	// yet have the row that was just enqueued, and SELECT ... FOR UPDATE is
+	// not valid against a read-only replica anyway.
+	err := db.WriteDB(ctx).Raw(claimSQL, claimBatchSize).Scan(&tasks).Error
+	if err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+// finalizeTask records the terminal state of a dispatched task.
+func (w *MailQueueWorker) finalizeTask(id uint, status, lastError string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := db.WriteDB(ctx).
+		Model(&MailTask{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"status":     status,
+			"last_error": lastError,
+			"updated_at": time.Now().UTC(),
+		}).Error
+	if err != nil {
+		log.Printf("[MailWorker] Failed to update email task %d status: %v", id, err)
+	}
+}
+
+// requeueStaleTasks returns tasks abandoned by a crashed worker to the queue.
+// Without this, a process that dies mid-dispatch would leave its claimed rows
+// in 'processing' forever.
+//
+// The UPDATE is only issued when a stale row actually exists. In the common
+// case (no crashed worker) the cheap existence probe below matches zero rows
+// and we skip the UPDATE entirely, avoiding a full-table scan on every poll
+// cycle. The probe is served by the partial index
+// idx_mail_task_processing_stale (migration 0132) when present.
+func (w *MailQueueWorker) requeueStaleTasks() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	const staleProbeSQL = `
+		SELECT 1
+		FROM "MailTask"
+		WHERE deleted_at IS NULL
+		  AND status = 'processing'
+		  AND updated_at < NOW() - make_interval(secs => ?)
+		LIMIT 1`
+
+	var found int
+	if err := db.WriteDB(ctx).Raw(staleProbeSQL, processingStaleAfter.Seconds()).Scan(&found).Error; err != nil {
+		log.Printf("[MailWorker] Failed to probe for stale email tasks: %v", err)
+		return
+	}
+	if found == 0 {
+		return
+	}
+
+	const requeueSQL = `
+		UPDATE "MailTask"
+		SET status     = CASE WHEN attempts >= max_retry THEN 'failed' ELSE 'retry' END,
+		    last_error = 'worker terminated before the task completed',
+		    updated_at = NOW()
+		WHERE deleted_at IS NULL
+		  AND status = 'processing'
+		  AND updated_at < NOW() - make_interval(secs => ?)`
+
+	result := db.WriteDB(ctx).Exec(requeueSQL, processingStaleAfter.Seconds())
+	if result.Error != nil {
+		log.Printf("[MailWorker] Failed to requeue stale email tasks: %v", result.Error)
+		return
+	}
+	if result.RowsAffected > 0 {
+		log.Printf("[MailWorker] Requeued %d stale email task(s) left behind by a terminated worker", result.RowsAffected)
 	}
 }
