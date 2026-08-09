@@ -36,7 +36,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.ConversionEventRequest"
+                            "$ref": "#/definitions/analyticsdelivery.ConversionEventRequest"
                         }
                     }
                 ],
@@ -74,7 +74,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.UserJourneyRequest"
+                            "$ref": "#/definitions/analyticsdelivery.UserJourneyRequest"
                         }
                     }
                 ],
@@ -273,7 +273,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.CreateBackupRequest"
+                            "$ref": "#/definitions/systemdelivery.CreateBackupRequest"
                         }
                     }
                 ],
@@ -309,7 +309,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.ScheduleBackupRequest"
+                            "$ref": "#/definitions/systemdelivery.ScheduleBackupRequest"
                         }
                     }
                 ],
@@ -507,7 +507,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.RestoreBackupRequest"
+                            "$ref": "#/definitions/systemdelivery.RestoreBackupRequest"
                         }
                     }
                 ],
@@ -624,7 +624,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.NotificationRequest"
+                            "$ref": "#/definitions/notificationdelivery.NotificationRequest"
                         }
                     }
                 ],
@@ -632,7 +632,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handlers.NotificationResponse"
+                            "$ref": "#/definitions/notificationdelivery.NotificationResponse"
                         }
                     }
                 }
@@ -701,7 +701,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handlers.NotificationResponse"
+                            "$ref": "#/definitions/notificationdelivery.NotificationResponse"
                         }
                     }
                 }
@@ -767,7 +767,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.NotificationRequest"
+                            "$ref": "#/definitions/notificationdelivery.NotificationRequest"
                         }
                     }
                 ],
@@ -775,7 +775,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handlers.NotificationResponse"
+                            "$ref": "#/definitions/notificationdelivery.NotificationResponse"
                         }
                     }
                 }
@@ -2043,7 +2043,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.CreateTicketRequest"
+                            "$ref": "#/definitions/systemdelivery.CreateTicketRequest"
                         }
                     }
                 ],
@@ -2229,7 +2229,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.SendMessageRequest"
+                            "$ref": "#/definitions/systemdelivery.SendMessageRequest"
                         }
                     }
                 ],
@@ -2272,7 +2272,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.UpdateTicketPriorityRequest"
+                            "$ref": "#/definitions/systemdelivery.UpdateTicketPriorityRequest"
                         }
                     }
                 ],
@@ -2317,7 +2317,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.UpdateTicketStatusRequest"
+                            "$ref": "#/definitions/systemdelivery.UpdateTicketStatusRequest"
                         }
                     }
                 ],
@@ -2354,7 +2354,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.LoginRequest"
+                            "$ref": "#/definitions/authdto.LoginRequest"
                         }
                     }
                 ],
@@ -2411,7 +2411,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "handlers.ConversionEventRequest": {
+        "analyticsdelivery.ConversionEventRequest": {
             "type": "object",
             "required": [
                 "goal",
@@ -2440,7 +2440,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.CreateBackupRequest": {
+        "systemdelivery.CreateBackupRequest": {
             "type": "object",
             "required": [
                 "name",
@@ -2479,7 +2479,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.CreateTicketRequest": {
+        "systemdelivery.CreateTicketRequest": {
             "type": "object",
             "required": [
                 "category",
@@ -2594,7 +2594,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.LoginRequest": {
+        "authdto.LoginRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -2613,7 +2613,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.NotificationRequest": {
+        "notificationdelivery.NotificationRequest": {
             "type": "object",
             "required": [
                 "channels",
@@ -2669,7 +2669,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.NotificationResponse": {
+        "notificationdelivery.NotificationResponse": {
             "type": "object",
             "properties": {
                 "broadcastId": {
@@ -2679,11 +2679,11 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "summary": {
-                    "$ref": "#/definitions/handlers.NotificationSummary"
+                    "$ref": "#/definitions/notificationdelivery.NotificationSummary"
                 }
             }
         },
-        "handlers.NotificationSummary": {
+        "notificationdelivery.NotificationSummary": {
             "type": "object",
             "properties": {
                 "failure": {
@@ -2864,7 +2864,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.RestoreBackupRequest": {
+        "systemdelivery.RestoreBackupRequest": {
             "type": "object",
             "properties": {
                 "dryRun": {
@@ -2881,7 +2881,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.ScheduleBackupRequest": {
+        "systemdelivery.ScheduleBackupRequest": {
             "type": "object",
             "required": [
                 "frequency",
@@ -2980,7 +2980,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.SendMessageRequest": {
+        "systemdelivery.SendMessageRequest": {
             "type": "object",
             "required": [
                 "message"
@@ -2995,7 +2995,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.UpdateTicketPriorityRequest": {
+        "systemdelivery.UpdateTicketPriorityRequest": {
             "type": "object",
             "required": [
                 "priority"
@@ -3012,7 +3012,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.UpdateTicketStatusRequest": {
+        "systemdelivery.UpdateTicketStatusRequest": {
             "type": "object",
             "required": [
                 "status"
@@ -3030,7 +3030,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.UserJourneyRequest": {
+        "analyticsdelivery.UserJourneyRequest": {
             "type": "object",
             "required": [
                 "sessionId",
@@ -3057,7 +3057,7 @@ const docTemplate = `{
                 "steps": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handlers.UserJourneyStep"
+                        "$ref": "#/definitions/models.UserJourneyStep"
                     }
                 },
                 "totalDuration": {
@@ -3068,7 +3068,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.UserJourneyStep": {
+        "models.UserJourneyStep": {
             "type": "object",
             "properties": {
                 "action": {

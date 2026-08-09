@@ -19,15 +19,22 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"thanawy-backend/internal/application/services"
+	systemservice "thanawy-backend/internal/domain/system/service"
+	dashboarddelivery "thanawy-backend/internal/infrastructure/api/handlers/admin"
+	contentdelivery "thanawy-backend/internal/infrastructure/api/handlers/protected"
+	"thanawy-backend/internal/infrastructure/cache"
+	userrepo "thanawy-backend/internal/infrastructure/persistence/repositories"
 	"time"
 
-	"thanawy-backend/internal/app"
-	"thanawy-backend/internal/config"
-	"thanawy-backend/internal/db"
-	"thanawy-backend/internal/router"
-	"thanawy-backend/internal/services"
-	"thanawy-backend/internal/storage"
-	"thanawy-backend/internal/worker"
+	"thanawy-backend/internal/application"
+	"thanawy-backend/internal/infrastructure/config"
+	db "thanawy-backend/internal/infrastructure/database"
+
+	"thanawy-backend/internal/infrastructure/api"
+
+	"thanawy-backend/internal/infrastructure/storage"
+	"thanawy-backend/internal/infrastructure/workers"
 	"thanawy-backend/pkg/buildinfo"
 	"thanawy-backend/pkg/telemetry"
 
@@ -37,8 +44,7 @@ import (
 	"github.com/joho/godotenv"
 	"gorm.io/gorm"
 
-	"thanawy-backend/internal/api/handlers"
-	"thanawy-backend/internal/middleware"
+	"thanawy-backend/internal/infrastructure/api/middleware"
 
 	_ "thanawy-backend/docs" // Required for Swagger documentation generation
 
@@ -99,6 +105,12 @@ func Run() {
 		log.Printf("Database configured with %d read replica(s)", len(cfg.DatabaseReadReplicas))
 	}
 
+	// Warmup repository schema checks to avoid slow INFORMATION_SCHEMA queries
+	// on the first request (e.g. GORM Migrator.HasColumn for deleted_at).
+	userrepo.WarmupUserRepository()
+	contentdelivery.WarmupBookRepository()
+	dashboarddelivery.WarmupUserSubscriptionRepository()
+
 	// Initialize Storage (Local or S3)
 	initStorage(cfg)
 
@@ -109,20 +121,20 @@ func Run() {
 	redisURL := os.Getenv("REDIS_URL")
 	if redisURL != "" {
 		redisCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-		if err := db.ConnectRedis(redisCtx, redisURL); err != nil {
+		if err := cache.ConnectRedis(redisCtx, redisURL); err != nil {
 			log.Printf("Redis unavailable; Redis-backed capabilities will remain disabled: %v", err)
 		}
 		cancel()
 	}
 
 	// Initialize Hexagonal Architecture (Dependency Injection)
-	hexHandlers, err := app.Initialize(db.DB)
+	hexHandlers, err := application.Initialize(db.DB)
 	if err != nil {
 		log.Printf("Warning: Failed to initialize hexagonal handlers: %v", err)
 	}
 
 	// Initialize WebSocket Hub with Redis Pub/Sub support
-	handlers.InitHub()
+	contentdelivery.InitHub()
 
 	// Initialize OpenTelemetry tracer
 	tp, err := telemetry.InitTracer("thanawy-backend")
@@ -140,12 +152,12 @@ func Run() {
 		appMode = strings.ToLower(os.Getenv("MODE"))
 	}
 	if appMode == "" {
-		appMode = "all"
+		appMode = "api"
 	}
 
 	runAPI := getEnvBool("RUN_API", true)
-	runWorkers := getEnvBool("RUN_WORKERS", true)
-	runScheduler := getEnvBool("RUN_SCHEDULER", true)
+	runWorkers := getEnvBool("RUN_WORKERS", false)
+	runScheduler := getEnvBool("RUN_SCHEDULER", false)
 
 	if appMode != "" {
 		switch appMode {
@@ -191,10 +203,10 @@ func Run() {
 		go func() {
 			defer wg.Done()
 			log.Println("Starting automated database backup scheduler...")
-			services.GetBackupCronWorker().Start()
+			systemservice.GetBackupCronWorker().Start()
 		}()
 
-		if db.Redis != nil {
+		if cache.Redis != nil {
 			// Start Asynq Background Worker (shuts down when workerCtx is cancelled)
 			wg.Add(1)
 			go func() {
@@ -215,13 +227,13 @@ func Run() {
 		}
 	}
 
-	if runScheduler && db.Redis != nil {
+	if runScheduler && cache.Redis != nil {
 		go func() {
 			log.Println("Starting periodic task scheduler...")
 			worker.StartScheduler()
 		}()
 	}
-	if runScheduler && db.Redis == nil {
+	if runScheduler && cache.Redis == nil {
 		log.Println("Redis is not connected; periodic scheduler is disabled for this process")
 	}
 
@@ -278,7 +290,7 @@ func Run() {
 
 	if runWorkers {
 		services.GetMailQueueWorker().Stop()
-		services.GetBackupCronWorker().Stop()
+		systemservice.GetBackupCronWorker().Stop()
 	}
 
 	// 2. Wait for all worker goroutines to exit (max 30 seconds)
@@ -305,7 +317,7 @@ func Run() {
 	}
 
 	// 4. Close Redis and DB connections last
-	if err := db.CloseRedis(); err != nil {
+	if err := cache.CloseRedis(); err != nil {
 		log.Printf("Error closing Redis connection pool: %v", err)
 	}
 
@@ -381,7 +393,7 @@ func initStorage(cfg *config.Config) {
 	log.Println("Storage initialized with S3 provider (Cloudflare R2)")
 }
 
-func setupRouter(cfg *config.Config, hexHandlers *app.Handlers) *gin.Engine {
+func setupRouter(cfg *config.Config, hexHandlers *application.Handlers) *gin.Engine {
 	if os.Getenv("GIN_MODE") == "release" || cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -426,12 +438,24 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers) *gin.Engine {
 	r.Use(middleware.CSRFMiddleware())
 	r.Use(middleware.DBConsistencyMiddleware(db.DB))
 
-	// Local file serving is disabled; media must be served from cloud storage/CDN.
-	r.GET("/uploads/*path", func(c *gin.Context) {
-		c.JSON(http.StatusGone, gin.H{
-			"error": "Local file serving is disabled. All media is served from cloud storage.",
+	// Serve uploaded media. With local storage the file key (including its
+	// folder segment, e.g. "uploads/<uuid>.png") maps 1:1 to the path under
+	// STORAGE_PATH, so the files are served straight from disk. With cloud
+	// storage, media URLs are absolute CDN/S3 URLs, so local serving is
+	// disabled and any stray local path request is answered with 410.
+	if cfg.StorageType == "local" {
+		localBaseDir := os.Getenv("STORAGE_PATH")
+		if localBaseDir == "" {
+			localBaseDir = "./uploads"
+		}
+		r.Static("/uploads", localBaseDir)
+	} else {
+		r.GET("/uploads/*path", func(c *gin.Context) {
+			c.JSON(http.StatusGone, gin.H{
+				"error": "Local file serving is disabled. All media is served from cloud storage.",
+			})
 		})
-	})
+	}
 
 	rootHandler := func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -448,9 +472,9 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers) *gin.Engine {
 	r.GET("/health", func(c *gin.Context) {
 		redisOK := true
 		redisLatencyMs := int64(-1)
-		if db.IsRedisAvailable() {
+		if cache.IsRedisAvailable() {
 			start := time.Now()
-			if err := db.RedisHealthCheck(c.Request.Context()); err != nil {
+			if err := cache.RedisHealthCheck(c.Request.Context()); err != nil {
 				redisOK = false
 			} else {
 				redisLatencyMs = time.Since(start).Milliseconds()
@@ -474,8 +498,8 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers) *gin.Engine {
 	r.GET("/api/readyz", func(c *gin.Context) {
 		// readyz signals that the process is ready to serve traffic.
 		// Fail if Redis is configured but not reachable.
-		if db.IsRedisAvailable() {
-			if err := db.RedisHealthCheck(c.Request.Context()); err != nil {
+		if cache.IsRedisAvailable() {
+			if err := cache.RedisHealthCheck(c.Request.Context()); err != nil {
 				c.JSON(http.StatusServiceUnavailable, gin.H{
 					"status": "not ready",
 					"reason": "redis ping failed: " + err.Error(),
@@ -488,12 +512,12 @@ func setupRouter(cfg *config.Config, hexHandlers *app.Handlers) *gin.Engine {
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	router.SetupPublicRoutes(r)
-	router.SetupProtectedRoutes(r)
-	router.SetupAdminRoutes(r)
+	api.SetupPublicRoutes(r)
+	api.SetupProtectedRoutes(r)
+	api.SetupAdminRoutes(r)
 
 	// Hexagonal Architecture routes (new)
-	router.SetupHexagonalRoutes(r, hexHandlers)
+	api.SetupHexagonalRoutes(r, hexHandlers)
 
 	return r
 }

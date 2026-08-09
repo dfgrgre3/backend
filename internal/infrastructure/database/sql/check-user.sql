@@ -1,0 +1,1 @@
+SELECT id, email, role, status, email_verified FROM "User" WHERE email = 'ffyoussef12@gmail.com';

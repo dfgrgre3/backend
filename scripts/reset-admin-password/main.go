@@ -43,19 +43,26 @@ func main() {
 		log.Fatalf("Failed to hash password: %v", err)
 	}
 
-	result := db.Exec(`UPDATE "User" SET password_hash = ? WHERE email = ?`, string(hash), email)
-	if result.Error != nil {
-		log.Fatalf("Failed to update password: %v", result.Error)
-	}
-	if result.RowsAffected == 0 {
+	// password_hash now lives in UserCredential table, not User
+	var existingID string
+	db.Raw(`SELECT id FROM "User" WHERE email = ? AND deleted_at IS NULL`, email).Scan(&existingID)
+
+	if existingID == "" {
 		log.Printf("No user found with email %s. Creating admin user...", email)
-		result = db.Exec(`INSERT INTO "User" (id, email, password_hash, role, status, created_at, updated_at, version)
-			VALUES (gen_random_uuid(), ?, ?, 'ADMIN', 'ACTIVE', NOW(), NOW(), 1)`, email, string(hash))
+		result := db.Exec(`INSERT INTO "User" (id, email, role, status, created_at, updated_at, version)
+			VALUES (gen_random_uuid(), ?, 'ADMIN', 'ACTIVE', NOW(), NOW(), 1)`, email)
 		if result.Error != nil {
 			log.Fatalf("Failed to create admin: %v", result.Error)
 		}
-		fmt.Printf("✅ Admin user created: %s\n", email)
-	} else {
-		fmt.Printf("✅ Password updated for: %s\n", email)
+		db.Raw(`SELECT id FROM "User" WHERE email = ?`, email).Scan(&existingID)
 	}
+
+	// Upsert password hash into UserCredential
+	result := db.Exec(`INSERT INTO "UserCredential" (user_id, password_hash, last_changed_at, created_at, updated_at)
+		VALUES (?, ?, NOW(), NOW(), NOW())
+		ON CONFLICT (user_id) DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = NOW()`, existingID, string(hash))
+	if result.Error != nil {
+		log.Fatalf("Failed to update password: %v", result.Error)
+	}
+	fmt.Printf("✅ Admin user ready: %s\n", email)
 }

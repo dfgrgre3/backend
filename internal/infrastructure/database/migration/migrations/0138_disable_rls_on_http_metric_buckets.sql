@@ -1,0 +1,18 @@
+-- The http_metric_buckets table is an internal telemetry/metrics table written to
+-- by a background goroutine (metricWriter). It contains aggregate performance data
+-- with no multi-tenant row isolation requirement.
+--
+-- setup-db-roles.sql enables Row Level Security on ALL tables in the public schema,
+-- but no policies are defined for this table. With RLS enabled and no applicable
+-- policy, PostgreSQL defaults to DENY ALL, which blocks the app_user from INSERT
+-- and UPDATE operations, producing:
+--   "new row violates row-level security policy for table 'http_metric_buckets'"
+--
+-- Disable RLS on this table to restore write access for the app_user role.
+--
+-- NOTE: No BEGIN/COMMIT wrapper — the migration runner (cmd/migrate/main.go and
+-- internal/db/migrations.go) already wraps each migration in a database.Transaction().
+-- Including BEGIN; here would cause: "ERROR: there is already a transaction in
+-- progress" (SQLSTATE 25P02), causing the migration to fail silently and leave
+-- RLS enabled on the table.
+ALTER TABLE public.http_metric_buckets DISABLE ROW LEVEL SECURITY;

@@ -12,11 +12,12 @@ import (
 	"strings"
 	"time"
 
+	db "thanawy-backend/internal/infrastructure/database"
+
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	"thanawy-backend/internal/db"
 )
 
 type migrationRecord struct {
@@ -204,18 +205,18 @@ func applyMigration(database *gorm.DB, name string) error {
 	}
 
 	log.Printf("Applying database migration %s", id)
-	
+
 	// For baseline schema, check if tables already exist and mark as applied if so
 	if id == "0000_baseline_schema" {
 		// Check if any core table exists (e.g., User table)
 		var tableExists int64
 		database.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'User' AND table_schema = 'public'").Scan(&tableExists)
-		
+
 		if tableExists > 0 {
 			// Check if the User table has a primary key constraint
 			var hasPK int64
 			database.Raw("SELECT COUNT(*) FROM information_schema.table_constraints WHERE table_name = 'User' AND constraint_type = 'PRIMARY KEY' AND table_schema = 'public'").Scan(&hasPK)
-			
+
 			if hasPK > 0 {
 				log.Printf("Baseline schema tables already exist with proper constraints, marking migration as applied")
 				// Manually insert the migration record using raw SQL with ON CONFLICT
@@ -226,29 +227,29 @@ func applyMigration(database *gorm.DB, name string) error {
 				}
 				return nil
 			}
-			
+
 			// Tables exist but don't have proper constraints - need to drop and recreate
 			log.Printf("Tables exist but missing constraints, dropping and recreating")
 			database.Exec(`DROP SCHEMA public CASCADE`)
 			database.Exec(`CREATE SCHEMA public`)
 		}
-		
+
 		// Tables don't exist, need to apply the migration
 		log.Printf("Applying baseline schema migration")
-		
+
 		// For fresh database, we need to handle the schema_migrations table conflict
 		// First, drop the schema_migrations table that was created by ensureMigrationTable
 		database.Exec(`DROP TABLE IF EXISTS schema_migrations CASCADE`)
-		
+
 		// Execute the entire baseline schema as a single block to preserve dependencies
 		content := string(contents)
 		// Remove the schema_migrations table definition more comprehensively
 		content = regexp.MustCompile(`(?s)--\n-- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -\n--\n\nCREATE TABLE public\.schema_migrations \([^)]+\);\n\n--\n-- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -\n--\n\nALTER TABLE ONLY public\.schema_migrations\n    ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY \(id\);\n\n`).ReplaceAllString(content, "")
-		
+
 		if err := database.Exec(content).Error; err != nil {
 			return fmt.Errorf("apply migration %s: %w", id, err)
 		}
-		
+
 		// Create the schema_migrations table manually
 		database.Exec(`
 			CREATE TABLE schema_migrations (
@@ -265,7 +266,7 @@ func applyMigration(database *gorm.DB, name string) error {
 		}
 		return nil
 	}
-	
+
 	// For other migrations, use statement splitting
 	return database.Transaction(func(tx *gorm.DB) error {
 		statements := splitSQLStatements(string(contents))
@@ -275,8 +276,8 @@ func applyMigration(database *gorm.DB, name string) error {
 				continue
 			}
 			// Skip CREATE TABLE IF NOT EXISTS for schema_migrations as it's already created
-			if strings.Contains(strings.ToUpper(trimmed), "CREATE TABLE") && 
-			   strings.Contains(strings.ToUpper(trimmed), "SCHEMA_MIGRATIONS") {
+			if strings.Contains(strings.ToUpper(trimmed), "CREATE TABLE") &&
+				strings.Contains(strings.ToUpper(trimmed), "SCHEMA_MIGRATIONS") {
 				log.Printf("Skipping schema_migrations table creation (already exists)")
 				continue
 			}

@@ -5,8 +5,8 @@ import (
 	"log"
 	"os"
 
-	"thanawy-backend/internal/config"
-	"thanawy-backend/internal/db"
+	"thanawy-backend/internal/infrastructure/config"
+	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"

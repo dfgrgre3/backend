@@ -1,0 +1,1 @@
+SELECT user_id, substring(password_hash, 1, 20) as password_hash_preview FROM "UserCredential" WHERE user_id = 'admin-001';

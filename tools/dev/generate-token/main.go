@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"thanawy-backend/internal/infrastructure/config"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"thanawy-backend/internal/config"
 )
 
 type tokenClaims struct {

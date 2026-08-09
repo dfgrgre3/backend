@@ -5,18 +5,18 @@ import (
 	"log"
 	"os"
 
-	"thanawy-backend/internal/config"
-	"thanawy-backend/internal/db"
+	"thanawy-backend/internal/infrastructure/config"
+	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/joho/godotenv"
 )
 
 type constraintInfo struct {
-	TableName        string `gorm:"column:table_name"`
-	ConstraintName   string `gorm:"column:constraint_name"`
-	ColumnName       string `gorm:"column:column_name"`
-	ForeignTable     string `gorm:"column:foreign_table_name"`
-	ForeignColumn    string `gorm:"column:foreign_column_name"`
+	TableName      string `gorm:"column:table_name"`
+	ConstraintName string `gorm:"column:constraint_name"`
+	ColumnName     string `gorm:"column:column_name"`
+	ForeignTable   string `gorm:"column:foreign_table_name"`
+	ForeignColumn  string `gorm:"column:foreign_column_name"`
 }
 
 func main() {

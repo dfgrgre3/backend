@@ -1,0 +1,159 @@
+﻿go : # thanawy-backend/internal/infrastructure/config
+At line:2 char:1
++ go build ./... 2>&1 | Out-File -Encoding utf8 build_all.txt
++ ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (# thanawy-backe...tructure/config 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+internal\infrastructure\config\config.go:4:2: 
+"thanawy-backend/internal/domain/common" imported as models and not used
+internal\infrastructure\config\config.go:157:2: undefined: authdomain
+internal\infrastructure\config\config.go:259:2: undefined: authdomain
+# thanawy-backend/internal/application/services
+internal\application\services\mail_queue_worker.go:112:14: undefined: 
+GetEmailService
+internal\application\services\mail_queue_worker.go:161:14: undefined: 
+GetEmailService
+# thanawy-backend/internal/domain/ai/service
+internal\domain\ai\service\ai_service.go:128:13: undefined: 
+GetCircuitBreakerService
+internal\domain\ai\service\ai_service.go:245:17: undefined: coursedomain
+internal\domain\ai\service\ai_service.go:247:11: undefined: database
+internal\domain\ai\service\ai_service.go:277:17: undefined: coursedomain
+internal\domain\ai\service\ai_service.go:278:2: undefined: database
+internal\domain\ai\service\ai_service.go:319:29: undefined: coursedomain
+internal\domain\ai\service\ai_service.go:412:13: undefined: 
+GetCircuitBreakerService
+internal\domain\ai\service\ai_service.go:570:13: undefined: 
+GetCircuitBreakerService
+internal\domain\ai\service\ai_service.go:645:17: undefined: aidomain
+internal\domain\ai\service\ai_service.go:666:8: undefined: database
+internal\domain\ai\service\ai_service.go:666:8: too many errors
+# thanawy-backend/internal/domain/analytics/service
+internal\domain\analytics\service\analytics_query.go:4:2: 
+"thanawy-backend/internal/domain/common" imported as models and not used
+internal\domain\analytics\service\analytics_query.go:64:23: undefined: 
+analyticsdomain
+internal\domain\analytics\service\analytics_query.go:75:23: undefined: 
+analyticsdomain
+internal\domain\analytics\service\audit_service.go:7:2: 
+"thanawy-backend/internal/domain/common" imported as models and not used
+internal\domain\analytics\service\audit_service.go:55:14: undefined: 
+analyticsdomain
+# thanawy-backend/internal/domain/payment/service
+internal\domain\payment\service\paymob_service.go:40:13: undefined: 
+GetCircuitBreakerService
+internal\domain\payment\service\paymob_service.go:48:18: undefined: 
+headerContentType
+internal\domain\payment\service\paymob_service.go:48:37: undefined: 
+contentTypeJSON
+internal\domain\payment\service\paymob_service.go:87:17: undefined: 
+headerContentType
+internal\domain\payment\service\paymob_service.go:87:36: undefined: 
+contentTypeJSON
+internal\domain\payment\service\paymob_service.go:136:17: undefined: 
+headerContentType
+internal\domain\payment\service\paymob_service.go:136:36: undefined: 
+contentTypeJSON
+internal\domain\payment\service\paymob_service.go:167:17: undefined: 
+headerContentType
+internal\domain\payment\service\paymob_service.go:167:36: undefined: 
+contentTypeJSON
+# thanawy-backend/internal/domain/notification/service
+internal\domain\notification\service\notification_queue.go:24:21: undefined: 
+notificationdomain
+internal\domain\notification\service\notification_queue.go:33:57: undefined: 
+notificationdomain
+internal\domain\notification\service\notification_service.go:32:62: undefined: 
+notificationdomain
+internal\domain\notification\service\notification_service.go:44:22: undefined: 
+notificationdomain
+internal\domain\notification\service\notification_service.go:54:22: undefined: 
+notificationdomain
+internal\domain\notification\service\notification_service.go:64:22: undefined: 
+notificationdomain
+internal\domain\notification\service\notification_service.go:74:22: undefined: 
+notificationdomain
+internal\domain\notification\service\notification_service.go:83:83: undefined: 
+notificationdomain
+internal\domain\notification\service\notification_service.go:84:22: undefined: 
+notificationdomain
+internal\domain\notification\service\notification_service.go:96:89: undefined: 
+notificationdomain
+internal\domain\notification\service\notification_service.go:84:22: too many 
+errors
+# thanawy-backend/internal/infrastructure/persistence/repositories
+internal\infrastructure\persistence\repositories\subject_repo.go:24:2: 
+queryByID redeclared in this block
+	
+internal\infrastructure\persistence\repositories\ai_conversation_repo.go:11:7: 
+other declaration of queryByID
+internal\infrastructure\persistence\repositories\user_repo.go:28:2: queryByID 
+redeclared in this block
+	
+internal\infrastructure\persistence\repositories\ai_conversation_repo.go:11:7: 
+other declaration of queryByID
+internal\infrastructure\persistence\repositories\user_repo.go:43:2: sfGroup 
+redeclared in this block
+	internal\infrastructure\persistence\repositories\subject_repo.go:49:5: other 
+declaration of sfGroup
+internal\infrastructure\persistence\repositories\course_repository_impl.go:238:
+42: enrollment.CourseID undefined (type *Enrollment has no field or method 
+CourseID)
+internal\infrastructure\persistence\repositories\course_repository_impl.go:242:
+47: enrollment.UserID.String undefined (type string has no field or method 
+String)
+internal\infrastructure\persistence\repositories\course_repository_impl.go:246:
+71: cannot convert enrollment.Progress (variable of struct type 
+decimal.Decimal) to type float64
+internal\infrastructure\persistence\repositories\course_repository_impl.go:512:
+35: cannot use e.Progress (variable of struct type decimal.Decimal) as float64 
+value in argument to decimal.NewFromFloat
+internal\infrastructure\persistence\repositories\course_repository_impl.go:514:
+16: cannot use e.ID (variable of type string) as uuid.UUID value in struct 
+literal
+internal\infrastructure\persistence\repositories\course_repository_impl.go:515:
+18: e.CourseID undefined (type *Enrollment has no field or method CourseID)
+internal\infrastructure\persistence\repositories\course_repository_impl.go:516:
+16: cannot use e.UserID (variable of type string) as uuid.UUID value in struct 
+literal
+internal\infrastructure\persistence\repositories\course_repository_impl.go:516:
+16: too many errors
+# thanawy-backend/internal/domain/certificate/repository
+internal\domain\certificate\repository\port.go:10:36: undefined: Certificate
+internal\domain\certificate\repository\port.go:11:45: undefined: Certificate
+internal\domain\certificate\repository\port.go:12:35: undefined: 
+ListCertificatesFilter
+internal\domain\certificate\repository\port.go:12:60: undefined: 
+ListCertificatesResult
+internal\domain\certificate\repository\port.go:18:51: undefined: 
+CertificateWithDetails
+# thanawy-backend/internal/domain/certificate/service
+internal\domain\certificate\service\service.go:17:12: undefined: Repository
+internal\domain\certificate\service\service.go:18:12: undefined: EventPublisher
+internal\domain\certificate\service\service.go:21:22: undefined: Repository
+internal\domain\certificate\service\service.go:21:44: undefined: EventPublisher
+internal\domain\certificate\service\service.go:29:63: undefined: 
+IssueCertificateInput
+internal\domain\certificate\service\service.go:29:88: undefined: Certificate
+internal\domain\certificate\service\service.go:73:68: undefined: 
+CertificateWithDetails
+internal\domain\certificate\service\service.go:82:94: undefined: Certificate
+internal\domain\certificate\service\service.go:99:94: undefined: 
+ListCertificatesResult
+internal\domain\certificate\service\service.go:126:59: undefined: 
+CertificateEvent
+internal\domain\certificate\service\service.go:126:59: too many errors
+# thanawy-backend/internal/domain/user/service
+internal\domain\user\service\user_service.go:20:12: undefined: Repository
+internal\domain\user\service\user_service.go:21:12: undefined: PasswordHasher
+internal\domain\user\service\user_service.go:22:12: undefined: EventPublisher
+internal\domain\user\service\user_service.go:25:22: undefined: Repository
+internal\domain\user\service\user_service.go:25:41: undefined: PasswordHasher
+internal\domain\user\service\user_service.go:25:67: undefined: EventPublisher
+internal\domain\user\service\user_service.go:33:57: undefined: CreateUserInput
+internal\domain\user\service\user_service.go:33:76: undefined: User
+internal\domain\user\service\user_service.go:87:61: undefined: User
+internal\domain\user\service\user_service.go:95:57: undefined: UpdateUserInput
+internal\domain\user\service\user_service.go:95:57: too many errors

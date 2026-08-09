@@ -14,8 +14,8 @@ import (
 )
 
 type migrationRecord struct {
-	ID        string `gorm:"primaryKey;column:id"`
-	Checksum  string `gorm:"not null;column:checksum"`
+	ID       string `gorm:"primaryKey;column:id"`
+	Checksum string `gorm:"not null;column:checksum"`
 }
 
 func (migrationRecord) TableName() string {

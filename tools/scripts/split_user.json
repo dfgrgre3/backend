@@ -1,0 +1,37 @@
+{
+  "package": "handlers",
+  "targets": [
+    {
+      "file": "user_crud_handler.go",
+      "ranges": [[188, 407], [409, 630], [631, 773]]
+    },
+    {
+      "file": "user_details_handler.go",
+      "ranges": [[774, 1193]]
+    },
+    {
+      "file": "user_billing_handler.go",
+      "ranges": [[1290, 1491]]
+    },
+    {
+      "file": "user_analytics_handler.go",
+      "ranges": [[1548, 1783]]
+    },
+    {
+      "file": "user_parent_handler.go",
+      "ranges": [[1784, 1964]]
+    },
+    {
+      "file": "user_bulk_handler.go",
+      "ranges": [[1974, 2093], [2623, 2770]]
+    },
+    {
+      "file": "user_admin_actions_handler.go",
+      "ranges": [[2095, 2356], [2377, 2496]]
+    },
+    {
+      "file": "user_session_audit_handler.go",
+      "ranges": [[2497, 2620]]
+    }
+  ]
+}

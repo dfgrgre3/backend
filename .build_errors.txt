@@ -1,0 +1,70 @@
+﻿go : internal\domain\course\service\lms_service.go:7:2: package 
+thanawy-backend/internal/modules/course/domain is not in std (C:\Program 
+Files\Go\src\thanawy-backend\internal\modules\course\domain)
+At line:1 char:5
++ & { go build ./... 2>&1 | Out-File -Encoding utf8 D:\backend\.build_e ...
++     ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (internal\domain...\course\domain) 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+internal\domain\course\service\lms_service.go:8:2: package 
+thanawy-backend/internal/modules/course/repository is not in std (C:\Program 
+Files\Go\src\thanawy-backend\internal\modules\course\repository)
+internal\infrastructure\api\handlers\protected\admin_coupons_handler.go:8:2: 
+package thanawy-backend/internal/core/database is not in std (C:\Program 
+Files\Go\src\thanawy-backend\internal\core\database)
+internal\infrastructure\api\handlers\protected\admin_coupons_handler.go:9:2: 
+package thanawy-backend/internal/core/response is not in std (C:\Program 
+Files\Go\src\thanawy-backend\internal\core\response)
+internal\domain\auth\service\auth_service.go:12:2: found packages 
+marketingrepo (ab_experiment_repo.go) and gamificationrepo 
+(achievement_repo.go) in 
+D:\backend\internal\infrastructure\persistence\repositories
+internal\infrastructure\api\handlers\protected\auth_handler.go:7:2: package 
+thanawy-backend/internal/infrastructure/api/dto is not in std (C:\Program 
+Files\Go\src\thanawy-backend\internal\infrastructure\api\dto)
+internal\infrastructure\api\middleware\ip_whitelist.go:7:2: package 
+thanawy-backend/internal/modules/auth/domain is not in std (C:\Program 
+Files\Go\src\thanawy-backend\internal\modules\auth\domain)
+internal\infrastructure\api\handlers\protected\resource_handler.go:12:2: 
+package thanawy-backend/internal/models is not in std (C:\Program 
+Files\Go\src\thanawy-backend\internal\models)
+internal\infrastructure\api\handlers\protected\admin_forum_handler.go:5:2: 
+package thanawy-backend/internal/modules/content/domain is not in std 
+(C:\Program Files\Go\src\thanawy-backend\internal\modules\content\domain)
+internal\infrastructure\api\handlers\protected\admin_rewards_handler.go:5:2: 
+package thanawy-backend/internal/modules/gamification/domain is not in std 
+(C:\Program Files\Go\src\thanawy-backend\internal\modules\gamification\domain)
+internal\infrastructure\api\handlers\protected\admin_coupons_handler.go:5:2: 
+package thanawy-backend/internal/modules/marketing/domain is not in std 
+(C:\Program Files\Go\src\thanawy-backend\internal\modules\marketing\domain)
+internal\infrastructure\api\handlers\protected\public_community_handler.go:9:2:
+ package thanawy-backend/internal/modules/notification/domain is not in std 
+(C:\Program Files\Go\src\thanawy-backend\internal\modules\notification\domain)
+internal\infrastructure\api\handlers\protected\admins_handler.go:8:2: package 
+thanawy-backend/internal/modules/user/domain is not in std (C:\Program 
+Files\Go\src\thanawy-backend\internal\modules\user\domain)
+internal\application\wire.go:5:2: found packages analyticsdelivery 
+(activity_handler.go) and marketingdelivery (admin_ab_testing_handler.go) in 
+D:\backend\internal\infrastructure\api\handlers\protected
+internal\infrastructure\api\handlers\admin\admin_missing_endpoints.go:14:2: 
+package thanawy-backend/internal/core/middleware is not in std (C:\Program 
+Files\Go\src\thanawy-backend\internal\core\middleware)
+internal\infrastructure\api\handlers\admin\admin_dashboard_charts.go:4:2: 
+package thanawy-backend/internal/modules/analytics/domain is not in std 
+(C:\Program Files\Go\src\thanawy-backend\internal\modules\analytics\domain)
+internal\infrastructure\api\handlers\admin\admin_dashboard_v1_savedfilters.go:8
+:2: package thanawy-backend/internal/modules/dashboard/domain is not in std 
+(C:\Program Files\Go\src\thanawy-backend\internal\modules\dashboard\domain)
+internal\infrastructure\api\handlers\admin\admin_dashboard_components.go:9:2: 
+package thanawy-backend/internal/modules/payment/domain is not in std 
+(C:\Program Files\Go\src\thanawy-backend\internal\modules\payment\domain)
+internal\infrastructure\api\handlers\admin\admin_dashboard_metrics.go:6:2: 
+package thanawy-backend/internal/modules/system/domain is not in std 
+(C:\Program Files\Go\src\thanawy-backend\internal\modules\system\domain)
+internal\infrastructure\api\admin_routes.go:4:2: found packages handlers 
+(admin_compat_handler.go) and dashboarddelivery (admin_dashboard_builder.go) 
+in D:\backend\internal\infrastructure\api\handlers\admin
+internal\bootstrap\run.go:33:2: found packages api (admin_routes.go) and 
+router (public_routes_test.go) in D:\backend\internal\infrastructure\api

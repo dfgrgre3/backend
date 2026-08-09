@@ -1,11 +1,11 @@
 package main
 
 import (
+	models "thanawy-backend/internal/domain/common"
 	"fmt"
 	"log"
 	"os"
-	"thanawy-backend/internal/db"
-	"thanawy-backend/internal/models"
+	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/joho/godotenv"
 )

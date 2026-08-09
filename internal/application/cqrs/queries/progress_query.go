@@ -1,0 +1,405 @@
+package queries
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sync"
+	models "thanawy-backend/internal/domain/common"
+	"thanawy-backend/internal/infrastructure/cache"
+	db "thanawy-backend/internal/infrastructure/database"
+
+	"time"
+
+	"gorm.io/gorm"
+)
+
+const whereUserID = "user_id = ?"
+
+type ProgressQueryService struct {
+}
+
+type l1ProgressEntry struct {
+	summary   *ProgressSummaryReadModel
+	expiresAt time.Time
+}
+
+type l1WeeklyEntry struct {
+	analytics *WeeklyAnalyticsReadModel
+	expiresAt time.Time
+}
+
+var (
+	l1SummaryCache sync.Map
+	l1WeeklyCache  sync.Map
+)
+
+type ProgressSummaryReadModel struct {
+	TotalMinutes   int     `json:"totalMinutes"`
+	AverageFocus   float64 `json:"averageFocus"`
+	TasksCompleted int64   `json:"tasksCompleted"`
+	StreakDays     int     `json:"streakDays"`
+}
+
+type WeeklyAnalyticsReadModel struct {
+	ProgressRate   int             `json:"progressRate"`
+	SkillsAcquired int             `json:"skillsAcquired"`
+	StudyHours     int             `json:"studyHours"`
+	DailyProgress  []DailyProgress `json:"dailyProgress"`
+	Timestamp      time.Time       `json:"timestamp"`
+}
+
+type DailyProgress struct {
+	Day      string `json:"day"`
+	Progress int    `json:"progress"`
+}
+
+func NewProgressQueryService() *ProgressQueryService {
+	return &ProgressQueryService{}
+}
+
+// readDBOrFallback dynamically retrieves the read DB connection.
+func (s *ProgressQueryService) readDBOrFallback() *gorm.DB {
+	return db.ReadDB()
+}
+
+func (s *ProgressQueryService) GetSummary(userID string) (*ProgressSummaryReadModel, error) {
+	// Try L1 cache first
+	if val, ok := s.tryL1SummaryCache(userID); ok {
+		return val, nil
+	}
+
+	cacheKey := fmt.Sprintf("user_summary:%s", userID)
+
+	// Try Redis cache next
+	if cache.Redis != nil {
+		if val, ok := s.tryRedisSummaryCache(userID, cacheKey); ok {
+			return val, nil
+		}
+	}
+
+	rdb := s.readDBOrFallback()
+	if rdb == nil {
+		return s.getSummaryFallback(userID)
+	}
+
+	var summary *ProgressSummaryReadModel
+	var err error
+
+	// Read from materialized view for fast single-query aggregation
+	var mv UserProgressSummaryReadModel
+	if err = rdb.Where(whereUserID, userID).Take(&mv).Error; err != nil {
+		summary, err = s.getSummaryFallback(userID)
+	} else {
+		summary = &ProgressSummaryReadModel{
+			TotalMinutes:   mv.WeeklyStudyMinutes,
+			AverageFocus:   float64(mv.WeeklyAvgFocus),
+			TasksCompleted: int64(mv.TasksCompleted),
+			StreakDays:     mv.CurrentStreak,
+		}
+	}
+
+	if err == nil && summary != nil {
+		s.warmSummaryCache(userID, cacheKey, summary)
+	}
+
+	return summary, err
+}
+
+// tryL1SummaryCache attempts to fetch the summary from the in-memory L1 cache.
+// Returns the cached value and true if found and not expired.
+func (s *ProgressQueryService) tryL1SummaryCache(userID string) (*ProgressSummaryReadModel, bool) {
+	if val, ok := l1SummaryCache.Load(userID); ok {
+		entry := val.(*l1ProgressEntry)
+		if time.Now().Before(entry.expiresAt) {
+			return entry.summary, true
+		}
+		l1SummaryCache.Delete(userID)
+	}
+	return nil, false
+}
+
+// tryRedisSummaryCache attempts to fetch the summary from Redis.
+// Returns the cached value and true if found; also warms the L1 cache.
+func (s *ProgressQueryService) tryRedisSummaryCache(userID, cacheKey string) (*ProgressSummaryReadModel, bool) {
+	redisCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	cachedVal, err := cache.Redis.Get(redisCtx, cacheKey).Result()
+	cancel()
+	if err == nil {
+		var cachedSummary ProgressSummaryReadModel
+		if json.Unmarshal([]byte(cachedVal), &cachedSummary) == nil {
+			l1SummaryCache.Store(userID, &l1ProgressEntry{
+				summary:   &cachedSummary,
+				expiresAt: time.Now().Add(15 * time.Second),
+			})
+			return &cachedSummary, true
+		}
+	}
+	return nil, false
+}
+
+// warmSummaryCache populates both L1 cache and Redis asynchronously.
+func (s *ProgressQueryService) warmSummaryCache(userID, cacheKey string, summary *ProgressSummaryReadModel) {
+	l1SummaryCache.Store(userID, &l1ProgressEntry{
+		summary:   summary,
+		expiresAt: time.Now().Add(15 * time.Second),
+	})
+
+	if cache.Redis != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if cacheBytes, err := json.Marshal(summary); err == nil {
+				cache.Redis.Set(ctx, cacheKey, cacheBytes, 3*time.Minute)
+			}
+		}()
+	}
+}
+
+func (s *ProgressQueryService) getSummaryFallback(userID string) (*ProgressSummaryReadModel, error) {
+	rdb := s.readDBOrFallback()
+	if rdb == nil {
+		return &ProgressSummaryReadModel{}, nil
+	}
+
+	summary := &ProgressSummaryReadModel{}
+
+	type studyStats struct {
+		TotalMinutes int
+		AvgFocus     float64
+	}
+	var stats studyStats
+	if err := rdb.Model(&models.StudySession{}).
+		Where(whereUserID, userID).
+		Select("COALESCE(SUM(duration_min), 0) as total_minutes, COALESCE(AVG(focus_score), 0) as avg_focus").
+		Scan(&stats).Error; err != nil {
+		return nil, err
+	}
+	summary.TotalMinutes = stats.TotalMinutes
+	summary.AverageFocus = stats.AvgFocus
+
+	rdb.Model(&models.Task{}).
+		Where("user_id = ? AND status = ?", userID, "COMPLETED").
+		Count(&summary.TasksCompleted)
+
+	summary.StreakDays = s.calculateStreakDays(userID)
+	return summary, nil
+}
+
+func (s *ProgressQueryService) calculateStreakDays(userID string) int {
+	rdb := s.readDBOrFallback()
+	if rdb == nil {
+		return 0
+	}
+
+	type dayResult struct {
+		Day string
+	}
+	var days []dayResult
+	rdb.Model(&models.StudySession{}).
+		Select("DISTINCT DATE(start_time) as day").
+		Where("user_id = ? AND start_time >= ?", userID, time.Now().AddDate(-1, 0, 0)).
+		Order("day DESC").
+		Scan(&days)
+
+	if len(days) == 0 {
+		return 0
+	}
+
+	streak := 0
+	currentDate := time.Now()
+	daySet := make(map[string]bool, len(days))
+	for _, d := range days {
+		daySet[d.Day] = true
+	}
+
+	for {
+		dayStr := currentDate.Format("2006-01-02")
+		if daySet[dayStr] {
+			streak++
+			currentDate = currentDate.AddDate(0, 0, -1)
+		} else {
+			break
+		}
+	}
+	return streak
+}
+
+func (s *ProgressQueryService) GetWeeklyAnalytics(userID string) (*WeeklyAnalyticsReadModel, error) {
+	// Try L1 cache first
+	if val, ok := s.tryL1WeeklyCache(userID); ok {
+		return val, nil
+	}
+
+	cacheKey := fmt.Sprintf("weekly_analytics:%s", userID)
+
+	// Try Redis cache next
+	if cache.Redis != nil {
+		if val, ok := s.tryRedisWeeklyCache(userID, cacheKey); ok {
+			return val, nil
+		}
+	}
+
+	rdb := s.readDBOrFallback()
+	if rdb == nil {
+		return s.getWeeklyAnalyticsFallback(userID)
+	}
+
+	var summary *WeeklyAnalyticsReadModel
+	var err error
+
+	// Read from materialized view
+	var mv WeeklyAnalyticsReadModelV2
+	if err = rdb.Where(whereUserID, userID).Take(&mv).Error; err != nil {
+		summary, err = s.getWeeklyAnalyticsFallback(userID)
+	} else {
+		summary = weeklyAnalyticsFromView(mv)
+	}
+
+	if err == nil && summary != nil {
+		s.warmWeeklyCache(userID, cacheKey, summary)
+	}
+
+	return summary, err
+}
+
+// tryL1WeeklyCache attempts to fetch weekly analytics from the in-memory L1 cache.
+// Returns the cached value and true if found and not expired.
+func (s *ProgressQueryService) tryL1WeeklyCache(userID string) (*WeeklyAnalyticsReadModel, bool) {
+	if val, ok := l1WeeklyCache.Load(userID); ok {
+		entry := val.(*l1WeeklyEntry)
+		if time.Now().Before(entry.expiresAt) {
+			return entry.analytics, true
+		}
+		l1WeeklyCache.Delete(userID)
+	}
+	return nil, false
+}
+
+// tryRedisWeeklyCache attempts to fetch weekly analytics from Redis.
+// Returns the cached value and true if found; also warms the L1 cache.
+func (s *ProgressQueryService) tryRedisWeeklyCache(userID, cacheKey string) (*WeeklyAnalyticsReadModel, bool) {
+	redisCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	cachedVal, err := cache.Redis.Get(redisCtx, cacheKey).Result()
+	cancel()
+	if err != nil {
+		return nil, false
+	}
+
+	var cachedAnalytics WeeklyAnalyticsReadModel
+	if json.Unmarshal([]byte(cachedVal), &cachedAnalytics) != nil {
+		return nil, false
+	}
+
+	storeWeeklyAnalyticsInL1(userID, &cachedAnalytics)
+	return &cachedAnalytics, true
+}
+
+func weeklyAnalyticsFromView(mv WeeklyAnalyticsReadModelV2) *WeeklyAnalyticsReadModel {
+	return &WeeklyAnalyticsReadModel{
+		ProgressRate:   weeklyProgressRate(mv.TotalStudyMinutes),
+		SkillsAcquired: mv.CompletedTasks,
+		StudyHours:     mv.TotalStudyMinutes / 60,
+		DailyProgress:  weeklyDailyProgress(mv.TotalStudyMinutes, mv.ActiveDays),
+		Timestamp:      mv.ComputedAt,
+	}
+}
+
+func weeklyProgressRate(totalStudyMinutes int) int {
+	if totalStudyMinutes <= 0 {
+		return 0
+	}
+
+	targetMinutes := 210
+	progressRate := int(float64(totalStudyMinutes) / float64(targetMinutes) * 100)
+	if progressRate > 100 {
+		return 100
+	}
+	return progressRate
+}
+
+func weeklyDailyProgress(totalStudyMinutes, activeDays int) []DailyProgress {
+	if activeDays <= 0 {
+		return nil
+	}
+
+	return []DailyProgress{
+		{Day: "Tue", Progress: totalStudyMinutes / activeDays},
+	}
+}
+
+// warmWeeklyCache populates both L1 cache and Redis asynchronously.
+func (s *ProgressQueryService) warmWeeklyCache(userID, cacheKey string, analytics *WeeklyAnalyticsReadModel) {
+	storeWeeklyAnalyticsInL1(userID, analytics)
+
+	if cache.Redis != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if cacheBytes, err := json.Marshal(analytics); err == nil {
+				cache.Redis.Set(ctx, cacheKey, cacheBytes, 3*time.Minute)
+			}
+		}()
+	}
+}
+
+func storeWeeklyAnalyticsInL1(userID string, analytics *WeeklyAnalyticsReadModel) {
+	l1WeeklyCache.Store(userID, &l1WeeklyEntry{
+		analytics: analytics,
+		expiresAt: time.Now().Add(15 * time.Second),
+	})
+}
+
+func (s *ProgressQueryService) getWeeklyAnalyticsFallback(userID string) (*WeeklyAnalyticsReadModel, error) {
+	rdb := s.readDBOrFallback()
+	if rdb == nil {
+		return &WeeklyAnalyticsReadModel{
+			ProgressRate:   0,
+			SkillsAcquired: 0,
+			StudyHours:     0,
+			DailyProgress:  nil,
+			Timestamp:      time.Now(),
+		}, nil
+	}
+
+	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
+	var sessions []models.StudySession
+	if err := rdb.Where("user_id = ? AND start_time >= ?", userID, sevenDaysAgo).
+		Order("start_time asc").Find(&sessions).Error; err != nil {
+		return nil, err
+	}
+
+	dailyProgress := make(map[string]int)
+	totalStudyMinutes := 0
+	for _, session := range sessions {
+		day := session.CreatedAt.Format("Mon")
+		dailyProgress[day] += session.DurationMin
+		totalStudyMinutes += session.DurationMin
+	}
+
+	var dailyProgressArr []DailyProgress
+	days := []string{"Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"}
+	for _, day := range days {
+		dailyProgressArr = append(dailyProgressArr, DailyProgress{Day: day, Progress: dailyProgress[day]})
+	}
+
+	progressRate := 0
+	if totalStudyMinutes > 0 {
+		targetMinutes := 210
+		progressRate = int(float64(totalStudyMinutes) / float64(targetMinutes) * 100)
+		if progressRate > 100 {
+			progressRate = 100
+		}
+	}
+
+	var skillsAcquired int64
+	rdb.Model(&models.Task{}).Where("user_id = ? AND status = ?", userID, "COMPLETED").Count(&skillsAcquired)
+
+	return &WeeklyAnalyticsReadModel{
+		ProgressRate:   progressRate,
+		SkillsAcquired: int(skillsAcquired),
+		StudyHours:     totalStudyMinutes / 60,
+		DailyProgress:  dailyProgressArr,
+		Timestamp:      time.Now(),
+	}, nil
+}

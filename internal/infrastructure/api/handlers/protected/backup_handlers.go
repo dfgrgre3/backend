@@ -1,0 +1,438 @@
+package protected
+
+import (
+	"fmt"
+	"net/http"
+	models "thanawy-backend/internal/domain/common"
+	systemservice "thanawy-backend/internal/domain/system/service"
+	"time"
+
+	"thanawy-backend/internal/infrastructure/api/middleware"
+	api_response "thanawy-backend/internal/infrastructure/api/response"
+	db "thanawy-backend/internal/infrastructure/database"
+
+	"github.com/gin-gonic/gin"
+)
+
+const errBackupNotFound = "Backup not found"
+
+// CreateBackupRequest represents a request to create a backup
+type CreateBackupRequest struct {
+	Name             string   `json:"name" binding:"required,max=100"`
+	Type             string   `json:"type" binding:"required,oneof=full database files incremental"`
+	Tables           []string `json:"tables,omitempty"`
+	IncludesFiles    bool     `json:"includesFiles"`
+	IncludesDatabase bool     `json:"includesDatabase"`
+	RetentionDays    int      `json:"retentionDays" binding:"omitempty,min=1,max=365"`
+}
+
+// RestoreBackupRequest represents a restore request
+type RestoreBackupRequest struct {
+	TargetTables []string `json:"targetTables,omitempty"`
+	SkipExisting bool     `json:"skipExisting"`
+	DryRun       bool     `json:"dryRun"`
+}
+
+// ScheduleBackupRequest represents a scheduled backup configuration
+type ScheduleBackupRequest struct {
+	Frequency     string `json:"frequency" binding:"required,oneof=daily weekly monthly"`
+	Type          string `json:"type" binding:"required,oneof=full database files incremental"`
+	Time          string `json:"time" binding:"required,datetime=15:04"`
+	DayOfWeek     int    `json:"dayOfWeek,omitempty" binding:"omitempty,min=0,max=6"`
+	DayOfMonth    int    `json:"dayOfMonth,omitempty" binding:"omitempty,min=1,max=31"`
+	RetentionDays int    `json:"retentionDays" binding:"required,min=1,max=365"`
+}
+
+// CreateBackup creates a new backup
+// @Summary Create backup
+// @Description Create a manual backup of the system
+// @Tags admin,backup
+// @Accept json
+// @Produce json
+// @Param request body CreateBackupRequest true "Backup configuration"
+// @Success 201 {object} map[string]interface{}
+// @Router /api/admin/backups [post]
+func CreateBackup(c *gin.Context) {
+	var req CreateBackupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	adminID, _ := c.Get("user_id")
+
+	// Set defaults
+	if req.RetentionDays == 0 {
+		req.RetentionDays = 30
+	}
+
+	if req.Type == "full" {
+		req.IncludesDatabase = true
+		req.IncludesFiles = true
+	}
+
+	// Create backup record
+	backup := models.Backup{
+		Name:             req.Name,
+		Type:             req.Type,
+		Status:           "in_progress",
+		IncludesFiles:    req.IncludesFiles,
+		IncludesDatabase: req.IncludesDatabase,
+		Tables:           req.Tables,
+		RetentionDays:    req.RetentionDays,
+		CreatedBy:        adminID.(string),
+		CreatedAt:        time.Now(),
+	}
+
+	if err := SafeCreate(db.DB, &backup); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create backup")
+		return
+	}
+
+	// Log operation
+	middleware.LogCriticalOperation(c, "backup_created", map[string]interface{}{
+		"backup_type": req.Type,
+		"backup_name": req.Name,
+	})
+
+	// Start backup process asynchronously
+	go systemservice.GetBackupService().PerformBackup(backup.ID)
+
+	api_response.Success(c, gin.H{
+		"message": "Backup started successfully",
+		"data": gin.H{
+			"backup": backup,
+		},
+	})
+}
+
+// GetBackups returns all backups
+// @Summary Get backups
+// @Description Get all backups with optional filtering
+// @Tags admin,backup
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /api/admin/backups [get]
+func GetBackups(c *gin.Context) {
+	query := db.DB.Model(&models.Backup{}).Order("created_at DESC")
+
+	var backups []models.Backup
+	if err := query.Find(&backups).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch backups")
+		return
+	}
+
+	api_response.Success(c, gin.H{
+		"data": gin.H{
+			"backups": backups,
+			"count":   len(backups),
+		},
+	})
+}
+
+// RestoreBackup restores a backup
+// @Summary Restore backup
+// @Description Restore the system from a backup
+// @Tags admin,backup
+// @Accept json
+// @Produce json
+// @Param id path string true "Backup ID"
+// @Param request body RestoreBackupRequest true "Restore options"
+// @Success 200 {object} map[string]string
+// @Router /api/admin/backups/{id}/restore [post]
+func RestoreBackup(c *gin.Context) {
+	id := c.Param("id")
+	adminID, _ := c.Get("user_id")
+
+	var req RestoreBackupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var backup models.Backup
+	if err := db.DB.First(&backup, idQuery, id).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errBackupNotFound)
+		return
+	}
+
+	// Can only restore completed backups
+	if backup.Status != "completed" {
+		api_response.Error(c, http.StatusBadRequest, "Can only restore completed backups")
+		return
+	}
+
+	// Update status
+	backup.Status = "restoring"
+	db.DB.Save(&backup)
+
+	// Log critical operation
+	middleware.LogCriticalOperation(c, "backup_restore", map[string]interface{}{
+		"backup_id":   id,
+		"backup_name": backup.Name,
+		"dry_run":     req.DryRun,
+	})
+
+	// Perform restore asynchronously
+	go func() {
+		err := systemservice.GetBackupService().RestoreBackup(backup.ID, req.TargetTables, req.SkipExisting)
+		if err != nil {
+			backup.Status = "failed"
+			backup.Error = err.Error()
+		} else {
+			backup.Status = "completed"
+		}
+		now := time.Now()
+		backup.RestoredAt = &now
+		backup.RestoredBy = adminID.(string)
+		db.DB.Save(&backup)
+	}()
+
+	api_response.Success(c, gin.H{
+		"message": "Restore started. This may take several minutes.",
+	})
+}
+
+// DeleteBackup deletes a backup
+// @Summary Delete backup
+// @Description Delete a backup permanently
+// @Tags admin,backup
+// @Accept json
+// @Produce json
+// @Param id path string true "Backup ID"
+// @Success 200 {object} map[string]string
+// @Router /api/admin/backups/{id} [delete]
+func DeleteBackup(c *gin.Context) {
+	id := c.Param("id")
+
+	var backup models.Backup
+	if err := db.DB.First(&backup, idQuery, id).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errBackupNotFound)
+		return
+	}
+
+	// Delete physical backup file
+	if backup.DownloadURL != "" {
+		systemservice.GetBackupService().DeleteBackupFile(backup.DownloadURL)
+	}
+
+	// Delete from database
+	if err := db.DB.Delete(&backup).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to delete backup")
+		return
+	}
+
+	api_response.Success(c, gin.H{"message": "Backup deleted successfully"})
+}
+
+// DownloadBackup downloads a backup file
+// @Summary Download backup
+// @Description Download a backup file
+// @Tags admin,backup
+// @Accept json
+// @Produce json
+// @Param id path string true "Backup ID"
+// @Success 200 {file} application/octet-stream
+// @Router /api/admin/backups/{id}/download [get]
+func DownloadBackup(c *gin.Context) {
+	id := c.Param("id")
+
+	var backup models.Backup
+	if err := db.DB.First(&backup, idQuery, id).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errBackupNotFound)
+		return
+	}
+
+	if backup.Status != "completed" {
+		api_response.Error(c, http.StatusBadRequest, "Backup not ready for download")
+		return
+	}
+
+	// Generate signed URL or serve file directly
+	filePath, err := systemservice.GetBackupService().GetBackupFilePath(backup.ID)
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to locate backup file")
+		return
+	}
+
+	c.FileAttachment(filePath, fmt.Sprintf("backup-%s-%s.sql", backup.Name, backup.CreatedAt.Format("2006-01-02")))
+}
+
+// VerifyBackup verifies backup integrity
+// @Summary Verify backup
+// @Description Verify the integrity of a backup
+// @Tags admin,backup
+// @Accept json
+// @Produce json
+// @Param id path string true "Backup ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/admin/backups/{id}/verify [post]
+func VerifyBackup(c *gin.Context) {
+	id := c.Param("id")
+
+	var backup models.Backup
+	if err := db.DB.First(&backup, idQuery, id).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errBackupNotFound)
+		return
+	}
+
+	isValid, err := systemservice.GetBackupService().VerifyBackup(backup.ID)
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Verification failed")
+		return
+	}
+
+	api_response.Success(c, gin.H{
+		"valid": isValid,
+	})
+}
+
+// GetBackupStats returns backup statistics
+// @Summary Get backup statistics
+// @Description Get statistics about backups
+// @Tags admin,backup
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /api/admin/backups/stats [get]
+func GetBackupStats(c *gin.Context) {
+	var stats struct {
+		TotalBackups   int64   `json:"totalBackups"`
+		TotalSize      int64   `json:"totalSize"`
+		LastBackupAt   *string `json:"lastBackupAt,omitempty"`
+		ScheduledCount int     `json:"scheduledBackups"`
+	}
+
+	db.DB.Model(&models.Backup{}).Count(&stats.TotalBackups)
+	db.DB.Model(&models.Backup{}).Select("COALESCE(SUM(size), 0)").Scan(&stats.TotalSize)
+
+	var lastBackup models.Backup
+	if err := db.DB.Where("status = ?", "completed").Order("created_at DESC").First(&lastBackup).Error; err == nil {
+		lastAt := lastBackup.CreatedAt.Format(time.RFC3339)
+		stats.LastBackupAt = &lastAt
+	}
+
+	// Storage usage (mock - in production, check actual disk usage)
+	storageUsed := stats.TotalSize
+	storageLimit := int64(10 * 1024 * 1024 * 1024) // 10 GB
+
+	api_response.Success(c, gin.H{
+		"overview":          stats,
+		"storageUsed":       storageUsed,
+		"storageLimit":      storageLimit,
+		"storagePercentage": float64(storageUsed) / float64(storageLimit) * 100,
+	})
+}
+
+// GetDatabaseTables returns all database tables
+// @Summary Get database tables
+// @Description Get a list of all database tables available for backup
+// @Tags admin,backup
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /api/admin/backups/tables [get]
+func GetDatabaseTables(c *gin.Context) {
+	tables, err := systemservice.GetBackupService().GetDatabaseTables()
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch tables")
+		return
+	}
+
+	api_response.Success(c, gin.H{
+		"tables": tables,
+	})
+}
+
+// ScheduleBackup creates a scheduled backup configuration
+// @Summary Schedule backup
+// @Description Configure automatic scheduled backups
+// @Tags admin,backup
+// @Accept json
+// @Produce json
+// @Param request body ScheduleBackupRequest true "Schedule configuration"
+// @Success 200 {object} map[string]string
+// @Router /api/admin/backups/schedule [post]
+func ScheduleBackup(c *gin.Context) {
+	var req ScheduleBackupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Validate day of week/month based on frequency
+	if req.Frequency == "weekly" && (req.DayOfWeek < 0 || req.DayOfWeek > 6) {
+		api_response.Error(c, http.StatusBadRequest, "Day of week must be 0-6")
+		return
+	}
+	if req.Frequency == "monthly" && (req.DayOfMonth < 1 || req.DayOfMonth > 31) {
+		api_response.Error(c, http.StatusBadRequest, "Day of month must be 1-31")
+		return
+	}
+
+	// Create schedule (would be stored in a schedules table or config)
+	// For now, just return success
+
+	api_response.Success(c, gin.H{
+		"message":   "Backup scheduled successfully",
+		"frequency": req.Frequency,
+		"time":      req.Time,
+	})
+}
+
+// GetBackupProgress returns the progress of an in-progress backup
+// @Summary Get backup progress
+// @Description Get the progress of a running backup operation
+// @Tags admin,backup
+// @Accept json
+// @Produce json
+// @Param id path string true "Backup ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/admin/backups/{id}/progress [get]
+func GetBackupProgress(c *gin.Context) {
+	id := c.Param("id")
+
+	var backup models.Backup
+	if err := db.DB.First(&backup, idQuery, id).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, errBackupNotFound)
+		return
+	}
+
+	// Get progress from service
+	progress := systemservice.GetBackupService().GetProgress(backup.ID)
+
+	var percent int
+	var message string
+	var eta int
+
+	if progress != nil {
+		percent = progress.Percent
+		message = progress.Message
+		eta = progress.ETA
+	} else {
+		// Fallback based on DB status
+		switch backup.Status {
+		case "completed":
+			percent = 100
+			message = "Completed"
+			eta = 0
+		case "failed":
+			percent = 0
+			message = "Failed"
+			eta = 0
+		default:
+			percent = 0
+			message = "Backup status: " + backup.Status
+			eta = 0
+		}
+	}
+
+	api_response.Success(c, gin.H{
+		"backupId": id,
+		"status":   backup.Status,
+		"percent":  percent,
+		"message":  message,
+		"eta":      eta,
+	})
+}
