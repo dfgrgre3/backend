@@ -56,7 +56,7 @@ incrementally; new code must not depend on them.
 
 **GORM with PostgreSQL** is the primary database system:
 
-- **Migrations**: SQL migrations in `internal/db/migrations/` (41 migration files)
+- **Migrations**: SQL migrations in `internal/infrastructure/database/migration/migrations/` (68 migration files)
 - **ORM**: GORM for runtime database operations
 - **Connection Pooling**: Configured for both serverless and traditional environments
 - **Read Replicas**: Support for read replica routing via `DATABASE_REPLICAS` env var
@@ -71,7 +71,7 @@ The project previously had multiple database systems which have been consolidate
 
 ### Migration Strategy
 
-- SQL-based migrations in `internal/db/migrations/`
+- SQL-based migrations in `internal/infrastructure/database/migration/migrations/`
 - Numbered migration files (0000_baseline_schema.sql, 0001_add_user_session.sql, etc.)
 - Migration tool: `cmd/migrate/main.go`
 - **Schema authority**: these numbered SQL files are the only production schema authority.

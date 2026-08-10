@@ -89,7 +89,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Success "Database connection successful"
 
 # Get migration files
-$migrationsDir = Join-Path $PSScriptRoot ".." "internal" "db" "migrations"
+$migrationsDir = Join-Path $PSScriptRoot ".." "internal" "infrastructure" "database" "migration" "migrations"
 $migrationFiles = Get-ChildItem -Path $migrationsDir -Filter "*.sql" | Sort-Object Name
 
 Write-Status "Found $($migrationFiles.Count) migration files"

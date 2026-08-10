@@ -91,6 +91,6 @@ issues:
         - errcheck
         - dupl
         - gosec
-    - path: internal/db/migrations/
+    - path: internal/infrastructure/database/migration/migrations/
       linters:
         - all

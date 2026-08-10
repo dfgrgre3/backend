@@ -158,9 +158,13 @@ func ensureMigrationTable(database *gorm.DB) error {
 	return nil
 }
 
+// migrationsDir is the on-disk location of the SQL migration files, relative to
+// the repository root (this command must be run from there).
+const migrationsDir = "internal/infrastructure/database/migration/migrations"
+
 func getMigrationNames() ([]string, error) {
 	// Read from filesystem instead of embed
-	entries, err := os.ReadDir("internal/db/migrations")
+	entries, err := os.ReadDir(migrationsDir)
 	if err != nil {
 		return nil, fmt.Errorf("read migrations: %w", err)
 	}
@@ -177,7 +181,7 @@ func getMigrationNames() ([]string, error) {
 
 func applyMigration(database *gorm.DB, name string) error {
 	id := name[:len(name)-len(filepath.Ext(name))]
-	contents, err := os.ReadFile("internal/db/migrations/" + name)
+	contents, err := os.ReadFile(filepath.Join(migrationsDir, name))
 	if err != nil {
 		return fmt.Errorf("read migration %s: %w", name, err)
 	}

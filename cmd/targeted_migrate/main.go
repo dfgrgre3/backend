@@ -67,8 +67,12 @@ func ensureMigrationsTable(db *gorm.DB) {
 	db.Exec(`CREATE TABLE IF NOT EXISTS "schema_migrations" (id text PRIMARY KEY, checksum text NOT NULL, "appliedAt" timestamptz NOT NULL DEFAULT now())`)
 }
 
+// migrationsDir is the on-disk location of the SQL migration files, relative to
+// the repository root (this command must be run from there).
+const migrationsDir = "internal/infrastructure/database/migration/migrations"
+
 func readMigrationFiles() []string {
-	entries, err := os.ReadDir("internal/db/migrations")
+	entries, err := os.ReadDir(migrationsDir)
 	if err != nil {
 		log.Fatalf("Read migrations: %v", err)
 	}
@@ -104,7 +108,7 @@ func processAllMigrations(db *gorm.DB, names []string, knownApplied map[string]b
 }
 
 func computeChecksum(name string) string {
-	contents, err := os.ReadFile("internal/db/migrations/" + name)
+	contents, err := os.ReadFile(migrationsDir + "/" + name)
 	if err != nil {
 		log.Fatalf("Read %s: %v", name, err)
 	}
@@ -212,7 +216,7 @@ func applyMigration(db *gorm.DB, name, id, checksum string) {
 }
 
 func readMigrationContent(name string) string {
-	contents, err := os.ReadFile("internal/db/migrations/" + name)
+	contents, err := os.ReadFile(migrationsDir + "/" + name)
 	if err != nil {
 		log.Fatalf("Read %s: %v", name, err)
 	}

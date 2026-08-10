@@ -13,6 +13,10 @@ import (
 	"gorm.io/gorm"
 )
 
+// migrationsDir is the on-disk location of the SQL migration files, relative to
+// the repository root (this command must be run from there).
+const migrationsDir = "internal/infrastructure/database/migration/migrations"
+
 type migrationRecord struct {
 	ID       string `gorm:"primaryKey;column:id"`
 	Checksum string `gorm:"not null;column:checksum"`
@@ -40,7 +44,7 @@ func main() {
 	}
 
 	// Read all migration files
-	entries, err := os.ReadDir("internal/db/migrations")
+	entries, err := os.ReadDir(migrationsDir)
 	if err != nil {
 		log.Fatalf("Failed to read migrations directory: %v", err)
 	}
@@ -56,7 +60,7 @@ func main() {
 	// Update checksums for all migrations
 	for _, name := range names {
 		id := name[:len(name)-len(filepath.Ext(name))]
-		content, err := os.ReadFile("internal/db/migrations/" + name)
+		content, err := os.ReadFile(filepath.Join(migrationsDir, name))
 		if err != nil {
 			log.Printf("Failed to read migration %s: %v", name, err)
 			continue
