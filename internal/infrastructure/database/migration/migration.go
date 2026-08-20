@@ -17,6 +17,27 @@ import (
 	"gorm.io/plugin/dbresolver"
 )
 
+// nonTransactionalStatements contains SQL patterns that cannot run inside a transaction.
+var nonTransactionalStatements = []string{
+	"CREATE INDEX CONCURRENTLY",
+	"DROP INDEX CONCURRENTLY",
+	"REINDEX CONCURRENTLY",
+	"CLUSTER CONCURRENTLY",
+	"ANALYZE CONCURRENTLY",
+}
+
+// needsNonTransactionalExecution checks if any statement in the migration
+// requires execution outside a transaction block.
+func needsNonTransactionalExecution(contents string) bool {
+	upperContents := strings.ToUpper(contents)
+	for _, pattern := range nonTransactionalStatements {
+		if strings.Contains(upperContents, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 
@@ -315,7 +336,7 @@ func applyMigration(database *gorm.DB, name string) error {
 	err = database.First(&existing, "id = ?", id).Error
 	if err == nil {
 		if existing.Checksum != checksum {
-			return fmt.Errorf("migration %s checksum mismatch: applied checksum %s, file checksum %s. Do not edit applied migrations; create a new migration instead.", id, existing.Checksum, checksum)
+			return fmt.Errorf("migration %s checksum mismatch: applied checksum %s, file checksum %s. Do not edit applied migrations; create a new migration instead", id, existing.Checksum, checksum)
 		}
 		return nil
 	}
@@ -330,9 +351,76 @@ func applyMigration(database *gorm.DB, name string) error {
 	}
 
 	log.Printf("Applying database migration %s", id)
+
+	// Check if this migration contains non-transactional statements
+	if needsNonTransactionalExecution(string(contents)) {
+		log.Printf("Migration %s contains non-transactional statements (CONCURRENTLY), executing outside transaction", id)
+		return executeNonTransactionalMigration(database, id, string(contents), checksum)
+	}
+
+	// For other migrations, use transaction for atomicity
 	return database.Transaction(func(tx *gorm.DB) error {
 		return executeMigrationStatements(tx, id, string(contents), checksum)
 	})
+}
+
+// executeNonTransactionalMigration executes a migration that contains statements
+// which cannot run inside a transaction (e.g., CREATE INDEX CONCURRENTLY).
+// These statements must be executed one by one, outside any transaction.
+// We use the raw *sql.DB connection to bypass GORM's transaction handling.
+func executeNonTransactionalMigration(database *gorm.DB, id, contents, checksum string) error {
+	// Get raw database connection to bypass GORM's transaction handling
+	sqlDB, err := database.DB()
+	if err != nil {
+		return fmt.Errorf("get database connection: %w", err)
+	}
+
+	statements := splitSQLStatements(contents)
+	executedNonTransactional := false
+
+	for i, stmt := range statements {
+		if strings.TrimSpace(stmt) == "" {
+			continue
+		}
+		if shouldSkipMigrationStatement(id, stmt) {
+			continue
+		}
+
+		// Check if this specific statement needs non-transactional execution
+		upperStmt := strings.ToUpper(stmt)
+		isNonTransactional := false
+		for _, pattern := range nonTransactionalStatements {
+			if strings.Contains(upperStmt, pattern) {
+				isNonTransactional = true
+				break
+			}
+		}
+
+		if isNonTransactional {
+			// Execute outside transaction using raw sql.DB connection
+			log.Printf("Executing non-transactional statement %d: %.50s...", i+1, stmt)
+			_, err := sqlDB.Exec(stmt)
+			if err != nil {
+				return fmt.Errorf("apply non-transactional migration %s statement %d: %w\nStatement: %.200s", id, i+1, err, stmt)
+			}
+			executedNonTransactional = true
+		} else {
+			// Execute using GORM for consistency
+			if err := database.Exec(stmt).Error; err != nil {
+				return fmt.Errorf("apply migration %s statement %d: %w\nStatement: %.200s", id, i+1, err, stmt)
+			}
+		}
+	}
+
+	// Only record the migration after ALL statements have succeeded
+	if err := database.Create(&migrationRecord{ID: id, Checksum: checksum, AppliedAt: time.Now().UTC()}).Error; err != nil {
+		return fmt.Errorf("record migration %s: %w", id, err)
+	}
+
+	if executedNonTransactional {
+		log.Printf("Migration %s completed with non-transactional statements", id)
+	}
+	return nil
 }
 
 // shouldSkipBaseline returns true when an existing schema is already in place,

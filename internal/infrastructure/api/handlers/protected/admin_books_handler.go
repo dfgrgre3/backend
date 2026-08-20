@@ -27,18 +27,18 @@ const headerContentType = "Content-Type"
 // execute against a nil *gorm.DB and fall back to an expensive INFORMATION_SCHEMA
 // query on every subsequent request.
 var (
-	bookListOrderValue string
+	bookListOrderValue = "created_at DESC"
 	bookListOrderOnce  sync.Once
 )
 
-// WarmupBookRepository triggers the created_at column check at startup so it
-// doesn't run on the first request. Call this after DB connection is established.
+// WarmupBookRepository initializes default book list ordering.
 func WarmupBookRepository() {
 	resolveBookListOrder()
 }
 
-// resolveBookListOrder initialises bookListOrderValue exactly once, after the DB
-// connection is established.
+// resolveBookListOrder initializes bookListOrderValue by probing the database
+// for the actual column name used by the Book table. Falls back to the
+// camelCase variant ("createdAt" DESC) when db.DB is unavailable.
 func resolveBookListOrder() {
 	bookListOrderOnce.Do(func() {
 		if db.DB != nil && db.DB.Migrator().HasColumn(&models.Book{}, "created_at") {

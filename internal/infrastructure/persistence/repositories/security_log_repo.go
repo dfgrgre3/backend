@@ -40,12 +40,16 @@ func (r *SecurityLogRepository) FindAll(limit, offset int) ([]models.SecurityLog
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		errCount = r.db.Model(&models.SecurityLog{}).Count(&count).Error
+		// Fix: Use separate session to avoid concurrent map writes
+		countRdb := r.db.Session(&gorm.Session{NewDB: true})
+		errCount = countRdb.Model(&models.SecurityLog{}).Count(&count).Error
 	}()
 
 	go func() {
 		defer wg.Done()
-		errFind = r.db.Order("created_at desc").Limit(limit).Offset(offset).Find(&logs).Error
+		// Fix: Use separate session to avoid concurrent map writes
+		findRdb := r.db.Session(&gorm.Session{NewDB: true})
+		errFind = findRdb.Order("created_at desc").Limit(limit).Offset(offset).Find(&logs).Error
 	}()
 
 	wg.Wait()

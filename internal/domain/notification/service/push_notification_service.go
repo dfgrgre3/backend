@@ -9,8 +9,6 @@ import (
 
 // PushNotificationService handles push notification operations
 type PushNotificationService struct {
-	fcmClient  interface{} // Would be *firebase.App in production
-	apnsClient interface{} // Would be APNs client in production
 }
 
 var pushNotificationServiceInstance *PushNotificationService

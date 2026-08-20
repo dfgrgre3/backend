@@ -5,8 +5,6 @@ import (
 	coursedelivery "thanawy-backend/internal/infrastructure/api/handlers/protected"
 	courserepo "thanawy-backend/internal/infrastructure/persistence/repositories"
 
-	commandcourse "thanawy-backend/internal/domain/course/service"
-	coursequery "thanawy-backend/internal/domain/course/service"
 	courseservice "thanawy-backend/internal/domain/course/service"
 
 	"gorm.io/gorm"
@@ -21,18 +19,18 @@ func Initialize(database *gorm.DB) (*Handlers, error) {
 		return nil, fmt.Errorf("initialize application: database is required")
 	}
 
-	listCoursesHandler := coursequery.NewListCoursesHandler(database)
-	getCourseHandler := coursequery.NewGetCourseHandler(database)
-	createCourseHandler := commandcourse.NewCreateCourseHandler(database)
-	updateCourseHandler := commandcourse.NewUpdateCourseHandler(database)
+	listCoursesHandler := courseservice.NewListCoursesHandler(database)
+	getCourseHandler := courseservice.NewGetCourseHandler(database)
+	createCourseHandler := courseservice.NewCreateCourseHandler(database)
+	updateCourseHandler := courseservice.NewUpdateCourseHandler(database)
 
 	// Import course repository and service
 	lmsRepo := courserepo.NewLmsRepository(database)
 	courService := courseservice.NewLmsService(lmsRepo)
-	searchCoursesHandler := coursequery.NewSearchCoursesHandler(database)
-	getEnrollmentHandler := coursequery.NewGetEnrollmentHandler()
-	enrollUserHandler := commandcourse.NewEnrollUserHandler(database)
-	updateProgressHandler := commandcourse.NewUpdateProgressHandler()
+	searchCoursesHandler := courseservice.NewSearchCoursesHandler(database)
+	getEnrollmentHandler := courseservice.NewGetEnrollmentHandler()
+	enrollUserHandler := courseservice.NewEnrollUserHandler(database)
+	updateProgressHandler := courseservice.NewUpdateProgressHandler()
 
 	// Course REST Handler
 	courseRESTHandler := coursedelivery.NewCourseRESTHandler(

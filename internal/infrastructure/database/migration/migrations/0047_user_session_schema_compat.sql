@@ -9,10 +9,18 @@ ALTER TABLE IF EXISTS public."UserSession"
     ADD COLUMN IF NOT EXISTS revoked_by uuid,
     ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
 
-UPDATE public."UserSession"
-SET refresh_token_hash = encode(sha256(refresh_token::bytea), 'hex')
-WHERE refresh_token_hash IS NULL
-  AND refresh_token IS NOT NULL;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'UserSession' AND column_name = 'refresh_token'
+    ) THEN
+        UPDATE public."UserSession"
+        SET refresh_token_hash = encode(sha256(refresh_token::bytea), 'hex')
+        WHERE refresh_token_hash IS NULL
+          AND refresh_token IS NOT NULL;
+    END IF;
+END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_session_refresh_hash
     ON public."UserSession" (refresh_token_hash)

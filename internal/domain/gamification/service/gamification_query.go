@@ -47,6 +47,41 @@ type UserProgressReadModel struct {
 	CustomGoals    []any     `json:"customGoals"`
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`
+
+	// Level thresholds, so clients never have to guess the XP curve.
+	CurrentLevelXP int `json:"currentLevelXP"`
+	NextLevelXP    int `json:"nextLevelXP"`
+	XPIntoLevel    int `json:"xpIntoLevel"`
+	XPToNextLevel  int `json:"xpToNextLevel"`
+}
+
+// xpThresholdForLevel returns the cumulative XP required to reach a level.
+// The curve is quadratic: level n starts at 500 * (n-1) * n.
+func xpThresholdForLevel(level int) int {
+	if level <= 1 {
+		return 0
+	}
+	return 500 * (level - 1) * level
+}
+
+// applyLevelThresholds fills the XP-curve fields from the learner's total XP.
+func (m *UserProgressReadModel) applyLevelThresholds() {
+	if m.Level < 1 {
+		m.Level = 1
+	}
+
+	m.CurrentLevelXP = xpThresholdForLevel(m.Level)
+	m.NextLevelXP = xpThresholdForLevel(m.Level + 1)
+
+	m.XPIntoLevel = m.TotalXP - m.CurrentLevelXP
+	if m.XPIntoLevel < 0 {
+		m.XPIntoLevel = 0
+	}
+
+	m.XPToNextLevel = m.NextLevelXP - m.TotalXP
+	if m.XPToNextLevel < 0 {
+		m.XPToNextLevel = 0
+	}
 }
 
 type GamificationQueryService struct {
@@ -80,7 +115,7 @@ func NewGamificationQueryService() *GamificationQueryService {
 
 func NewDefaultUserProgress(userID string) *UserProgressReadModel {
 	now := time.Now()
-	return &UserProgressReadModel{
+	progress := &UserProgressReadModel{
 		ID:             userID,
 		UserID:         userID,
 		TotalXP:        0,
@@ -93,6 +128,8 @@ func NewDefaultUserProgress(userID string) *UserProgressReadModel {
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
+	progress.applyLevelThresholds()
+	return progress
 }
 
 // readDBOrFallback dynamically retrieves the read DB connection.
@@ -285,7 +322,7 @@ func (s *GamificationQueryService) GetUserProgress(userID string) (*UserProgress
 		}
 	}
 
-	return &UserProgressReadModel{
+	progress := &UserProgressReadModel{
 		ID:             user.ID,
 		UserID:         user.ID,
 		TotalXP:        user.TotalXP,
@@ -297,7 +334,9 @@ func (s *GamificationQueryService) GetUserProgress(userID string) (*UserProgress
 		CustomGoals:    []any{},
 		CreatedAt:      user.CreatedAt,
 		UpdatedAt:      user.UpdatedAt,
-	}, nil
+	}
+	progress.applyLevelThresholds()
+	return progress, nil
 }
 
 func (s *GamificationQueryService) GetUserAchievements(userID string) ([]UserAchievementReadModel, error) {

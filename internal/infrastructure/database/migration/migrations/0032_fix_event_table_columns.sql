@@ -3,8 +3,6 @@
 --   type, start_date, end_date, location, is_online, max_attendees, attendees_count, is_active
 -- The baseline schema has Prisma camelCase column names (startDate, endDate, etc.)
 
-BEGIN;
-
 -- Add missing columns that the Go model requires
 ALTER TABLE "Event"
     ADD COLUMN IF NOT EXISTS type text DEFAULT 'workshop',
@@ -24,4 +22,3 @@ WHERE start_date IS NULL OR end_date IS NULL;
 -- Index on is_active for efficient filtering
 CREATE INDEX IF NOT EXISTS idx_event_is_active ON "Event" (is_active) WHERE deleted_at IS NULL;
 
-COMMIT;

@@ -7,36 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const (
-	hexUserByIDRoute          = "/hex/users/:id"
-	hexSubjectsRoute          = "/hex/subjects"
-	hexSubjectByIDRoute       = hexSubjectsRoute + "/:id"
-	hexSubjectBySlugRoute     = hexSubjectsRoute + "/slug/:slug"
-	hexSubjectCurriculumRoute = hexSubjectByIDRoute + "/curriculum"
-	hexSubjectLessonsRoute    = hexSubjectByIDRoute + "/lessons"
-	hexSubjectReviewsRoute    = hexSubjectByIDRoute + "/reviews"
-	hexSubjectEnrollRoute     = hexSubjectByIDRoute + "/enroll"
-	hexSubjectStatusRoute     = hexSubjectByIDRoute + "/enrollment-status"
-	hexSubjectCompleteRoute   = hexSubjectByIDRoute + "/complete"
-	hexLessonProgressRoute    = "/hex/courses/lessons/:id/progress"
-	hexMyCoursesRoute         = "/hex/my-courses"
-	hexCourseStudentsRoute    = hexSubjectByIDRoute + "/students"
-	hexCourseDuplicateRoute   = "/hex/courses/duplicate"
-	hexCourseBatchRoute       = "/hex/courses/batch"
-	hexDashboardStatsRoute    = "/hex/dashboard/stats"
-
-	// New Course Domain Routes (CQRS Architecture)
-	hexCoursesRoute           = "/hex/v3/courses"
-	hexCourseByIDRoute        = hexCoursesRoute + "/:id"
-	hexCourseSectionsRoute    = hexCourseByIDRoute + "/sections"
-	hexCourseSectionByIDRoute = hexCourseSectionsRoute + "/:sectionId"
-	hexCourseLessonsRoute     = hexCourseSectionByIDRoute + "/lessons"
-	hexCourseLessonByIDRoute  = hexCourseLessonsRoute + "/:lessonId"
-	hexCourseEnrollmentsRoute = hexCourseByIDRoute + "/enrollments"
-	hexCourseEnrollmentRoute  = hexCourseEnrollmentsRoute + "/:userId"
-	hexCoursePricingRoute     = hexCourseByIDRoute + "/pricing"
-)
-
 // SetupHexagonalRoutes configures routes using the new Hexagonal Architecture handlers
 // This runs alongside legacy routes for gradual migration
 func SetupHexagonalRoutes(router *gin.Engine, handlers *application.Handlers) {

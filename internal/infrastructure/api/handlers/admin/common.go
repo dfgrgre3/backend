@@ -29,12 +29,6 @@ const (
 
 var calculateTotalPages = shared.CalculateTotalPages
 
-// Shared error message constants
-const (
-	errDBUnavailable        = shared.ErrDBUnavailable
-	msgUserNotAuthenticated = shared.MsgUserNotAuthenticated
-)
-
 // IsDuplicateKeyError checks if the error is a unique constraint violation.
 func IsDuplicateKeyError(err error) bool { return shared.IsDuplicateKeyError(err) }
 

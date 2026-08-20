@@ -1,16 +1,15 @@
 package protected
 
 import (
-	models "thanawy-backend/internal/domain/common"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	models "thanawy-backend/internal/domain/common"
 
 	api_response "thanawy-backend/internal/infrastructure/api/response"
-	apiresponse "thanawy-backend/internal/infrastructure/api/response"
 	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/gin-gonic/gin"
@@ -113,7 +112,7 @@ func CreateTeacher(c *gin.Context) {
 		return
 	}
 
-	apiresponse.Created(c, gin.H{"teacher": teacher})
+	api_response.Created(c, gin.H{"teacher": teacher})
 }
 
 func UpdateTeacher(c *gin.Context) {

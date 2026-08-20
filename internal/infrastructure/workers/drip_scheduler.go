@@ -7,9 +7,10 @@ import (
 	"thanawy-backend/internal/infrastructure/cache"
 	"time"
 
-	"github.com/hibiken/asynq"
 	notificationservice "thanawy-backend/internal/domain/notification/service"
 	db "thanawy-backend/internal/infrastructure/database"
+
+	"github.com/hibiken/asynq"
 	// ⚠️ تأكد من استيراد حزمة models والمسار الصحيح لـ asynq config helpers
 	// "thanawy-backend/internal/domain/course/models"
 	// "thanawy-backend/internal/infrastructure/queue"

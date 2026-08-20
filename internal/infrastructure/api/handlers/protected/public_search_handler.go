@@ -400,7 +400,7 @@ func TrackSearchHistory(c *gin.Context) {
 	}
 
 	event := models.AnalyticsEvent{
-		ID:         fmt.Sprintf("search-%s-%d", req.Query, time.Now().UnixNano()),
+		EventID:    fmt.Sprintf("search-%s-%d", req.Query, time.Now().UnixNano()),
 		EventType:  "search_query",
 		UserID:     userID,
 		Payload:    payload,
@@ -409,7 +409,7 @@ func TrackSearchHistory(c *gin.Context) {
 	}
 
 	// Fire-and-forget style: log but don't fail the request on DB error
-	if err := db.DB.Create(&event).Error; err != nil {
+	if err := db.RawWriteDB(c.Request.Context()).Create(&event).Error; err != nil {
 		log.Printf("Failed to track search history: %v", err)
 	}
 
@@ -441,7 +441,7 @@ func GetUserSearchHistory(c *gin.Context) {
 	}
 
 	var events []models.AnalyticsEvent
-	query := db.DB.Where("event_type = ? AND user_id = ?", "search_query", userID).
+	query := db.RawReadDB(c.Request.Context()).Where("event_type = ? AND user_id = ?", "search_query", userID).
 		Order("received_at DESC").
 		Limit(limit)
 
@@ -469,8 +469,11 @@ func GetUserSearchHistory(c *gin.Context) {
 
 // PromoEventRequest represents a promo event tracking request
 type PromoEventRequest struct {
-	PromoID   string                 `json:"promoId" binding:"required"`
-	EventType string                 `json:"eventType" binding:"required"` // view, click, dismiss
+	PromoID   string                 `json:"promoId"`
+	ID        string                 `json:"id"`
+	EventType string                 `json:"eventType"`
+	Type      string                 `json:"type"`
+	Component string                 `json:"component"`
 	Timestamp int64                  `json:"timestamp"`
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
@@ -491,11 +494,23 @@ func TrackPromoEvent(c *gin.Context) {
 		return
 	}
 
-	// Validate event type
-	validTypes := map[string]bool{"view": true, "click": true, "dismiss": true}
-	if !validTypes[req.EventType] {
-		api_response.Error(c, http.StatusBadRequest, "eventType must be 'view', 'click', or 'dismiss'")
-		return
+	promoID := req.PromoID
+	if promoID == "" {
+		promoID = req.ID
+	}
+	if promoID == "" {
+		promoID = req.Component
+	}
+	if promoID == "" {
+		promoID = "general"
+	}
+
+	eventType := req.EventType
+	if eventType == "" {
+		eventType = req.Type
+	}
+	if eventType == "" {
+		eventType = "view"
 	}
 
 	// Get user ID if authenticated (optional)
@@ -508,8 +523,8 @@ func TrackPromoEvent(c *gin.Context) {
 
 	// Build payload
 	payload := models.JSONMap{
-		"promoId":   req.PromoID,
-		"eventType": req.EventType,
+		"promoId":   promoID,
+		"eventType": eventType,
 	}
 	if req.Metadata != nil {
 		for k, v := range req.Metadata {
@@ -535,8 +550,8 @@ func TrackPromoEvent(c *gin.Context) {
 	}
 
 	event := models.AnalyticsEvent{
-		EventID:    fmt.Sprintf("promo-%s-%s-%d", req.PromoID, req.EventType, time.Now().UnixNano()),
-		EventType:  "promo_" + req.EventType,
+		EventID:    fmt.Sprintf("promo-%s-%s-%d", promoID, eventType, time.Now().UnixNano()),
+		EventType:  "promo_" + eventType,
 		UserID:     userID,
 		Payload:    payload,
 		Source:     "frontend",
@@ -544,7 +559,7 @@ func TrackPromoEvent(c *gin.Context) {
 	}
 
 	// Fire-and-forget style: log but don't fail the request on DB error
-	if err := db.DB.Create(&event).Error; err != nil {
+	if err := db.RawWriteDB(c.Request.Context()).Create(&event).Error; err != nil {
 		log.Printf("Failed to track promo event: %v", err)
 	}
 

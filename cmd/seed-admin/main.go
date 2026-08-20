@@ -1,10 +1,10 @@
 package main
 
 import (
-	models "thanawy-backend/internal/domain/common"
 	"fmt"
 	"log"
 	"os"
+	models "thanawy-backend/internal/domain/common"
 
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"

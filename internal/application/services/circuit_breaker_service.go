@@ -10,7 +10,6 @@ import (
 // CircuitBreakerService wraps external service calls with circuit breakers
 type CircuitBreakerService struct {
 	breakers map[string]*circuitbreaker.CircuitBreaker
-	mu       sync.RWMutex
 }
 
 var circuitServiceInstance *CircuitBreakerService

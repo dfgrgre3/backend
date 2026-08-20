@@ -8,14 +8,15 @@
 #   docker compose down -v            # Stop and remove volumes (WARNING: deletes data)
 #   docker compose ps                 # Check service status
 #   docker compose logs -f            # Follow logs
+#   docker compose exec backend sh    # Open shell in backend container
 #
 # Services:
-#   postgres  - Main database (port 5432)
-#   redis     - Cache, rate limiting, workers (port 6379)
-#   minio     - S3-compatible storage (ports 9000, 9001)
-#   mailpit   - Email testing UI (ports 1025, 8025) [dev profile]
-#   backend   - Go API server (port 8082)
-#   frontend  - Next.js app (port 3000)
+#   postgres    - Main database (port 5432)
+#   redis       - Cache, rate limiting, workers (port 6379)
+#   minio       - S3-compatible storage (ports 9000, 9001)
+#   mailpit     - Email testing UI (ports 1025, 8025) [dev profile]
+#   backend     - Go API server (port 8082)
+#   frontend    - Next.js app (port 3000)
 
 name: thanawy
 
@@ -53,6 +54,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./config/postgresql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-thanawy} -d ${POSTGRES_DB:-thanawy}"]
       interval: 10s
@@ -96,8 +98,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"    # S3 API
-      - "${MINIO_CONSOLE_PORT:-9001}:9001" # Web Console
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -111,17 +113,22 @@ services:
     networks:
       - thanawy-net
 
-  # Creates the default bucket on MinIO startup
+  # ==========================================
+  # MinIO Bucket Initializer
+  # ==========================================
   minio-init:
     image: minio/mc:latest
     depends_on:
       minio:
         condition: service_healthy
+    profiles:
+      - init
     entrypoint: >
       /bin/sh -c "
       mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD};
-      mc mb --ignore-existing local/${MINIO_BUCKET:-thanawy};
-      mc anonymous set download local/${MINIO_BUCKET:-thanawy};
+      mc mb --ignore-existing local/${MINIO_BUCKET:-thanawy} 2>/dev/null || true;
+      mc anonymous set download local/${MINIO_BUCKET:-thanawy} 2>/dev/null || true;
+      echo 'MinIO bucket initialized';
       exit 0;
       "
     logging: *default-logging
@@ -137,8 +144,8 @@ services:
     profiles:
       - dev
     ports:
-      - "${MAILPIT_SMTP_PORT:-1025}:1025"  # SMTP server
-      - "${MAILPIT_UI_PORT:-8025}:8025"    # Web UI
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
     volumes:
       - mailpit_data:/data
     healthcheck:
@@ -158,6 +165,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: api
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -169,13 +181,27 @@ services:
     ports:
       - "${BACKEND_PORT:-8082}:8082"
     environment:
-      NODE_ENV: development
-      APP_ENV: development
+      # Environment mode
+      NODE_ENV: ${NODE_ENV:-development}
+      APP_ENV: ${APP_ENV:-development}
+      APP_MODE: ${APP_MODE:-api}
+
+      # Server configuration
       PORT: 8082
-      GIN_MODE: debug
+      GIN_MODE: ${GIN_MODE:-release}
       TZ: UTC
+
+      # Database (internal network)
       DATABASE_URL: postgresql://${POSTGRES_USER:-thanawy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-thanawy}?sslmode=disable
+      DATABASE_WRITE_DSN: postgresql://${POSTGRES_USER:-thanawy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-thanawy}?sslmode=disable
+      DATABASE_HOST: postgres
+
+      # Redis (internal network)
       REDIS_URL: redis://:${REDIS_PASSWORD:-devpassword}@redis:6379
+      DISABLE_REDIS: ${DISABLE_REDIS:-false}
+      REDIS_TLS: ${REDIS_TLS:-false}
+
+      # Storage (MinIO internal endpoint)
       STORAGE_TYPE: s3
       S3_ENDPOINT: minio:9000
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
@@ -183,17 +209,127 @@ services:
       S3_BUCKET: ${MINIO_BUCKET:-thanawy}
       S3_USE_SSL: "false"
       S3_PUBLIC_URL: http://localhost:${MINIO_API_PORT:-9000}/${MINIO_BUCKET:-thanawy}
+      S3_REGION: us-east-1
+
+      # SMTP (Mailpit in dev, external in prod)
       SMTP_ENABLED: "true"
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       SMTP_USER: ""
       SMTP_PASS: ""
+      SMTP_SECURE: "false"
       SMTP_FROM: "Thanawy <noreply@thanawy.local>"
+
+      # JWT Configuration
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      JWT_ISSUER_URL: ${JWT_ISSUER_URL:-http://localhost:8082}
+
+      # App settings
+      APP_VERSION: ${APP_VERSION:-1.0.0}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      # CORS
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
+
+      # Security
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
+
+      # Feature flags
+      SKIP_AUTO_MIGRATE: ${SKIP_AUTO_MIGRATE:-false}
+      RUN_API: ${RUN_API:-true}
+      RUN_WORKERS: ${RUN_WORKERS:-false}
+      RUN_SCHEDULER: ${RUN_SCHEDULER:-false}
+
+      # Rate limiting
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-500}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1m}
+
+      # HTTP timeouts
+      HTTP_READ_TIMEOUT: ${HTTP_READ_TIMEOUT:-10s}
+      HTTP_WRITE_TIMEOUT: ${HTTP_WRITE_TIMEOUT:-30s}
+      HTTP_IDLE_TIMEOUT: ${HTTP_IDLE_TIMEOUT:-120s}
+
+      # Proxy
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     env_file:
+      - path: .env.docker
+        required: false
+      - path: .env
+        required: false
+    volumes:
+      # Mount local .env for development
+      - .env:/app/.env:ro
+    healthcheck:
+      test: ["CMD", "curl", "--silent", "--fail", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+    logging: *default-logging
+    <<: *default-limits
+    networks:
+      - thanawy-net
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
+    command: ["./main"]
+
+  # ==========================================
+  # Backend Worker - Background Processing
+  # ==========================================
+  backend-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Worker mode
+      APP_MODE: worker
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-thanawy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-thanawy}?sslmode=disable
+      DATABASE_HOST: postgres
+
+      # Redis
+      REDIS_URL: redis://:${REDIS_PASSWORD:-devpassword}@redis:6379
+      DISABLE_REDIS: ${DISABLE_REDIS:-false}
+
+      # Storage
+      STORAGE_TYPE: s3
+      S3_ENDPOINT: minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${MINIO_BUCKET:-thanawy}
+      S3_USE_SSL: "false"
+
+      # SMTP
+      SMTP_ENABLED: "true"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      # Rate limiting
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-500}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1m}
+    env_file:
+      - path: .env.docker
+        required: false
       - path: .env
         required: false
     healthcheck:
-      test: ["CMD", "curl", "--silent", "--fail", "http://localhost:8082/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/health"]
       interval: 30s
       timeout: 5s
       start_period: 60s
@@ -204,28 +340,52 @@ services:
       - thanawy-net
 
   # ==========================================
-  # Frontend - Next.js App
+  # Backend Scheduler - Periodic Tasks
   # ==========================================
-  frontend:
+  backend-scheduler:
     build:
-      context: ../thanawy
-      dockerfile: Dockerfile.frontend
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     restart: unless-stopped
     depends_on:
-      backend:
+      postgres:
         condition: service_healthy
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      redis:
+        condition: service_healthy
     environment:
-      NODE_ENV: development
-      NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-8082}/api
-      INTERNAL_API_URL: http://backend:8082
-      NEXT_TELEMETRY_DISABLED: "1"
+      # Scheduler mode
+      APP_MODE: scheduler
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-thanawy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-thanawy}?sslmode=disable
+      DATABASE_HOST: postgres
+
+      # Redis
+      REDIS_URL: redis://:${REDIS_PASSWORD:-devpassword}@redis:6379
+      DISABLE_REDIS: ${DISABLE_REDIS:-false}
+
+      # Storage
+      STORAGE_TYPE: s3
+      S3_ENDPOINT: minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${MINIO_BUCKET:-thanawy}
+      S3_USE_SSL: "false"
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     env_file:
-      - path: ../thanawy/frontend/.env
+      - path: .env.docker
+        required: false
+      - path: .env
         required: false
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/healthz"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/health"]
       interval: 30s
       timeout: 5s
       start_period: 60s
@@ -234,6 +394,66 @@ services:
     <<: *default-limits
     networks:
       - thanawy-net
+
+  # ==========================================
+  # Migration Runner - One-shot container
+  # ==========================================
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-thanawy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-thanawy}?sslmode=disable
+      DATABASE_HOST: postgres
+      LOG_LEVEL: info
+    env_file:
+      - path: .env.docker
+        required: false
+      - path: .env
+        required: false
+    networks:
+      - thanawy-net
+    entrypoint: ["/app/migrate"]
+    command: ["up"]
+
+  # ==========================================
+  # Frontend - Next.js App (Optional)
+  # ==========================================
+  # Uncomment if you have a frontend in ../thanawy
+  # ==========================================
+  # frontend:
+  #   build:
+  #     context: ../thanawy
+  #     dockerfile: Dockerfile.frontend
+  #   restart: unless-stopped
+  #   depends_on:
+  #     backend:
+  #       condition: service_healthy
+  #   ports:
+  #     - "${FRONTEND_PORT:-3000}:3000"
+  #   environment:
+  #     NODE_ENV: development
+  #     NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-8082}/api
+  #     INTERNAL_API_URL: http://backend:8082
+  #     NEXT_TELEMETRY_DISABLED: "1"
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/healthz"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     start_period: 60s
+  #     retries: 3
+  #   logging: *default-logging
+  #   <<: *default-limits
+  #   networks:
+  #     - thanawy-net
 
 # ==========================================
 # Volumes

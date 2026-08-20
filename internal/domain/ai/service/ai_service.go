@@ -3,6 +3,7 @@ package aiservice
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -118,7 +119,7 @@ func (s *AIService) GenerateContent(ctx context.Context, prompt, contentType str
 // GenerateContentWithMessages allows passing full message history to the AI
 func (s *AIService) GenerateContentWithMessages(ctx context.Context, messages []map[string]interface{}, model string) (string, error) {
 	if !s.enabled {
-		return "", fmt.Errorf(errAINotEnabled)
+		return "", errors.New(errAINotEnabled)
 	}
 
 	if model == "" {
@@ -154,7 +155,7 @@ func (s *AIService) GenerateContentWithMessages(ctx context.Context, messages []
 // ReviewContent reviews and provides feedback on educational content
 func (s *AIService) ReviewContent(ctx context.Context, content, subject string) (map[string]interface{}, error) {
 	if !s.enabled {
-		return nil, fmt.Errorf(errAINotEnabled)
+		return nil, errors.New(errAINotEnabled)
 	}
 
 	validatedContent, err := ValidateAIInput(content, 5000)
@@ -365,7 +366,7 @@ func getRiskLevel(score int) string {
 // GenerateQuiz generates quiz questions for a topic
 func (s *AIService) GenerateQuiz(ctx context.Context, topic, difficulty string, count int) ([]map[string]interface{}, error) {
 	if !s.enabled {
-		return nil, fmt.Errorf(errAINotEnabled)
+		return nil, errors.New(errAINotEnabled)
 	}
 
 	if count > 20 {
@@ -612,7 +613,7 @@ func (s *AIService) callGemini(ctx context.Context, systemPrompt, userMessage st
 
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("Gemini API returned status %d: %s", resp.StatusCode, string(body))
+			return fmt.Errorf("gemini API returned status %d: %s", resp.StatusCode, string(body))
 		}
 
 		var result struct {

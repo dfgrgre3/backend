@@ -9,7 +9,6 @@ import (
 	"time"
 
 	api_response "thanawy-backend/internal/infrastructure/api/response"
-	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -210,30 +209,3 @@ func containsString(values []string, needle string) bool {
 // upsertDashboardAlert records an operational alert, collapsing repeats of the
 // same condition onto one row via dedupeKey. It is safe to call from any
 // background job or handler that detects a problem worth surfacing.
-func upsertDashboardAlert(alert models.DashboardAlert, dedupeKey string) {
-	if db.DB == nil || dedupeKey == "" {
-		return
-	}
-	now := time.Now()
-	result := db.DB.Model(&models.DashboardAlert{}).
-		Where("dedupe_key = ? AND deleted_at IS NULL", dedupeKey).
-		Updates(map[string]interface{}{
-			"occurrence_count": gorm.Expr("occurrence_count + 1"),
-			"last_seen_at":     now,
-			"updated_at":       now,
-		})
-	if result.Error == nil && result.RowsAffected > 0 {
-		return
-	}
-
-	alert.DedupeKey = &dedupeKey
-	alert.FirstSeenAt = now
-	alert.LastSeenAt = now
-	if alert.State == "" {
-		alert.State = models.DashboardAlertStateOpen
-	}
-	if alert.Severity == "" {
-		alert.Severity = models.DashboardAlertSeverityInfo
-	}
-	db.DB.Create(&alert)
-}

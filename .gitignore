@@ -27,6 +27,10 @@ bin/
 .env.local
 .env.*
 !.env.example
+
+# Docker environment files
+.env.docker
+.env.docker.*
 !.env.docker.example
 
 # Also ensure any .env* in subdirectories is ignored

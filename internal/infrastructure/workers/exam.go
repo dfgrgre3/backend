@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 	aiservice "thanawy-backend/internal/domain/ai/service"
-	"thanawy-backend/internal/domain/common"
+	models "thanawy-backend/internal/domain/common"
 	"thanawy-backend/internal/infrastructure/cache"
 	"time"
 

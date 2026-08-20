@@ -13,7 +13,7 @@ import (
 	"thanawy-backend/internal/infrastructure/cache"
 	db "thanawy-backend/internal/infrastructure/database"
 
-	"thanawy-backend/internal/infrastructure/workers"
+	worker "thanawy-backend/internal/infrastructure/workers"
 	"time"
 
 	"github.com/gin-gonic/gin"

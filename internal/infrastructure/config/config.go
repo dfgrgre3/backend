@@ -6,8 +6,6 @@ import (
 	"os"
 	"strings"
 	models "thanawy-backend/internal/domain/common"
-
-	"github.com/google/uuid"
 )
 
 type Config struct {
@@ -185,10 +183,6 @@ func LoadSafe() (*Config, error) {
 		JWTClientID:          getEnv("JWT_CLIENT_ID", ""),
 	}
 
-	if c.JWTSecretKey != "" && c.JWTIssuerURL == "" {
-		return nil, fmt.Errorf("JWT_ISSUER_URL is required when JWT_SECRET_KEY is set")
-	}
-
 	c.S3.Endpoint = getEnv("S3_ENDPOINT", "")
 	c.S3.AccessKey = getEnv("S3_ACCESS_KEY", "")
 	c.S3.SecretKey = getEnv("S3_SECRET_KEY", "")
@@ -283,14 +277,6 @@ func getEnvInt(key string, defaultVal int) int {
 }
 
 // generateRandomString generates a random string for dev secrets
-func generateRandomString(n int) string {
-	result := uuid.New().String()
-	if len(result) > n {
-		return result[:n]
-	}
-	return result
-}
-
 func parseReplicas(raw string) []string {
 	if raw == "" {
 		return nil

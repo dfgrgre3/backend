@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	models "thanawy-backend/internal/domain/common"
 	"thanawy-backend/internal/infrastructure/cache"
@@ -97,7 +99,7 @@ func fetchOrCreateSettingsForGet(c *gin.Context, uid string) (models.UserSetting
 	// Use the write DB directly to avoid double-query in the fallback path.
 	// ReadDB may be nil or slow, and fallback to write DB adds latency.
 	var settings models.UserSettings
-	result := db.DB.Where(&models.UserSettings{UserID: uid}).First(&settings)
+	result := db.DB.Where("user_id = ?", uid).Take(&settings)
 
 	if result.Error != nil {
 		if handleSettingsFetchError(c, uid, result) {
@@ -167,8 +169,10 @@ func createDefaultUserSettings(c *gin.Context, uid string) (models.UserSettings,
 		ShowProgress:         true,
 	}
 
-	// Use OnConflict DO NOTHING to prevent duplicates if concurrent requests try to create settings
-	if err := db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&settings).Error; err != nil {
+	// Use RawWriteDB to bypass RLS when creating default settings
+	// This is necessary because the app role connection has RLS enabled,
+	// but we need to insert system-level default settings for users
+	if err := db.RawWriteDB(c.Request.Context()).Clauses(clause.OnConflict{DoNothing: true}).Create(&settings).Error; err != nil {
 		log.Printf("ERROR: Failed to create settings for user %v: %v", uid, err)
 		api_response.Error(c, http.StatusInternalServerError, "Failed to create settings")
 		return settings, err
@@ -202,6 +206,14 @@ func UpdateSettings(c *gin.Context) {
 	if err := c.ShouldBindJSON(&patch); err != nil {
 		log.Printf("ERROR: UpdateSettings - ShouldBindJSON failed for user %v: %v", userID, err)
 		api_response.Error(c, http.StatusBadRequest, "Invalid request body: "+err.Error())
+		return
+	}
+
+	// Validate the incoming patch before doing any work so invalid values are
+	// rejected with a clear 400 response instead of being silently ignored or
+	// persisted with corrupt data.
+	if err := validateSettingsPatch(patch); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -272,7 +284,12 @@ func fetchOrCreateUserSettings(userID string) (models.UserSettings, error) {
 		ShowProgress:         true,
 	}
 
-	if err := db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&settings).Error; err != nil {
+	// Use RawWriteDB to bypass RLS when creating default settings, matching the
+	// read path (createDefaultUserSettings). The app role connection has RLS
+	// enabled but lacks INSERT privileges for the UserSettings table, which
+	// otherwise fails with SQLSTATE 42501 when a user updates settings before
+	// they have been created (e.g. via PATCH /settings/preferences).
+	if err := db.RawWriteDB().Clauses(clause.OnConflict{DoNothing: true}).Create(&settings).Error; err != nil {
 		log.Printf("ERROR: Failed to create settings for user %v: %v", userID, err)
 		return settings, err
 	}
@@ -289,6 +306,98 @@ func applySettingsPatch(settings *models.UserSettings, patch map[string]interfac
 	applyNotificationSettings(settings, patch)
 	applyPrivacySettings(settings, patch)
 	applyAdvancedSettings(settings, patch)
+}
+
+// validateSettingsPatch validates the incoming preferences patch and returns an
+// error describing the first invalid field/value encountered. Unknown keys are
+// intentionally ignored to stay forward-compatible with settings added later,
+// but every recognized key must carry a value of the expected type and within
+// the allowed range/set.
+func validateSettingsPatch(patch map[string]interface{}) error {
+	// String enum fields.
+	for key, allowed := range map[string][]string{
+		"theme":             {"light", "dark", "system"},
+		"fontSize":          {"small", "medium", "large"},
+		"language":          {"ar", "en"},
+		"numberFormat":      {"english", "arabic"},
+		"profileVisibility": {"public", "private", "contacts"},
+	} {
+		if raw, ok := patch[key]; ok {
+			val, isStr := raw.(string)
+			if !isStr || !oneOfEnum(strings.ToLower(strings.TrimSpace(val)), allowed) {
+				return fmt.Errorf("invalid value for '%s': must be one of %v", key, allowed)
+			}
+		}
+	}
+
+	// Boolean fields: if present, they must be an actual JSON boolean.
+	for _, key := range []string{
+		"reducedMotion", "highContrast", "compactMode", "efficiencyMode",
+		"notificationsEnabled", "studyReminders", "emailNotifications", "pushNotifications",
+		"taskReminders", "dailyGoalReminders", "examReminders", "deadlineReminders",
+		"progressReports", "weeklyReport", "achievementAlerts", "commentNotifications", "mentionNotifications",
+		"pushEnabled", "emailEnabled", "smsEnabled", "quietHoursEnabled",
+		"soundEnabled", "vibrationEnabled", "showOnlineStatus", "showProgress",
+	} {
+		if raw, ok := patch[key]; ok {
+			if _, isBool := raw.(bool); !isBool {
+				return fmt.Errorf("invalid value for '%s': expected a boolean (true/false)", key)
+			}
+		}
+	}
+
+	// Quiet hours must be a valid HH:mm time.
+	for _, key := range []string{"quietHoursStart", "quietHoursEnd"} {
+		if raw, ok := patch[key]; ok {
+			val, isStr := raw.(string)
+			if !isStr || !validHHMM(val) {
+				return fmt.Errorf("invalid value for '%s': expected time in HH:mm format", key)
+			}
+		}
+	}
+
+	// Task reminder time is expressed in whole minutes (default: "30").
+	if raw, ok := patch["taskReminderTime"]; ok {
+		val, isStr := raw.(string)
+		if !isStr {
+			return fmt.Errorf("invalid value for 'taskReminderTime': expected minutes as a string")
+		}
+		mins, err := strconv.Atoi(strings.TrimSpace(val))
+		if err != nil || mins < 1 || mins > 1440 {
+			return fmt.Errorf("invalid value for 'taskReminderTime': expected minutes between 1 and 1440")
+		}
+	}
+
+	// Exam reminders must be a whole number of days within a sensible range.
+	if raw, ok := patch["examReminderDays"]; ok {
+		days, isNum := raw.(float64)
+		if !isNum || days != float64(int(days)) || days < 0 || days > 30 {
+			return fmt.Errorf("invalid value for 'examReminderDays': expected an integer between 0 and 30")
+		}
+	}
+
+	return nil
+}
+
+// oneOfEnum reports whether v matches any of the allowed values.
+func oneOfEnum(v string, allowed []string) bool {
+	for _, a := range allowed {
+		if v == a {
+			return true
+		}
+	}
+	return false
+}
+
+// validHHMM reports whether v parses as a 24-hour clock time in strict HH:mm format.
+// The value must be exactly 5 characters (e.g. "07:00", not "7:00") after trimming.
+func validHHMM(v string) bool {
+	s := strings.TrimSpace(v)
+	if len(s) != 5 {
+		return false
+	}
+	_, err := time.Parse("15:04", s)
+	return err == nil
 }
 
 func applyUISettings(settings *models.UserSettings, patch map[string]interface{}) {
@@ -490,17 +599,20 @@ func fetchSystemSettings(database *gorm.DB, defaultSettings map[string]interface
 		if err != gorm.ErrRecordNotFound {
 			log.Printf("ERROR: Failed to fetch admin_settings from DB: %v. Using defaults.", err)
 		}
+		cache.StoreSettingsCache(defaultSettings)
 		return defaultSettings
 	}
 
 	var settings map[string]interface{}
 	if err := json.Unmarshal([]byte(dbSetting.Value), &settings); err != nil || settings == nil {
 		log.Printf("WARN: Failed to unmarshal admin_settings from DB: %v. Using defaults.", err)
+		cache.StoreSettingsCache(defaultSettings)
 		return defaultSettings
 	}
 
 	// Double safety check
 	if settings == nil {
+		cache.StoreSettingsCache(defaultSettings)
 		return defaultSettings
 	}
 

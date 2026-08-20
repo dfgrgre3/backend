@@ -135,7 +135,7 @@ func (s *oauthService) GetGoogleAuthURL(state string) string {
 
 func (s *oauthService) ExchangeGoogleCode(ctx context.Context, code string) (*OAuthUserInfo, error) {
 	if s.googleConfig == nil {
-		return nil, errors.New("Google OAuth not configured")
+		return nil, errors.New("google OAuth not configured")
 	}
 
 	// Exchange code for token
@@ -154,7 +154,7 @@ func (s *oauthService) ExchangeGoogleCode(ctx context.Context, code string) (*OA
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Google API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("google API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var googleUser struct {
@@ -169,7 +169,7 @@ func (s *oauthService) ExchangeGoogleCode(ctx context.Context, code string) (*OA
 	}
 
 	if googleUser.ID == "" || googleUser.Email == "" {
-		return nil, errors.New("Google OAuth response missing required fields")
+		return nil, errors.New("google OAuth response missing required fields")
 	}
 
 	return &OAuthUserInfo{
@@ -198,7 +198,7 @@ func (s *oauthService) GetAppleAuthURL(state string) string {
 
 func (s *oauthService) ExchangeAppleCode(ctx context.Context, code string) (*OAuthUserInfo, error) {
 	if s.appleConfig == nil {
-		return nil, errors.New("Apple OAuth not configured")
+		return nil, errors.New("apple OAuth not configured")
 	}
 
 	// Exchange code for token
@@ -210,7 +210,7 @@ func (s *oauthService) ExchangeAppleCode(ctx context.Context, code string) (*OAu
 	// Get ID token and parse it
 	idToken, ok := token.Extra("id_token").(string)
 	if !ok {
-		return nil, errors.New("Apple OAuth response missing id_token")
+		return nil, errors.New("apple OAuth response missing id_token")
 	}
 
 	// Parse JWT claims (simplified - in production use jwt library)
@@ -220,7 +220,7 @@ func (s *oauthService) ExchangeAppleCode(ctx context.Context, code string) (*OAu
 	}
 
 	if userInfo.ProviderUserID == "" {
-		return nil, errors.New("Apple OAuth response missing user ID")
+		return nil, errors.New("apple OAuth response missing user ID")
 	}
 
 	return userInfo, nil
@@ -255,7 +255,7 @@ func (s *oauthService) parseAppleIDToken(idToken string) (*OAuthUserInfo, error)
 	}
 
 	if claims.Sub == "" {
-		return nil, errors.New("Apple ID token missing subject (sub) claim")
+		return nil, errors.New("apple ID token missing subject (sub) claim")
 	}
 
 	userInfo := &OAuthUserInfo{
@@ -267,7 +267,7 @@ func (s *oauthService) parseAppleIDToken(idToken string) (*OAuthUserInfo, error)
 
 	// Apple only includes name on first login, so it may be empty
 	if userInfo.Name == "" {
-		userInfo.Name = "Apple User"
+		userInfo.Name = "apple User"
 	}
 
 	return userInfo, nil
@@ -284,7 +284,7 @@ const (
 
 func (s *oauthService) GenerateOAuthState(ctx context.Context) (string, error) {
 	if cache.Redis == nil {
-		return "", errors.New("Redis is required for OAuth state management")
+		return "", errors.New("redis is required for OAuth state management")
 	}
 
 	// Generate random state
@@ -301,7 +301,7 @@ func (s *oauthService) GenerateOAuthState(ctx context.Context) (string, error) {
 
 func (s *oauthService) ValidateOAuthState(ctx context.Context, state string) (bool, error) {
 	if cache.Redis == nil {
-		return false, errors.New("Redis is required for OAuth state validation")
+		return false, errors.New("redis is required for OAuth state validation")
 	}
 
 	stateKey := fmt.Sprintf("%s%s", oauthStatePrefix, state)

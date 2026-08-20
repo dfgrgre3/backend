@@ -39,8 +39,6 @@ type MetricsCollector struct {
 	goroutinesCount prometheus.Gauge
 	memoryUsage     prometheus.Gauge
 	cpuUsage        prometheus.Gauge
-
-	mu sync.RWMutex
 }
 
 // NewMetricsCollector creates a new metrics collector

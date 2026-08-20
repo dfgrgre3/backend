@@ -35,6 +35,7 @@ const (
 	msgUserNotAuthenticated = shared.MsgUserNotAuthenticated
 	msgSubjectNotFound      = shared.MsgSubjectNotFound
 	msgInvalidInput         = shared.MsgInvalidInput
+	msgMethodNotAllowed     = shared.MsgMethodNotAllowed
 )
 
 // IsDuplicateKeyError checks if the error is a unique constraint violation.

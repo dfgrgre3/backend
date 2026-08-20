@@ -112,7 +112,9 @@ func fetchBillingData(uid string) gin.H {
 
 	go func() {
 		defer wg.Done()
-		readDB.
+		// Fix: Use separate session to avoid concurrent map writes
+		paymentRdb := readDB.Session(&gorm.Session{NewDB: true})
+		paymentRdb.
 			Model(&models.Payment{}).
 			Select("id", "amount", "status", "created_at").
 			Where("user_id = ?", uid).

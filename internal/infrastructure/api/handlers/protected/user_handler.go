@@ -4,28 +4,25 @@ import (
 	"crypto/rand"
 	"log"
 	"math/big"
-	"os"
 	"strings"
 	"sync"
 	models "thanawy-backend/internal/domain/common"
 	"thanawy-backend/internal/infrastructure/api/handlers/shared"
-	"thanawy-backend/internal/infrastructure/config"
 	db "thanawy-backend/internal/infrastructure/database"
-	authrepo "thanawy-backend/internal/infrastructure/persistence/repositories"
 	userrepo "thanawy-backend/internal/infrastructure/persistence/repositories"
 
 	"github.com/shopspring/decimal"
 )
 
-var (
-	userRepo        *userrepo.UserRepository
-	userRepoOnce    sync.Once
-	sessionRepo     *authrepo.SessionRepository
-	sessionRepoOnce sync.Once
+type userAggregateCountRow struct {
+	UserID string `gorm:"column:user_id"`
+	Kind   string `gorm:"column:kind"`
+	Count  int64  `gorm:"column:count"`
+}
 
-	errFailedToGenerateTokens = os.Getenv("ERRFAILEDTOGENERATETOKENS")
-	refreshTokenPath          = os.Getenv("REFRESHTOKENPATH")
-	errInvalidEmail           = "Invalid email"
+var (
+	userRepo     *userrepo.UserRepository
+	userRepoOnce sync.Once
 )
 
 func getUserRepo() *userrepo.UserRepository {
@@ -33,19 +30,6 @@ func getUserRepo() *userrepo.UserRepository {
 		userRepo = userrepo.NewUserRepository(db.DB)
 	})
 	return userRepo
-}
-
-func getSessionRepo() *authrepo.SessionRepository {
-	sessionRepoOnce.Do(func() {
-		sessionRepo = authrepo.NewSessionRepository(db.DB)
-	})
-	return sessionRepo
-}
-
-type userAggregateCountRow struct {
-	UserID string `gorm:"column:user_id"`
-	Kind   string `gorm:"column:kind"`
-	Count  int64  `gorm:"column:count"`
 }
 
 func aggregateUserCountRows(rows []userAggregateCountRow) (map[string]int64, map[string]int64, map[string]int64, map[string]int64) {
@@ -106,27 +90,8 @@ func fetchUserAggregateCounts(userIDs []string) ([]userAggregateCountRow, error)
 }
 
 // isProduction checks if the app is running in production mode
-func isProduction() bool {
-	cfg := config.Load()
-	return cfg.Environment == "production"
-}
-
-// Mock geolocation helper
-func getMockLocation(_ string) *string {
-	loc := "القاهرة، مصر"
-	return &loc
-}
-
-// ─── L1 in-memory cache for billing summary ──────────────
 func calculateTotalPages(total int64, limit int) int64 {
 	return shared.CalculateTotalPages(total, limit)
-}
-
-func defaultPermissions(role models.UserRole, existing []string) []string {
-	if len(existing) > 0 {
-		return existing
-	}
-	return models.GetDefaultPermissions(role)
 }
 
 func EnsureUserExists(userId, email string) error {

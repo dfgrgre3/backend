@@ -423,7 +423,7 @@ func (p *AppleProvider) ExchangeCode(ctx context.Context, idToken string) (*OAut
 
 	kid, ok := unverified.Header["kid"].(string)
 	if !ok || kid == "" {
-		return nil, errors.New("Apple ID token missing kid header")
+		return nil, errors.New("apple ID token missing kid header")
 	}
 
 	// Fetch the matching RSA public key from Apple's JWKS endpoint.
@@ -441,16 +441,16 @@ func (p *AppleProvider) ExchangeCode(ctx context.Context, idToken string) (*OAut
 		return publicKey, nil
 	}, jwt.WithIssuer("https://appleid.apple.com"), jwt.WithAudience(p.ClientID))
 	if err != nil {
-		return nil, fmt.Errorf("Apple ID token verification failed: %w", err)
+		return nil, fmt.Errorf("apple ID token verification failed: %w", err)
 	}
 	if !token.Valid {
-		return nil, errors.New("Apple ID token is invalid")
+		return nil, errors.New("apple ID token is invalid")
 	}
 
 	email, _ := claims["email"].(string)
 	sub, _ := claims["sub"].(string)
 	if sub == "" {
-		return nil, errors.New("Apple ID token missing sub claim")
+		return nil, errors.New("apple ID token missing sub claim")
 	}
 
 	return &OAuthUser{

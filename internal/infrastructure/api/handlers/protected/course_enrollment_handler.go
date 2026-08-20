@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	command "thanawy-backend/internal/domain/course/service"
-	querypkg "thanawy-backend/internal/domain/course/service"
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 
 	"github.com/gin-gonic/gin"
@@ -44,7 +43,7 @@ func (h *CourseRESTHandler) GetEnrollment(c *gin.Context) {
 	courseID := c.Param("courseId")
 	userID := c.Param("userId")
 
-	query := querypkg.GetEnrollmentQuery{
+	query := command.GetEnrollmentQuery{
 		CourseID: courseID,
 		UserID:   userID,
 	}
@@ -84,7 +83,7 @@ func (h *CourseRESTHandler) UpdateProgress(c *gin.Context) {
 	}
 
 	// Fetch updated enrollment
-	query := querypkg.GetEnrollmentQuery{
+	query := command.GetEnrollmentQuery{
 		CourseID: courseID,
 		UserID:   userID,
 	}

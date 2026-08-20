@@ -9,9 +9,18 @@ ALTER TABLE "Contest" ADD COLUMN IF NOT EXISTS participants_count INTEGER DEFAUL
 
 ALTER TABLE "ContestQuestion" ADD COLUMN IF NOT EXISTS "order" INTEGER DEFAULT 0;
 
-ALTER TABLE "ip_whitelist_entries" ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
-ALTER TABLE "ip_whitelist_entries" ADD COLUMN IF NOT EXISTS country VARCHAR(100);
-ALTER TABLE "ip_whitelist_entries" ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+DO $$
+BEGIN
+    IF to_regclass('public."IpWhitelistEntry"') IS NOT NULL THEN
+        ALTER TABLE public."IpWhitelistEntry" ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+        ALTER TABLE public."IpWhitelistEntry" ADD COLUMN IF NOT EXISTS country VARCHAR(100);
+        ALTER TABLE public."IpWhitelistEntry" ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+    ELSIF to_regclass('public."ip_whitelist_entries"') IS NOT NULL THEN
+        ALTER TABLE public."ip_whitelist_entries" ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+        ALTER TABLE public."ip_whitelist_entries" ADD COLUMN IF NOT EXISTS country VARCHAR(100);
+        ALTER TABLE public."ip_whitelist_entries" ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+    END IF;
+END $$;
 
 -- 2. Drop and recreate AnalyticsEvent table to match the new structure
 DROP TABLE IF EXISTS "AnalyticsEvent" CASCADE;

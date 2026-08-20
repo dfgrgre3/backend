@@ -1,81 +1,71 @@
 package protected
 
 import (
+	"log/slog"
 	"net/http"
-	models "thanawy-backend/internal/domain/common"
 
-	"thanawy-backend/internal/infrastructure/api/response"
-	db "thanawy-backend/internal/infrastructure/database"
+	gamificationservice "thanawy-backend/internal/domain/gamification/service"
+	apiresponse "thanawy-backend/internal/infrastructure/api/response"
 
 	"github.com/gin-gonic/gin"
 )
 
-func GetUserCoursesProgress(c *gin.Context) {
-	userID, ok := currentUserID(c)
-	if !ok {
-		response.Error(c, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	var total int64
-	if err := db.DB.Model(&models.Enrollment{}).Where("user_id = ?", userID).Count(&total).Error; err != nil {
-		response.Error(c, http.StatusInternalServerError, "Failed to fetch course progress")
-		return
-	}
-
-	response.Success(c, gin.H{
-		"courses":        []gin.H{},
-		"totalCourses":   total,
-		"completed":      0,
-		"inProgress":     total,
-		"averagePercent": 0,
-	})
+// TimeProgressResponse returns the learner's overall time, focus, and streak metrics.
+type TimeProgressResponse struct {
+	TotalMinutes   int     `json:"totalMinutes"`
+	AverageFocus   float64 `json:"averageFocus"`
+	TasksCompleted int64   `json:"tasksCompleted"`
+	StreakDays     int     `json:"streakDays"`
 }
 
+// AchievementsProgressResponse wraps the achievements list with a total count.
+type AchievementsProgressResponse struct {
+	Achievements []gamificationservice.UserAchievementReadModel `json:"achievements"`
+	Total        int                                            `json:"total"`
+}
+
+// GetUserTimeProgress returns the learner's overall time, focus, and streak metrics.
+// progressQuery is a package-level service defined in progress_handler.go.
 func GetUserTimeProgress(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {
-		response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		apiresponse.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
 	summary, err := progressQuery.GetSummary(userID)
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "Failed to fetch time progress")
+		slog.Error("failed to fetch time progress", "userID", userID, "error", err)
+		apiresponse.Error(c, mapErrorToHTTPStatus(err), "Failed to fetch time progress")
 		return
 	}
 
-	response.Success(c, gin.H{
-		"totalMinutes":   summary.TotalMinutes,
-		"averageFocus":   summary.AverageFocus,
-		"tasksCompleted": summary.TasksCompleted,
-		"streakDays":     summary.StreakDays,
+	apiresponse.Success(c, TimeProgressResponse{
+		TotalMinutes:   summary.TotalMinutes,
+		AverageFocus:   summary.AverageFocus,
+		TasksCompleted: summary.TasksCompleted,
+		StreakDays:     summary.StreakDays,
 	})
 }
 
+// GetUserAchievementsProgress returns the learner's unlocked and locked achievements.
+// gamificationQuery is a package-level service defined in gamification_handler.go.
 func GetUserAchievementsProgress(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {
-		response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		apiresponse.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
 	achievements, err := gamificationQuery.GetUserAchievements(userID)
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "Failed to fetch achievements progress")
+		slog.Error("failed to fetch achievements progress", "userID", userID, "error", err)
+		apiresponse.Error(c, mapErrorToHTTPStatus(err), "Failed to fetch achievements progress")
 		return
 	}
 
-	response.Success(c, gin.H{
-		"achievements": achievements,
-		"total":        len(achievements),
+	apiresponse.Success(c, AchievementsProgressResponse{
+		Achievements: achievements,
+		Total:        len(achievements),
 	})
-}
-
-func currentUserID(c *gin.Context) (string, bool) {
-	userID := c.GetString("userId")
-	if userID == "" {
-		return "", false
-	}
-	return userID, true
 }

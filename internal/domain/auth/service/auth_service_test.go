@@ -3,6 +3,7 @@ package authservice
 import (
 	"context"
 	"testing"
+	"time"
 
 	authdto "thanawy-backend/internal/application/dto"
 	models "thanawy-backend/internal/domain/common"
@@ -41,6 +42,67 @@ func (r *recordingAuthRepo) GetOAuthAccount(ctx context.Context, provider, provi
 }
 func (r *recordingAuthRepo) GetUserSessions(ctx context.Context, userID string) ([]*models.UserSession, error) {
 	return nil, nil
+}
+func (r *recordingAuthRepo) FindVerificationCodeByCodeAndType(ctx context.Context, code, codeType string) (*models.VerificationCode, error) {
+	return nil, nil
+}
+func (r *recordingAuthRepo) GetSessionByIDAndUser(ctx context.Context, sessionID, userID string) (*models.UserSession, error) {
+	return nil, nil
+}
+func (r *recordingAuthRepo) GetSessionByHashOrdered(ctx context.Context, hash string) (*models.UserSession, error) {
+	return nil, nil
+}
+func (r *recordingAuthRepo) GetActiveReplacementSession(ctx context.Context, userID string, since time.Time) (*models.UserSession, error) {
+	return nil, nil
+}
+func (r *recordingAuthRepo) RotateSession(ctx context.Context, oldSessionID string, newSession *models.UserSession) error {
+	return nil
+}
+func (r *recordingAuthRepo) FindUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	return nil, nil
+}
+func (r *recordingAuthRepo) FindUserByID(ctx context.Context, userID string) (*models.User, error) {
+	return nil, nil
+}
+func (r *recordingAuthRepo) GetCredentialByUserID(ctx context.Context, userID string) (*models.UserCredential, error) {
+	return nil, nil
+}
+func (r *recordingAuthRepo) CreateUserAndCredential(ctx context.Context, user *models.User, credential *models.UserCredential) error {
+	return nil
+}
+func (r *recordingAuthRepo) UpdateCredential(ctx context.Context, credential *models.UserCredential) error {
+	return nil
+}
+func (r *recordingAuthRepo) UpdatePasswordHash(ctx context.Context, userID, hash string) error {
+	return nil
+}
+func (r *recordingAuthRepo) SaveUser(ctx context.Context, user *models.User) error { return nil }
+func (r *recordingAuthRepo) GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error) {
+	return nil, nil
+}
+func (r *recordingAuthRepo) SaveProfile(ctx context.Context, profile *models.Profile) error {
+	return nil
+}
+func (r *recordingAuthRepo) CreatePasswordResetToken(ctx context.Context, token *models.PasswordResetToken) error {
+	return nil
+}
+func (r *recordingAuthRepo) FindPasswordResetTokenByHash(ctx context.Context, tokenHash string) (*models.PasswordResetToken, error) {
+	return nil, nil
+}
+func (r *recordingAuthRepo) MarkPasswordResetTokenUsed(ctx context.Context, tokenID string) error {
+	return nil
+}
+func (r *recordingAuthRepo) FindOAuthAccountByProvider(ctx context.Context, provider, providerUserID string) (*models.OAuthAccount, error) {
+	return nil, nil
+}
+func (r *recordingAuthRepo) DeleteOAuthAccount(ctx context.Context, userID, provider string) error {
+	return nil
+}
+func (r *recordingAuthRepo) GetOAuthAccountsByUser(ctx context.Context, userID string) ([]models.OAuthAccount, error) {
+	return nil, nil
+}
+func (r *recordingAuthRepo) CreateUserWithProfileAndOAuth(ctx context.Context, user *models.User, profile *models.Profile, oauthAcc *models.OAuthAccount) error {
+	return nil
 }
 
 func TestLogFailedLoginSkipsAnonymousUsers(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	authservice "thanawy-backend/internal/domain/auth/service"
 	models "thanawy-backend/internal/domain/common"
 	"thanawy-backend/internal/infrastructure/cache"
+	"thanawy-backend/internal/infrastructure/config"
 	"time"
 
 	"thanawy-backend/internal/infrastructure/api/response"
@@ -278,6 +279,7 @@ func (h *MFAHandler) VerifyMFA(c *gin.Context) {
 
 	// Create session via DB directly
 	userSession := &models.UserSession{
+		ID:           tokenPair.JTI,
 		UserID:       user.ID,
 		RefreshToken: tokenPair.RefreshToken,
 		UserAgent:    userAgent,
@@ -292,16 +294,20 @@ func (h *MFAHandler) VerifyMFA(c *gin.Context) {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
-	db.DB.WithContext(ctx).Create(userSession)
+	if err := db.DB.WithContext(ctx).Create(userSession).Error; err != nil {
+		response.Error(c, http.StatusInternalServerError, "Failed to create session")
+		return
+	}
 
 	// Set cookies
-	secureCookie := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	cfg := config.Load()
 	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("access_token", tokenPair.AccessToken, 15*60, "/", "", secureCookie, true)
-	c.SetCookie("refresh_token", tokenPair.RefreshToken, 30*24*60*60, "/", "", secureCookie, true)
+	c.SetCookie("access_token", tokenPair.AccessToken, 15*60, "/", cfg.CookieDomain, secureCookie(c), true)
+	c.SetCookie("refresh_token", tokenPair.RefreshToken, 30*24*60*60, "/", cfg.CookieDomain, secureCookie(c), true)
 
 	response.Success(c, gin.H{
-		"accessToken": tokenPair.AccessToken,
+		"accessToken":  tokenPair.AccessToken,
+		"refreshToken": tokenPair.RefreshToken,
 		"user": gin.H{
 			"id":    user.ID,
 			"email": user.Email,

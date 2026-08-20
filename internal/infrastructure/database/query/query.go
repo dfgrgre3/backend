@@ -446,7 +446,6 @@ func (qpl *QueryPerformanceLogger) LogSlowQuery(query string, duration time.Dura
 
 // WithQueryLogging wraps a GORM DB with slow-query logging via GORM's callback system.
 func WithQueryLogging(db *gorm.DB, threshold time.Duration) *gorm.DB {
-	type queryStartKey struct{}
 
 	_ = db.Callback().Query().Before("gorm:query").Register("perf:before_query", func(tx *gorm.DB) {
 		tx.Set("perf:start", time.Now())

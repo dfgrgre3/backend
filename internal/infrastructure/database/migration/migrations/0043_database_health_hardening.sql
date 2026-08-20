@@ -5,9 +5,8 @@
 -- Every block checks table/column existence first so older databases with
 -- partial schemas can still migrate forward.
 
-BEGIN;
-
 DO $$
+
 BEGIN
     IF to_regclass('public."Subject"') IS NOT NULL THEN
         IF EXISTS (
@@ -131,23 +130,42 @@ BEGIN
     IF to_regclass('public."UserSession"') IS NOT NULL THEN
         IF EXISTS (
             SELECT 1 FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = 'UserSession' AND column_name = 'refresh_token_hash'
+            WHERE table_schema = 'public' AND table_name = 'UserSession' AND column_name = 'is_active'
         ) THEN
-            CREATE INDEX IF NOT EXISTS idx_user_sessions_active_refresh_hash
-                ON public."UserSession" (id, refresh_token_hash, is_active)
-                WHERE is_active = true AND deleted_at IS NULL;
-        ELSIF EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = 'UserSession' AND column_name = 'refresh_token'
-        ) THEN
-            CREATE INDEX IF NOT EXISTS idx_user_sessions_active_refresh_token
-                ON public."UserSession" (id, refresh_token, is_active)
-                WHERE is_active = true AND deleted_at IS NULL;
-        END IF;
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'UserSession' AND column_name = 'refresh_token_hash'
+            ) THEN
+                CREATE INDEX IF NOT EXISTS idx_user_sessions_active_refresh_hash
+                    ON public."UserSession" (id, refresh_token_hash, is_active)
+                    WHERE is_active = true AND deleted_at IS NULL;
+            ELSIF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'UserSession' AND column_name = 'refresh_token'
+            ) THEN
+                CREATE INDEX IF NOT EXISTS idx_user_sessions_active_refresh_token
+                    ON public."UserSession" (id, refresh_token, is_active)
+                    WHERE is_active = true AND deleted_at IS NULL;
+            END IF;
 
-        CREATE INDEX IF NOT EXISTS idx_user_sessions_user_active_recent
-            ON public."UserSession" (user_id, is_active, last_accessed DESC)
-            WHERE deleted_at IS NULL;
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'UserSession' AND column_name = 'last_accessed'
+            ) THEN
+                CREATE INDEX IF NOT EXISTS idx_user_sessions_user_active_recent
+                    ON public."UserSession" (user_id, is_active, last_accessed DESC)
+                    WHERE deleted_at IS NULL;
+            END IF;
+        ELSE
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'UserSession' AND column_name = 'last_accessed_at'
+            ) THEN
+                CREATE INDEX IF NOT EXISTS idx_user_sessions_user_status_recent
+                    ON public."UserSession" (user_id, status, last_accessed_at DESC)
+                    WHERE deleted_at IS NULL;
+            END IF;
+        END IF;
     END IF;
 END $$;
 
@@ -209,4 +227,3 @@ BEGIN
     END LOOP;
 END $$;
 
-COMMIT;

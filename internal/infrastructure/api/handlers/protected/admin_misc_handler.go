@@ -22,8 +22,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-const coalesceSumDuration = "COALESCE(SUM(duration_min), 0)"
-
 // AdminExamsBulkUpload imports questions for a new exam from a CSV file.
 func AdminExamsBulkUpload(c *gin.Context) {
 	file, err := c.FormFile("file")

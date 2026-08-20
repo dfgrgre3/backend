@@ -147,12 +147,6 @@ func (h *CourseRESTHandler) DeleteLesson(c *gin.Context) {
 	id := c.Param("id")
 
 	_ = id
-	var err error
-	err = nil
-	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to delete lesson: "+err.Error())
-		return
-	}
 
 	api_response.Success(c, gin.H{"message": "Lesson deleted successfully"})
 }
@@ -190,12 +184,6 @@ func (h *CourseRESTHandler) ReorderLessons(c *gin.Context) {
 
 	_ = sectionID
 	_ = req.LessonIDs
-	var err error
-	err = nil
-	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to reorder lessons: "+err.Error())
-		return
-	}
 
 	api_response.Success(c, gin.H{"message": "Lessons reordered successfully"})
 }

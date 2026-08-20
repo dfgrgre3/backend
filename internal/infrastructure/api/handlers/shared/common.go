@@ -41,6 +41,7 @@ const (
 	MsgUserNotAuthenticated = "User not authenticated"
 	MsgSubjectNotFound      = "Subject not found"
 	MsgInvalidInput         = "Invalid input"
+	MsgMethodNotAllowed     = "Method not allowed"
 )
 
 // SafeDB returns a non-nil *gorm.DB instance after checking db.DB.

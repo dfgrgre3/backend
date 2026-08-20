@@ -185,7 +185,7 @@ func querySystemHealth(ctx context.Context, now time.Time, summary monitoring.Pe
 	redisStart := time.Now()
 	var redisErr error
 	if cache.Redis == nil {
-		redisErr = fmt.Errorf("Redis client is not configured")
+		redisErr = fmt.Errorf("redis client is not configured")
 	} else {
 		redisErr = cache.Redis.Ping(ctx).Err()
 	}

@@ -10,8 +10,6 @@ import (
 	"thanawy-backend/internal/infrastructure/cache"
 	"time"
 
-	db "thanawy-backend/internal/infrastructure/database"
-
 	"gorm.io/gorm"
 )
 
@@ -42,26 +40,8 @@ var (
 	localUserCache sync.Map
 )
 
-// Column existence check (runs once at startup)
-var (
-	userDeletedAtOnce         sync.Once
-	userDeletedAtColumnExists bool
-)
-
-func hasUserDeletedAtColumn() bool {
-	userDeletedAtOnce.Do(func() {
-		if db.DB != nil {
-			userDeletedAtColumnExists = db.DB.Migrator().HasColumn(&models.User{}, "deleted_at")
-		}
-	})
-	return userDeletedAtColumnExists
-}
-
-// WarmupUserRepository triggers the deleted_at column check at startup
-// so it doesn't run on the first request. Call after DB connection is established.
-func WarmupUserRepository() {
-	hasUserDeletedAtColumn()
-}
+// WarmupUserRepository is a no-op kept for backwards compatibility during startup
+func WarmupUserRepository() {}
 
 // =============================================================
 // UserRepository
@@ -77,7 +57,7 @@ type UserRepository struct {
 func NewUserRepository(dbConn *gorm.DB) *UserRepository {
 	return &UserRepository{
 		db:                 dbConn,
-		hasDeletedAtColumn: hasUserDeletedAtColumn(),
+		hasDeletedAtColumn: true,
 	}
 }
 

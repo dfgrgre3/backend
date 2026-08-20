@@ -11,7 +11,6 @@ type NotificationQueueService struct {
 	// For now, use a simple channel-based queue
 	// In production, this could be backed by Redis/BullMQ
 	queue chan models.Notification
-	mu    sync.Mutex
 }
 
 var notificationQueueInstance *NotificationQueueService

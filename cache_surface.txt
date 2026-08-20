@@ -1,0 +1,12 @@
+CachedSettings
+CloseRedis
+ConnectRedis
+GetRedis
+InvalidateSettingsCache
+IsRedisAvailable
+NewCacheInvalidator
+NewLRUCache
+ParseAsynqRedisConnOpt
+Redis
+RedisHealthCheck
+StoreSettingsCache

@@ -8,9 +8,7 @@ import (
 	"strings"
 
 	models "thanawy-backend/internal/domain/common"
-	command "thanawy-backend/internal/domain/course/service"
 	courseservice "thanawy-backend/internal/domain/course/service"
-	querypkg "thanawy-backend/internal/domain/course/service"
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 
 	"github.com/gin-gonic/gin"
@@ -20,14 +18,14 @@ import (
 
 // CourseRESTHandler handles REST API requests for courses
 type CourseRESTHandler struct {
-	createCourseHandler   *command.CreateCourseHandler
-	updateCourseHandler   *command.UpdateCourseHandler
-	enrollUserHandler     *command.EnrollUserHandler
-	updateProgressHandler *command.UpdateProgressHandler
-	getCourseHandler      *querypkg.GetCourseHandler
-	listCoursesHandler    *querypkg.ListCoursesHandler
-	searchCoursesHandler  *querypkg.SearchCoursesHandler
-	getEnrollmentHandler  *querypkg.GetEnrollmentHandler
+	createCourseHandler   *courseservice.CreateCourseHandler
+	updateCourseHandler   *courseservice.UpdateCourseHandler
+	enrollUserHandler     *courseservice.EnrollUserHandler
+	updateProgressHandler *courseservice.UpdateProgressHandler
+	getCourseHandler      *courseservice.GetCourseHandler
+	listCoursesHandler    *courseservice.ListCoursesHandler
+	searchCoursesHandler  *courseservice.SearchCoursesHandler
+	getEnrollmentHandler  *courseservice.GetEnrollmentHandler
 	courseService         *courseservice.LmsService
 	db                    *gorm.DB
 }
@@ -35,14 +33,14 @@ type CourseRESTHandler struct {
 // NewCourseRESTHandler creates a new REST course handler
 func NewCourseRESTHandler(
 	courseService *courseservice.LmsService,
-	createCourseHandler *command.CreateCourseHandler,
-	updateCourseHandler *command.UpdateCourseHandler,
-	enrollUserHandler *command.EnrollUserHandler,
-	updateProgressHandler *command.UpdateProgressHandler,
-	getCourseHandler *querypkg.GetCourseHandler,
-	listCoursesHandler *querypkg.ListCoursesHandler,
-	searchCoursesHandler *querypkg.SearchCoursesHandler,
-	getEnrollmentHandler *querypkg.GetEnrollmentHandler,
+	createCourseHandler *courseservice.CreateCourseHandler,
+	updateCourseHandler *courseservice.UpdateCourseHandler,
+	enrollUserHandler *courseservice.EnrollUserHandler,
+	updateProgressHandler *courseservice.UpdateProgressHandler,
+	getCourseHandler *courseservice.GetCourseHandler,
+	listCoursesHandler *courseservice.ListCoursesHandler,
+	searchCoursesHandler *courseservice.SearchCoursesHandler,
+	getEnrollmentHandler *courseservice.GetEnrollmentHandler,
 	db *gorm.DB,
 ) *CourseRESTHandler {
 	return &CourseRESTHandler{
@@ -89,7 +87,7 @@ func (h *CourseRESTHandler) CreateCourse(c *gin.Context) {
 		}
 	}
 
-	cmd := command.CreateCourseCommand{
+	cmd := courseservice.CreateCourseCommand{
 		Title:                 req.Title,
 		Slug:                  req.Slug,
 		ShortDescription:      req.ShortDescription,
@@ -203,7 +201,7 @@ func (h *CourseRESTHandler) UpdateCourse(c *gin.Context) {
 		courseID = parsed
 	}
 
-	cmd := command.UpdateCourseCommand{
+	cmd := courseservice.UpdateCourseCommand{
 		ID:                    courseID,
 		CourseID:              id,
 		Title:                 req.Title,
@@ -296,7 +294,7 @@ func (h *CourseRESTHandler) ListCourses(c *gin.Context) {
 		level = &levelStr
 	}
 
-	query := querypkg.ListCoursesQuery{
+	query := courseservice.ListCoursesQuery{
 		Status:       status,
 		Level:        level,
 		Language:     optionalStringPtr(c.Query("language")),
@@ -375,8 +373,8 @@ func (h *CourseRESTHandler) SearchCourses(c *gin.Context) {
 		}
 	}
 
-	query := querypkg.SearchCoursesQuery{
-		ListCoursesQuery: querypkg.ListCoursesQuery{
+	query := courseservice.SearchCoursesQuery{
+		ListCoursesQuery: courseservice.ListCoursesQuery{
 			Status:          optionalStringPtr(c.Query("status")),
 			Level:           optionalStringPtr(c.Query("level")),
 			Language:        optionalStringPtr(c.Query("language")),
@@ -429,7 +427,7 @@ func (h *CourseRESTHandler) GetCourse(c *gin.Context) {
 	id := c.Param("id")
 	slug := c.Query("slug")
 
-	query := querypkg.GetCourseQuery{
+	query := courseservice.GetCourseQuery{
 		ID:   id,
 		Slug: slug,
 	}
@@ -478,7 +476,7 @@ func (h *CourseRESTHandler) GetCoursesPendingReview(c *gin.Context) {
 		limit = 20
 	}
 
-	query := querypkg.ListCoursesQuery{
+	query := courseservice.ListCoursesQuery{
 		Status: optionalStringPtr("pending_review"),
 		Page:   page,
 		Limit:  limit,
@@ -542,7 +540,7 @@ func (h *CourseRESTHandler) BulkStatusChange(c *gin.Context) {
 		}
 
 		// Get the course first
-		query := querypkg.GetCourseQuery{ID: courseIDStr}
+		query := courseservice.GetCourseQuery{ID: courseIDStr}
 		_, err = h.getCourseHandler.Handle(c.Request.Context(), query)
 		if err != nil {
 			failed = append(failed, courseIDStr)

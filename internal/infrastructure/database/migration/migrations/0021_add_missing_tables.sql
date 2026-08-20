@@ -91,7 +91,7 @@ COMMENT ON TABLE public."IpWhitelistEntry" IS 'إدخالات القائمة ا�
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ipwhitelistentry_ip_status 
     ON public."IpWhitelistEntry" (ip_address, status) WHERE status = 'active';
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ipwhitelistentry_cidr 
-    ON public."IpWhitelistEntry" USING GIST(cidr) WHERE cidr IS NOT NULL;
+    ON public."IpWhitelistEntry" USING GIST(cidr inet_ops) WHERE cidr IS NOT NULL;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ipwhitelistentry_expires 
     ON public."IpWhitelistEntry" (expires_at) WHERE type = 'temporary' AND status = 'active';
 

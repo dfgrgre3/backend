@@ -17,15 +17,6 @@ import (
 // the repository root (this command must be run from there).
 const migrationsDir = "internal/infrastructure/database/migration/migrations"
 
-type migrationRecord struct {
-	ID       string `gorm:"primaryKey;column:id"`
-	Checksum string `gorm:"not null;column:checksum"`
-}
-
-func (migrationRecord) TableName() string {
-	return "schema_migrations"
-}
-
 func main() {
 	_ = godotenv.Load(".env.local")
 	_ = godotenv.Load()

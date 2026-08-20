@@ -34,7 +34,7 @@ import (
 	"thanawy-backend/internal/infrastructure/api"
 
 	"thanawy-backend/internal/infrastructure/storage"
-	"thanawy-backend/internal/infrastructure/workers"
+	worker "thanawy-backend/internal/infrastructure/workers"
 	"thanawy-backend/pkg/buildinfo"
 	"thanawy-backend/pkg/telemetry"
 
@@ -104,6 +104,13 @@ func Run() {
 	if len(cfg.DatabaseReadReplicas) > 0 {
 		log.Printf("Database configured with %d read replica(s)", len(cfg.DatabaseReadReplicas))
 	}
+
+	// Pre-open connections on every DB pool (read replica + write source +
+	// telemetry) BEFORE the HTTP server starts listening. database/sql opens
+	// connections lazily, so without this the first requests after boot pay a
+	// 300-800ms cold TCP+TLS+auth handshake each — observed as 500ms+ "slow
+	// queries" on trivial SELECTs and multi-second first-page loads.
+	db.WarmUpPools(context.Background())
 
 	// Warmup repository schema checks to avoid slow INFORMATION_SCHEMA queries
 	// on the first request (e.g. GORM Migrator.HasColumn for deleted_at).

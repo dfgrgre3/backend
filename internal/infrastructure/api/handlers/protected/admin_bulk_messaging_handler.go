@@ -84,7 +84,7 @@ func validateBulkMessageChannels(channels []string) error {
 	validChannels := map[string]bool{"app": true, "email": true, "sms": true}
 	for _, channel := range channels {
 		if !validChannels[channel] {
-			return fmt.Errorf("Invalid channel: %s", channel)
+			return fmt.Errorf("invalid channel: %s", channel)
 		}
 	}
 	return nil
@@ -100,7 +100,7 @@ func fetchBulkMessageTargetUsers(userIDs []string, role string) ([]models.User, 
 	}
 
 	if err := query.Find(&targetUsers).Error; err != nil {
-		return nil, fmt.Errorf("Failed to fetch target users")
+		return nil, fmt.Errorf("failed to fetch target users")
 	}
 	return targetUsers, nil
 }

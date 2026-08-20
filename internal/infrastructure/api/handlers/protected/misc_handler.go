@@ -46,6 +46,7 @@ func GetUnreadNotificationsCount(c *gin.Context) {
 
 	count, ok := tryUnreadNotificationsCaches(c, userId)
 	if ok {
+		api_response.Success(c, gin.H{"count": count})
 		return
 	}
 
@@ -424,8 +425,4 @@ func GetAdminMetricsHistory(c *gin.Context) {
 		"metrics": metrics,
 		"stats":   stats,
 	})
-}
-
-func formatMiB(value uint64) string {
-	return fmt.Sprintf("%d MiB", value/1024/1024)
 }

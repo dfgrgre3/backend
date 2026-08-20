@@ -112,12 +112,6 @@ func (h *CourseRESTHandler) DeleteSection(c *gin.Context) {
 
 	sectionUUID, _ := uuid.Parse(id)
 	_ = sectionUUID
-	var err error
-	err = nil
-	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to delete section: "+err.Error())
-		return
-	}
 
 	api_response.Success(c, gin.H{"message": "Section deleted successfully"})
 }
@@ -155,12 +149,6 @@ func (h *CourseRESTHandler) ReorderSections(c *gin.Context) {
 
 	_ = courseID
 	_ = req.SectionIDs
-	var err error
-	err = nil
-	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to reorder sections: "+err.Error())
-		return
-	}
 
 	api_response.Success(c, gin.H{"message": "Sections reordered successfully"})
 }

@@ -1,0 +1,29 @@
+-- ============================================================
+-- Migration 0143: Disable RLS on AnalyticsEvent
+-- ============================================================
+-- The setup-db-roles.sql provisioning script is intended to leave
+-- AnalyticsEvent WITHOUT row-level security: it is excluded from the
+-- "ENABLE ROW LEVEL SECURITY" loop and has an explicit block that
+-- DISABLEs RLS on it. This is because AnalyticsEvent is an internal
+-- telemetry table written by the backend itself (the analytics batch
+-- worker, and the frontend analytics endpoints such as mega_menu_handler.go),
+-- not by end users, so it needs no multi-tenant row isolation.
+--
+-- However, if RLS was enabled on this table by an earlier run of the
+-- script (before the exclusion was added) or re-enabled afterwards,
+-- the app_user role has no applicable policy defined for it. With RLS
+-- enabled and no matching policy, PostgreSQL defaults to DENY ALL,
+-- so the INSERT from the mega-menu/promo analytics handlers fails with:
+--   "new row violates row-level security policy for table 'AnalyticsEvent'
+--    (SQLSTATE 42501)"
+--
+-- This migration follows the same pattern as 0138/0139/0140 (which fixed
+-- http_metric_buckets, AuditLog and login_history) and disables RLS to
+-- restore write access for the app_user role. It is idempotent: if RLS is
+-- already disabled, it is a no-op. ALTER TABLE IF EXISTS guards against a
+-- missing table.
+--
+-- NOTE: No BEGIN/COMMIT wrapper — the migration runner wraps each migration
+-- in a database.Transaction() automatically.
+-- ============================================================
+ALTER TABLE IF EXISTS public."AnalyticsEvent" DISABLE ROW LEVEL SECURITY;

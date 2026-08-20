@@ -15,7 +15,6 @@ import (
 	notificationservice "thanawy-backend/internal/domain/notification/service"
 	"thanawy-backend/internal/infrastructure/cache"
 	authrepo "thanawy-backend/internal/infrastructure/persistence/repositories"
-	userrepo "thanawy-backend/internal/infrastructure/persistence/repositories"
 	"time"
 	"unicode"
 
@@ -23,7 +22,6 @@ import (
 	"gorm.io/gorm"
 
 	"thanawy-backend/internal/infrastructure/config"
-	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/google/uuid"
 )
@@ -245,12 +243,11 @@ func (s *authService) Register(ctx context.Context, req *authdto.RegisterRequest
 		return nil, err
 	}
 
-	// Check if user exists
-	var existingUser models.User
-	err := db.DB.WithContext(ctx).Where("email = ?", req.Email).First(&existingUser).Error
-	if err == nil {
+	// Check if user exists via repository
+	existingUser, err := s.authRepo.FindUserByEmail(ctx, req.Email)
+	if err == nil && existingUser != nil {
 		return nil, errors.New("user with this email already exists")
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+	} else if err != nil && !authrepo.IsNotFound(err) {
 		return nil, err
 	}
 
@@ -266,24 +263,27 @@ func (s *authService) Register(ctx context.Context, req *authdto.RegisterRequest
 
 	fullName := req.FirstName + " " + req.LastName
 
-	// Create user and credential in a transaction
-	var user models.User
-	if err := db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		user = models.User{
-			Email:  req.Email,
-			Name:   &fullName,
-			Role:   models.RoleStudent,
-			Status: models.StatusActive,
+	// Determine role (fix: use req.Role instead of always defaulting to STUDENT)
+	role := models.RoleStudent
+	if req.Role != "" {
+		role = models.UserRole(req.Role)
+		if !models.IsValidUserRole(role) {
+			role = models.RoleStudent
 		}
-		if err := tx.Create(&user).Error; err != nil {
-			return err
-		}
-		credential := models.UserCredential{
-			UserID:       user.ID,
-			PasswordHash: string(hashedPassword),
-		}
-		return tx.Create(&credential).Error
-	}); err != nil {
+	}
+
+	// Create user and credential in a single transaction via repository
+	user := models.User{
+		Email:  req.Email,
+		Name:   &fullName,
+		Role:   role,
+		Status: models.StatusActive,
+	}
+	credential := models.UserCredential{
+		PasswordHash: string(hashedPassword),
+	}
+
+	if err := s.authRepo.CreateUserAndCredential(ctx, &user, &credential); err != nil {
 		return nil, err
 	}
 
@@ -324,9 +324,9 @@ func (s *authService) Register(ctx context.Context, req *authdto.RegisterRequest
 }
 
 func (s *authService) Login(ctx context.Context, req *authdto.LoginRequest, userAgent, ip string) (*authdto.LoginResponse, error) {
-	// Find user
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("email = ?", req.Email).First(&user).Error; err != nil {
+	// Find user via repository
+	user, err := s.authRepo.FindUserByEmail(ctx, req.Email)
+	if err != nil {
 		s.logFailedLogin(ctx, "", ip, userAgent, "Invalid credentials")
 		return nil, errors.New("invalid email or password")
 	}
@@ -338,8 +338,8 @@ func (s *authService) Login(ctx context.Context, req *authdto.LoginRequest, user
 	}
 
 	// Get user credential for password verification
-	var credential models.UserCredential
-	if err := db.DB.WithContext(ctx).Where("user_id = ?", user.ID).First(&credential).Error; err != nil {
+	credential, err := s.authRepo.GetCredentialByUserID(ctx, user.ID)
+	if err != nil {
 		s.logFailedLogin(ctx, user.ID, ip, userAgent, "Invalid credentials")
 		return nil, errors.New("invalid email or password")
 	}
@@ -374,7 +374,7 @@ func (s *authService) Login(ctx context.Context, req *authdto.LoginRequest, user
 	}
 
 	// Generate tokens
-	tokenPair, err := s.tokenService.GenerateTokenPair(&user)
+	tokenPair, err := s.tokenService.GenerateTokenPair(user)
 	if err != nil {
 		return nil, err
 	}
@@ -419,10 +419,13 @@ func (s *authService) Login(ctx context.Context, req *authdto.LoginRequest, user
 		AccessToken:  tokenPair.AccessToken,
 		RefreshToken: tokenPair.RefreshToken,
 		User: authdto.UserDTO{
-			ID:    user.ID,
-			Email: user.Email,
-			Name:  name,
-			Role:  string(user.Role),
+			ID:            user.ID,
+			Email:         user.Email,
+			Name:          name,
+			Role:          string(user.Role),
+			EmailVerified: user.EmailVerified,
+			PhoneVerified: user.PhoneVerified,
+			Permissions:   user.GetEffectivePermissions(),
 		},
 	}, nil
 }
@@ -433,9 +436,9 @@ func (s *authService) ChangePassword(ctx context.Context, userID, oldPassword, n
 		return err
 	}
 
-	// Get user credential
-	var credential models.UserCredential
-	if err := db.DB.WithContext(ctx).Where("user_id = ?", userID).First(&credential).Error; err != nil {
+	// Get user credential via repository
+	credential, err := s.authRepo.GetCredentialByUserID(ctx, userID)
+	if err != nil {
 		return errors.New("user not found")
 	}
 
@@ -454,13 +457,10 @@ func (s *authService) ChangePassword(ctx context.Context, userID, oldPassword, n
 		return errors.New("failed to hash password")
 	}
 
-	// Update credential
+	// Update credential via repository
 	credential.PasswordHash = string(hashedPassword)
-	now := time.Now().UTC()
-	credential.LastChangedAt = now
-
-	// Save new password
-	if err := db.DB.WithContext(ctx).Save(&credential).Error; err != nil {
+	credential.LastChangedAt = time.Now().UTC()
+	if err := s.authRepo.UpdateCredential(ctx, credential); err != nil {
 		return errors.New("failed to update password")
 	}
 
@@ -480,29 +480,22 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken, userAgent,
 	// Replay Attack Protection: fetch the session once by hash and then evaluate
 	// both the active case and the revoked/replayed-token case without issuing a
 	// second lookup on the same refresh token.
-	var session models.UserSession
 	oldHash := models.ComputeRefreshTokenHash(refreshToken)
-	if err := db.DB.WithContext(ctx).
-		Where("refresh_token_hash = ?", oldHash).
-		Order("updated_at DESC").
-		First(&session).Error; err != nil {
+	session, err := s.authRepo.GetSessionByHashOrdered(ctx, oldHash)
+	if err != nil {
 		return nil, errors.New("invalid or expired refresh token")
 	}
 
 	if !session.IsActive {
 		// Check if it was revoked/rotated within the 10-second grace period (e.g. slow client double-requests)
 		if session.Status == "revoked" && session.RevokedAt != nil && time.Since(*session.RevokedAt) <= 10*time.Second {
-			var replacementSession models.UserSession
-			err := db.DB.WithContext(ctx).
-				Where("user_id = ? AND is_active = ? AND created_at >= ?", session.UserID, true, session.RevokedAt.Add(-2*time.Second)).
-				Order("created_at DESC").
-				First(&replacementSession).Error
-			if err == nil {
-				var user models.User
-				if err := db.DB.WithContext(ctx).Where("id = ?", session.UserID).First(&user).Error; err == nil {
+			replacementSession, lookupErr := s.authRepo.GetActiveReplacementSession(ctx, session.UserID, session.RevokedAt.Add(-2*time.Second))
+			if lookupErr == nil {
+				user, userErr := s.authRepo.FindUserByID(ctx, session.UserID)
+				if userErr == nil {
 					// Generate a new access token for this replacement session
-					accessToken, err := s.tokenService.GenerateAccessTokenForSession(&user, replacementSession.ID)
-					if err == nil {
+					accessToken, tokenErr := s.tokenService.GenerateAccessTokenForSession(user, replacementSession.ID)
+					if tokenErr == nil {
 						return &authdto.RefreshTokenResponse{
 							AccessToken:  accessToken,
 							RefreshToken: replacementSession.RefreshToken,
@@ -517,8 +510,8 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken, userAgent,
 		return nil, errors.New("security alert: reuse of rotated refresh token detected, all sessions revoked")
 	}
 
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("id = ?", session.UserID).First(&user).Error; err != nil {
+	user, err := s.authRepo.FindUserByID(ctx, session.UserID)
+	if err != nil {
 		return nil, errors.New("user not found")
 	}
 
@@ -528,47 +521,30 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken, userAgent,
 	}
 
 	// Generate new tokens
-	tokenPair, err := s.tokenService.GenerateTokenPair(&user)
+	tokenPair, err := s.tokenService.GenerateTokenPair(user)
 	if err != nil {
 		return nil, err
 	}
 
-	// Rotate refresh token: Invalidate old, create new - use transaction for atomicity
-	err = db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Revoke old session
-		if err := tx.Model(&models.UserSession{}).
-			Where("id = ?", session.ID).
-			Updates(map[string]interface{}{
-				"is_active":  false,
-				"status":     "revoked",
-				"revoked_at": tx.NowFunc(),
-			}).Error; err != nil {
-			return err
-		}
+	// Build the new session
+	os, browser := parseUserAgent(userAgent)
+	newSession := &models.UserSession{
+		ID:           tokenPair.JTI,
+		UserID:       user.ID,
+		RefreshToken: tokenPair.RefreshToken,
+		UserAgent:    userAgent,
+		Browser:      browser,
+		OS:           os,
+		IP:           ip,
+		DeviceType:   detectDeviceType(userAgent),
+		Status:       "active",
+		IsActive:     true,
+		LastAccessed: time.Now().UTC(),
+		ExpiresAt:    time.Now().UTC().Add(30 * 24 * time.Hour),
+	}
 
-		// Create new session
-		os, browser := parseUserAgent(userAgent)
-		newSession := &models.UserSession{
-			ID:           tokenPair.JTI,
-			UserID:       user.ID,
-			RefreshToken: tokenPair.RefreshToken,
-			UserAgent:    userAgent,
-			Browser:      browser,
-			OS:           os,
-			IP:           ip,
-			DeviceType:   detectDeviceType(userAgent),
-			Status:       "active",
-			IsActive:     true,
-			LastAccessed: time.Now().UTC(),
-			ExpiresAt:    time.Now().UTC().Add(30 * 24 * time.Hour),
-		}
-		if err := tx.Create(newSession).Error; err != nil {
-			return err
-		}
-
-		return nil
-	})
-	if err != nil {
+	// Rotate refresh token atomically via repository
+	if err := s.authRepo.RotateSession(ctx, session.ID, newSession); err != nil {
 		return nil, err
 	}
 
@@ -600,8 +576,7 @@ func (s *authService) GetUserSessions(ctx context.Context, userID string) ([]*mo
 }
 
 func (s *authService) RevokeSession(ctx context.Context, userID, sessionID string) error {
-	var session models.UserSession
-	if err := db.DB.WithContext(ctx).Where("id = ? AND user_id = ?", sessionID, userID).First(&session).Error; err != nil {
+	if _, err := s.authRepo.GetSessionByIDAndUser(ctx, sessionID, userID); err != nil {
 		return errors.New("session not found")
 	}
 	err := s.authRepo.RevokeSession(ctx, sessionID)
@@ -653,8 +628,8 @@ func detectDeviceType(ua string) string {
 // ─────────────────────────────────────────────
 
 func (s *authService) ForgotPassword(ctx context.Context, email string) error {
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+	user, err := s.authRepo.FindUserByEmail(ctx, email)
+	if err != nil {
 		// Return nil even if user not found — prevents user enumeration
 		return nil
 	}
@@ -689,8 +664,8 @@ func (s *authService) ForgotPassword(ctx context.Context, email string) error {
 }
 
 func (s *authService) VerifyForgotPasswordCode(ctx context.Context, email, code string) (string, error) {
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+	user, err := s.authRepo.FindUserByEmail(ctx, email)
+	if err != nil {
 		return "", errors.New("invalid email")
 	}
 
@@ -716,7 +691,7 @@ func (s *authService) VerifyForgotPasswordCode(ctx context.Context, email, code 
 	}
 	tokenStr := hex.EncodeToString(rawToken)
 
-	// Store the reset token with 15-minute expiry
+	// Store the reset token with 15-minute expiry via repository
 	tokenHash := sha256.Sum256([]byte(tokenStr))
 	tokenHashStr := hex.EncodeToString(tokenHash[:])
 
@@ -725,7 +700,7 @@ func (s *authService) VerifyForgotPasswordCode(ctx context.Context, email, code 
 		TokenHash: tokenHashStr,
 		ExpiresAt: time.Now().UTC().Add(15 * time.Minute),
 	}
-	if err := db.DB.WithContext(ctx).Create(resetToken).Error; err != nil {
+	if err := s.authRepo.CreatePasswordResetToken(ctx, resetToken); err != nil {
 		return "", errors.New("failed to create reset token")
 	}
 
@@ -745,15 +720,13 @@ func (s *authService) ResetPassword(ctx context.Context, token, newPassword stri
 	tokenHash := sha256.Sum256([]byte(token))
 	tokenHashStr := hex.EncodeToString(tokenHash[:])
 
-	var resetToken models.PasswordResetToken
-	if err := db.DB.WithContext(ctx).
-		Where("token_hash = ? AND is_used = ? AND expires_at > ?", tokenHashStr, false, time.Now().UTC()).
-		First(&resetToken).Error; err != nil {
+	resetToken, err := s.authRepo.FindPasswordResetTokenByHash(ctx, tokenHashStr)
+	if err != nil {
 		return errors.New("invalid or expired reset token")
 	}
 
 	// Mark token as used
-	db.DB.WithContext(ctx).Model(&resetToken).Update("is_used", true)
+	_ = s.authRepo.MarkPasswordResetTokenUsed(ctx, resetToken.ID)
 
 	// Hash new password (max 14 for security)
 	bcryptCost := s.cfg.BCryptCost
@@ -765,14 +738,8 @@ func (s *authService) ResetPassword(ctx context.Context, token, newPassword stri
 		return errors.New("failed to hash password")
 	}
 
-	// Update user credential
-	now := time.Now().UTC()
-	if err := db.DB.WithContext(ctx).Model(&models.UserCredential{}).
-		Where("user_id = ?", resetToken.UserID).
-		Updates(map[string]interface{}{
-			"password_hash":   string(hashedPassword),
-			"last_changed_at": now,
-		}).Error; err != nil {
+	// Update user credential via repository
+	if err := s.authRepo.UpdatePasswordHash(ctx, resetToken.UserID, string(hashedPassword)); err != nil {
 		return errors.New("failed to update password")
 	}
 
@@ -799,16 +766,18 @@ func (s *authService) VerifyEmail(ctx context.Context, userID, code string) erro
 	// Mark code as used
 	s.authRepo.MarkCodeAsUsed(ctx, verificationCode.ID)
 
-	// Update user email verified status
-	if err := db.DB.WithContext(ctx).Model(&models.User{}).
-		Where("id = ?", userID).
-		Update("email_verified", true).Error; err != nil {
+	// Update user email verified status via repository
+	user, err := s.authRepo.FindUserByID(ctx, userID)
+	if err != nil {
+		return errors.New("user not found")
+	}
+	user.EmailVerified = true
+	if err := s.authRepo.SaveUser(ctx, user); err != nil {
 		return errors.New("failed to verify email")
 	}
 
 	// Send Welcome Email
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("id = ?", userID).First(&user).Error; err == nil {
+	if user.ID != "" {
 		userName := user.Email
 		if user.Name != nil {
 			userName = *user.Name
@@ -821,8 +790,8 @@ func (s *authService) VerifyEmail(ctx context.Context, userID, code string) erro
 }
 
 func (s *authService) ResendVerificationEmail(ctx context.Context, userID string) error {
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("id = ?", userID).First(&user).Error; err != nil {
+	user, err := s.authRepo.FindUserByID(ctx, userID)
+	if err != nil {
 		return errors.New("user not found")
 	}
 
@@ -863,8 +832,7 @@ func (s *authService) ResendVerificationEmail(ctx context.Context, userID string
 }
 
 func (s *authService) GetCurrentUser(ctx context.Context, userID string) (*authdto.UserDTO, error) {
-	userRepo := userrepo.NewUserRepository(db.DB)
-	user, err := userRepo.FindByID(userID)
+	user, err := s.authRepo.FindUserByID(ctx, userID)
 	if err != nil {
 		return nil, errors.New("user not found")
 	}
@@ -897,8 +865,8 @@ func (s *authService) GetCurrentUser(ctx context.Context, userID string) (*authd
 }
 
 func (s *authService) UpdateProfile(ctx context.Context, userID string, req *authdto.UpdateProfileRequest) (*authdto.UserDTO, error) {
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("id = ? AND deleted_at IS NULL", userID).First(&user).Error; err != nil {
+	user, err := s.authRepo.FindUserByID(ctx, userID)
+	if err != nil {
 		return nil, errors.New("user not found")
 	}
 
@@ -921,13 +889,12 @@ func (s *authService) UpdateProfile(ctx context.Context, userID string, req *aut
 		user.Country = &req.Country
 	}
 
-	if err := db.DB.WithContext(ctx).Save(&user).Error; err != nil {
+	if err := s.authRepo.SaveUser(ctx, user); err != nil {
 		return nil, errors.New("failed to update profile")
 	}
 
-	var profile models.Profile
-	err := db.DB.WithContext(ctx).Where("user_id = ?", userID).First(&profile).Error
-	if err == nil {
+	profile, profileErr := s.authRepo.GetProfileByUserID(ctx, userID)
+	if profileErr == nil {
 		if req.Name != "" {
 			profile.Name = req.Name
 		}
@@ -940,21 +907,21 @@ func (s *authService) UpdateProfile(ctx context.Context, userID string, req *aut
 		if req.Timezone != "" {
 			profile.Timezone = req.Timezone
 		}
-		db.DB.WithContext(ctx).Save(&profile)
+		_ = s.authRepo.SaveProfile(ctx, profile)
 	}
 
 	return s.GetCurrentUser(ctx, userID)
 }
 
 func (s *authService) DeleteAccount(ctx context.Context, userID, password, reason string) error {
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("id = ? AND deleted_at IS NULL", userID).First(&user).Error; err != nil {
+	user, err := s.authRepo.FindUserByID(ctx, userID)
+	if err != nil {
 		return errors.New("user not found")
 	}
 
-	// Get user credential for password verification
-	var credential models.UserCredential
-	if err := db.DB.WithContext(ctx).Where("user_id = ?", userID).First(&credential).Error; err != nil {
+	// Get user credential via repository for password verification
+	credential, err := s.authRepo.GetCredentialByUserID(ctx, userID)
+	if err != nil {
 		return errors.New("user not found")
 	}
 
@@ -968,7 +935,7 @@ func (s *authService) DeleteAccount(ctx context.Context, userID, password, reaso
 	user.DeletedAt = gorm.DeletedAt{Time: now, Valid: true}
 	user.Status = "INACTIVE"
 	user.ArchiveReason = &reason
-	if err := db.DB.WithContext(ctx).Save(&user).Error; err != nil {
+	if err := s.authRepo.SaveUser(ctx, user); err != nil {
 		return errors.New("failed to delete account")
 	}
 
@@ -977,7 +944,7 @@ func (s *authService) DeleteAccount(ctx context.Context, userID, password, reaso
 
 func (s *authService) GetOAuthRedirectURL(ctx context.Context, provider string) (string, error) {
 	if s.oauthService == nil {
-		return "", errors.New("OAuth service is not configured")
+		return "", errors.New("oauth service is not configured")
 	}
 
 	state, err := s.oauthService.GenerateOAuthState(ctx)
@@ -989,13 +956,13 @@ func (s *authService) GetOAuthRedirectURL(ctx context.Context, provider string) 
 	case "google":
 		redirectURL := s.oauthService.GetGoogleAuthURL(state)
 		if redirectURL == "" {
-			return "", errors.New("Google OAuth is not configured")
+			return "", errors.New("google OAuth is not configured")
 		}
 		return redirectURL, nil
 	case "apple":
 		redirectURL := s.oauthService.GetAppleAuthURL(state)
 		if redirectURL == "" {
-			return "", errors.New("Apple OAuth is not configured")
+			return "", errors.New("apple OAuth is not configured")
 		}
 		return redirectURL, nil
 	default:
@@ -1008,7 +975,7 @@ func (s *authService) HandleOAuthCallback(ctx context.Context, provider, code, s
 	// Step 1: Validate OAuth state (CSRF protection)
 	// ───────────────────────────────────────────────────────────────────────────────
 	if s.oauthService == nil {
-		return nil, errors.New("OAuth service not configured")
+		return nil, errors.New("oauth service not configured")
 	}
 
 	valid, err := s.oauthService.ValidateOAuthState(ctx, state)
@@ -1123,7 +1090,7 @@ func (s *authService) HandleOAuthCallback(ctx context.Context, provider, code, s
 
 func (s *authService) LinkOAuthProvider(ctx context.Context, userID, provider, code, state string) error {
 	if s.oauthService == nil {
-		return errors.New("OAuth service is not configured")
+		return errors.New("oauth service is not configured")
 	}
 
 	// Validate state parameter (CSRF protection)
@@ -1152,13 +1119,10 @@ func (s *authService) LinkOAuthProvider(ctx context.Context, userID, provider, c
 	}
 
 	// Check if this OAuth account is already linked to another user
-	var existingLink models.OAuthAccount
-	err = db.DB.WithContext(ctx).
-		Where("provider = ? AND provider_user_id = ?", oauthUserInfo.Provider, oauthUserInfo.ProviderUserID).
-		First(&existingLink).Error
-	if err == nil {
+	existingLink, err := s.authRepo.FindOAuthAccountByProvider(ctx, oauthUserInfo.Provider, oauthUserInfo.ProviderUserID)
+	if err == nil && existingLink != nil {
 		return errors.New("this social account is already linked to another user")
-	} else if err != gorm.ErrRecordNotFound {
+	} else if err != nil && !authrepo.IsNotFound(err) {
 		return fmt.Errorf("database error: %w", err)
 	}
 
@@ -1169,22 +1133,22 @@ func (s *authService) LinkOAuthProvider(ctx context.Context, userID, provider, c
 		ProviderUserID: oauthUserInfo.ProviderUserID,
 		Email:          &oauthUserInfo.Email,
 	}
-	if err := db.DB.WithContext(ctx).Create(&link).Error; err != nil {
+	if err := s.authRepo.CreateOAuthAccount(ctx, &link); err != nil {
 		return fmt.Errorf("failed to link account: %w", err)
 	}
 	return nil
 }
 
 func (s *authService) UnlinkOAuthProvider(ctx context.Context, userID, provider string) error {
-	if err := db.DB.WithContext(ctx).Where("user_id = ? AND provider = ?", userID, provider).Delete(&models.OAuthAccount{}).Error; err != nil {
+	if err := s.authRepo.DeleteOAuthAccount(ctx, userID, provider); err != nil {
 		return errors.New("failed to unlink provider")
 	}
 	return nil
 }
 
 func (s *authService) GetLinkedAccounts(ctx context.Context, userID string) ([]authdto.LinkedAccountDTO, error) {
-	var accounts []models.OAuthAccount
-	if err := db.DB.WithContext(ctx).Where("user_id = ?", userID).Find(&accounts).Error; err != nil {
+	accounts, err := s.authRepo.GetOAuthAccountsByUser(ctx, userID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1219,8 +1183,8 @@ func (s *authService) ValidateAccessToken(ctx context.Context, token string) (*a
 		return nil, err
 	}
 
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("id = ? AND deleted_at IS NULL", claims.UserID).First(&user).Error; err != nil {
+	user, err := s.authRepo.FindUserByID(ctx, claims.UserID)
+	if err != nil {
 		return nil, errors.New("user not found")
 	}
 
@@ -1239,8 +1203,8 @@ func (s *authService) ValidateAccessToken(ctx context.Context, token string) (*a
 }
 
 func (s *authService) InitiateAccountRecovery(ctx context.Context, email, method string) (string, error) {
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("email = ? AND deleted_at IS NULL", email).First(&user).Error; err != nil {
+	user, err := s.authRepo.FindUserByEmail(ctx, email)
+	if err != nil {
 		return "", errors.New("user not found")
 	}
 
@@ -1276,19 +1240,16 @@ func (s *authService) InitiateAccountRecovery(ctx context.Context, email, method
 }
 
 func (s *authService) FinalizeAccountRecovery(ctx context.Context, ticket, code, newPassword string) error {
-	var vCode models.VerificationCode
-	err := db.DB.WithContext(ctx).
-		Where("code = ? AND type = ? AND is_used = ? AND expires_at > ?", code, "account_recovery:"+ticket, false, time.Now()).
-		First(&vCode).Error
+	vCode, err := s.authRepo.FindVerificationCodeByCodeAndType(ctx, code, "account_recovery:"+ticket)
 	if err != nil {
 		return errors.New("invalid or expired verification code")
 	}
 
-	vCode.IsUsed = true
-	db.DB.WithContext(ctx).Save(&vCode)
+	// Mark code as used
+	_ = s.authRepo.MarkCodeAsUsed(ctx, vCode.ID)
 
-	var user models.User
-	if err := db.DB.WithContext(ctx).Where("id = ?", vCode.UserID).First(&user).Error; err != nil {
+	user, err := s.authRepo.FindUserByID(ctx, vCode.UserID)
+	if err != nil {
 		return errors.New("user not found")
 	}
 
@@ -1297,10 +1258,8 @@ func (s *authService) FinalizeAccountRecovery(ctx context.Context, ticket, code,
 		return err
 	}
 
-	// Update user credential
-	if err := db.DB.WithContext(ctx).Model(&models.UserCredential{}).
-		Where("user_id = ?", user.ID).
-		Update("password_hash", string(hashedPassword)).Error; err != nil {
+	// Update user credential via repository
+	if err := s.authRepo.UpdatePasswordHash(ctx, user.ID, string(hashedPassword)); err != nil {
 		return errors.New("failed to save new password")
 	}
 

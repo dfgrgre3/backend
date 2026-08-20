@@ -154,6 +154,7 @@ func parsePrismaSchema(path string) (map[string]PrismaModel, error) {
 
 func parseGoModels(dirPath string) (map[string]GoStruct, error) {
 	fset := token.NewFileSet()
+	//lint:ignore SA1019 ParseDir is intentionally used to preserve package grouping in this schema audit.
 	pkgs, err := parser.ParseDir(fset, dirPath, nil, parser.ParseComments)
 	if err != nil {
 		return nil, err

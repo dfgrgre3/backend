@@ -79,7 +79,7 @@ func SetupPublicRoutes(router *gin.Engine) {
 		ai.POST("/grade-essay", protected.GradeEssayProxy)
 		// Polling for async essay grading
 		ai.GET("/grade-essay/status/:jobId", protected.GetEssayGradeStatus)
-		ai.GET("/recommendations", protected.GetAIRecommendations)
+
 		ai.POST("/recommendations/track", protected.TrackAIRecommendation)
 		ai.POST("/search/track", protected.TrackSearchHistory)
 		ai.GET("/search/history", protected.GetUserSearchHistory)
@@ -205,6 +205,9 @@ func SetupPublicRoutes(router *gin.Engine) {
 	// Navigation / Mega Menu routes
 	router.GET("/api/navigation/menu", protected.GetNavigationMenu)
 	router.GET("/api/navigation/main", protected.GetMainNavItems)
+
+	// AI Recommendations (optional auth — works without login, returns empty recommendations)
+	router.GET("/api/ai/recommendations", middleware.OptionalAuth(), middleware.AIRateLimiter(), protected.GetAIRecommendations)
 
 	// Public Unified Search (courses, resources, teachers, videos)
 	router.GET("/api/search", protected.PublicSearch)

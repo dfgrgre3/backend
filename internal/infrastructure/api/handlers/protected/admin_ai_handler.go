@@ -2,8 +2,11 @@ package protected
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
+	"thanawy-backend/internal/application/cqrs/queries"
 	"thanawy-backend/internal/application/services"
 	models "thanawy-backend/internal/domain/common"
 	"time"
@@ -13,6 +16,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// courseSuggestionsQuery backs the personalized course recommendations feed.
+var courseSuggestionsQuery = queries.NewCourseSuggestionsQueryService()
 
 // AdminAIGet returns the AI advisor snapshot: at-risk students and subjects.
 func AdminAIGet(c *gin.Context) {
@@ -140,20 +146,50 @@ func AdminAIPost(c *gin.Context) {
 	}
 }
 
+// GetAIRecommendations suggests published courses the learner has not enrolled
+// in, ranked by affinity with the categories they already study.
 func GetAIRecommendations(c *gin.Context) {
-	_, exists := c.Get("userId")
-	if !exists {
+	userID := c.GetString("userId")
+	if userID == "" {
 		api_response.Success(c, gin.H{
 			"recommendations": []interface{}{},
+			"searchHistory":   []interface{}{},
+			"page":            1,
+			"totalPages":      0,
 			"message":         "Please login to see personalized recommendations",
 		})
 		return
 	}
 
-	api_response.Success(c, gin.H{
-		"recommendations": []interface{}{},
-		"message":         "AI recommendations not yet implemented",
-	})
+	page := queryInt(c, "page", 1, 1, 1000)
+	limit := queryInt(c, "limit", 8, 1, 50)
+
+	result, err := courseSuggestionsQuery.GetSuggestions(userID, page, limit)
+	if err != nil {
+		// Log the actual error for debugging
+		slog.Error("failed to build AI recommendations",
+			"userID", userID,
+			"page", page,
+			"limit", limit,
+			"error", err,
+		)
+		api_response.Error(c, http.StatusInternalServerError, "Failed to build recommendations")
+		return
+	}
+
+	api_response.Success(c, result)
+}
+
+// queryInt reads an integer query parameter and clamps it into range.
+func queryInt(c *gin.Context, key string, fallback, min, max int) int {
+	value, err := strconv.Atoi(c.Query(key))
+	if err != nil || value < min {
+		return fallback
+	}
+	if value > max {
+		return max
+	}
+	return value
 }
 
 func TrackAIRecommendation(c *gin.Context) {

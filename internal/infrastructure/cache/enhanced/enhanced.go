@@ -23,7 +23,6 @@ import (
 type Cache struct {
 	local *lru.Cache
 	stats *Stats
-	mu    sync.RWMutex
 }
 
 // Stats tracks cache performance metrics

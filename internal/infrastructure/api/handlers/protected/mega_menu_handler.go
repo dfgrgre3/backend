@@ -94,7 +94,7 @@ func TrackMegaMenuEvent(c *gin.Context) {
 	}
 
 	// Fire-and-forget style: log but don't fail the request on DB error
-	if err := db.DB.Create(&event).Error; err != nil {
+	if err := db.RawWriteDB(c.Request.Context()).Create(&event).Error; err != nil {
 		log.Printf("Failed to track mega menu event: %v", err)
 		// Still return success to avoid breaking frontend UX
 	}

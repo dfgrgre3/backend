@@ -31,28 +31,54 @@ func loadDashboardRecentItems(conn *gorm.DB, readDB *gorm.DB) dashboardRecentIte
 	var wg sync.WaitGroup
 	wg.Add(11)
 
-	go func() { defer wg.Done(); conn.Order(createdAtDescSort).Limit(5).Find(&items.RecentUsers) }()
+	// Fix: Use separate sessions for each goroutine to avoid concurrent map writes
 	go func() {
 		defer wg.Done()
-		conn.Where("deleted_at IS NULL AND role = ?", models.RoleTeacher).
+		conn.Session(&gorm.Session{NewDB: true}).Order(createdAtDescSort).Limit(5).Find(&items.RecentUsers)
+	}()
+	go func() {
+		defer wg.Done()
+		conn.Session(&gorm.Session{NewDB: true}).Where("deleted_at IS NULL AND role = ?", models.RoleTeacher).
 			Order(createdAtDescSort).Limit(5).Find(&items.RecentTeachers)
 	}()
-	go func() { defer wg.Done(); conn.Order(createdAtDescSort).Limit(5).Find(&items.RecentCourses) }()
 	go func() {
 		defer wg.Done()
-		userSubscriptionScope(conn).Order(createdAtDescSort).Limit(5).Find(&items.RecentOrders)
+		conn.Session(&gorm.Session{NewDB: true}).Order(createdAtDescSort).Limit(5).Find(&items.RecentCourses)
 	}()
-	go func() { defer wg.Done(); conn.Order(createdAtDescSort).Limit(5).Find(&items.RecentPayments) }()
-	go func() { defer wg.Done(); conn.Order(createdAtDescSort).Limit(5).Find(&items.RecentExams) }()
-	go func() { defer wg.Done(); conn.Order(createdAtDescSort).Limit(5).Find(&items.RecentAssignments) }()
-	go func() { defer wg.Done(); conn.Order(createdAtDescSort).Limit(5).Find(&items.Announcements) }()
 	go func() {
 		defer wg.Done()
-		conn.Where("deleted_at IS NULL AND status = ?", "LIVE").
+		conn.Session(&gorm.Session{NewDB: true}).Where("deleted_at IS NULL AND role = ?", models.RoleTeacher).
+			Order(createdAtDescSort).Limit(5).Find(&items.RecentOrders)
+	}()
+	go func() {
+		defer wg.Done()
+		conn.Session(&gorm.Session{NewDB: true}).Order(createdAtDescSort).Limit(5).Find(&items.RecentPayments)
+	}()
+	go func() {
+		defer wg.Done()
+		conn.Session(&gorm.Session{NewDB: true}).Order(createdAtDescSort).Limit(5).Find(&items.RecentExams)
+	}()
+	go func() {
+		defer wg.Done()
+		conn.Session(&gorm.Session{NewDB: true}).Order(createdAtDescSort).Limit(5).Find(&items.RecentAssignments)
+	}()
+	go func() {
+		defer wg.Done()
+		conn.Session(&gorm.Session{NewDB: true}).Order(createdAtDescSort).Limit(5).Find(&items.Announcements)
+	}()
+	go func() {
+		defer wg.Done()
+		conn.Session(&gorm.Session{NewDB: true}).Where("deleted_at IS NULL AND status = ?", "LIVE").
 			Order(createdAtDescSort).Limit(5).Find(&items.LiveClasses)
 	}()
-	go func() { defer wg.Done(); conn.Order(createdAtDescSort).Limit(5).Find(&items.SecurityAlerts) }()
-	go func() { defer wg.Done(); readDB.Order(createdAtDescSort).Limit(5).Find(&items.UpcomingExams) }()
+	go func() {
+		defer wg.Done()
+		conn.Session(&gorm.Session{NewDB: true}).Order(createdAtDescSort).Limit(5).Find(&items.SecurityAlerts)
+	}()
+	go func() {
+		defer wg.Done()
+		readDB.Session(&gorm.Session{NewDB: true}).Order(createdAtDescSort).Limit(5).Find(&items.UpcomingExams)
+	}()
 
 	wg.Wait()
 	return items

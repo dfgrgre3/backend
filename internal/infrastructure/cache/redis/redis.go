@@ -44,6 +44,50 @@ func HealthCheck(ctx context.Context) error {
 	return c.Ping(pingCtx).Err()
 }
 
+// WarmUp pre-opens connections on the Redis pool so the first cache accesses
+// after startup do not pay a cold TCP/TLS handshake. On remote Redis
+// (Upstash, ElastiCache, managed instances) that handshake can cost
+// hundreds of milliseconds, which otherwise lands on the very first requests
+// (e.g. a cache miss for /api/navigation/menu).
+func WarmUp(ctx context.Context) {
+	c := Get()
+	if c == nil {
+		return
+	}
+
+	opts := c.Options()
+	target := opts.MinIdleConns
+	if target < 1 {
+		target = 1
+	}
+	if target > opts.PoolSize {
+		target = opts.PoolSize
+	}
+	if v := envInt("REDIS_PREWARM_CONNS", 0); v > 0 {
+		target = v
+	}
+	// Serverless instances each hold their own pool — keep the warm-up small.
+	if isServerlessEnv() && target > 2 {
+		target = 2
+	}
+
+	start := time.Now()
+	var wg sync.WaitGroup
+	for i := 0; i < target; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			if err := c.Ping(pingCtx).Err(); err != nil {
+				log.Printf("[Redis WarmUp] Warning: failed to establish a pool connection: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	log.Printf("[Redis WarmUp] Pre-opened %d connection(s) in %s", target, time.Since(start).Round(time.Millisecond))
+}
+
 func Connect(ctx context.Context, url string) error {
 	if url == "" || os.Getenv("DISABLE_REDIS") == "true" {
 		log.Println("Redis is disabled via DISABLE_REDIS or empty URL")

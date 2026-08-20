@@ -18,7 +18,7 @@ import (
 	db "thanawy-backend/internal/infrastructure/database"
 	airepo "thanawy-backend/internal/infrastructure/persistence/repositories"
 
-	"thanawy-backend/internal/infrastructure/workers"
+	worker "thanawy-backend/internal/infrastructure/workers"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -435,14 +435,6 @@ func (h *AIHandler) GetExamStatus(c *gin.Context) {
 
 // buildLegacyExamPrompt is the synchronous-fallback prompt used when Redis
 // is not available. It produces a non-JSON reply the legacy UI can display.
-func buildLegacyExamPrompt(subject, year, lesson, difficulty string, count int) string {
-	return fmt.Sprintf(
-		"أنشئ %d سؤالاً امتحانياً حول \"%s\" للصف %s في مادة %s. مستوى الصعوبة: %s.",
-		count, lesson, year, subject, difficulty,
-	)
-}
-
-// AISuggestProxy handles content suggestion requests
 func (h *AIHandler) AISuggestProxy(c *gin.Context) {
 	h.AIChatProxy(c)
 }
@@ -692,41 +684,6 @@ func (h *AIHandler) buildAIMessages(history []models.AIMessage) []map[string]int
 }
 
 // contentToString safely extracts a string from an interface{} that may be a string or an array
-func contentToString(v interface{}) string {
-	if v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-
-	// If content is an array (e.g. vision messages), extract text parts
-	if arr, ok := v.([]interface{}); ok {
-		var parts []string
-		for _, item := range arr {
-			if text := extractTextFromPart(item); text != "" {
-				parts = append(parts, text)
-			}
-		}
-		return strings.Join(parts, " ")
-	}
-
-	return fmt.Sprintf("%v", v)
-}
-
-func extractTextFromPart(item interface{}) string {
-	m, ok := item.(map[string]interface{})
-	if !ok {
-		return ""
-	}
-	if t, ok := m["type"].(string); ok && t == "text" {
-		if text, ok := m["text"].(string); ok {
-			return text
-		}
-	}
-	return ""
-}
-
 func (h *AIHandler) buildCacheKey(messages []map[string]interface{}) string {
 	data, _ := json.Marshal(messages)
 	return fmt.Sprintf("ai_cache:%x", data)

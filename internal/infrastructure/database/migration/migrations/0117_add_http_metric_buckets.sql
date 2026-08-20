@@ -1,5 +1,3 @@
-BEGIN;
-
 CREATE TABLE IF NOT EXISTS public.http_metric_buckets (
     bucket_start timestamptz NOT NULL,
     route text NOT NULL,
@@ -20,4 +18,3 @@ CREATE TABLE IF NOT EXISTS public.http_metric_buckets (
 CREATE INDEX IF NOT EXISTS idx_http_metric_buckets_time
     ON public.http_metric_buckets (bucket_start DESC);
 
-COMMIT;

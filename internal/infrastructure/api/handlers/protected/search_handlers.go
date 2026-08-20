@@ -6,7 +6,7 @@ import (
 
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 	db "thanawy-backend/internal/infrastructure/database"
-	"thanawy-backend/internal/shared/utils"
+	pagination "thanawy-backend/internal/shared/utils"
 
 	"github.com/gin-gonic/gin"
 )

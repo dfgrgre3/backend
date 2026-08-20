@@ -160,6 +160,8 @@ func isValidCSRFToken(token string) bool {
 // request that establishes their identity).
 // Webhooks and external callbacks use their own signing-secret authentication
 // (Paymob HMAC, etc.) and never carry browser cookies/headers.
+// Public analytics endpoints are fire-and-forget tracking calls that should
+// not require CSRF tokens.
 var csrfSkipPaths = []string{
 	"/api/webhooks/",
 	"/api/payments/paymob/callback",
@@ -171,6 +173,8 @@ var csrfSkipPaths = []string{
 	"/api/auth/mfa/",
 	"/api/auth/change-password",
 	"/api/auth/sessions",
+	"/api/analytics/promo",
+	"/api/analytics/mega-menu",
 }
 
 // isSafeMethod checks if the HTTP method is read-only

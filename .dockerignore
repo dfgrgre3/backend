@@ -1,49 +1,93 @@
+# Git files
 .git
 .gitignore
+.gitattributes
 
-# Local configuration and secrets
-.env
-.env.*
-!.env.example
-*.key
-*.pem
-*.p12
-*.pfx
-*.cer
-*.crt
-*.der
-credentials*
+# Documentation
+docs
+*.md
+!README.md
 
-# Local build artifacts
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Test files
+*_test.go
+*_test
+test
+tests
+*_test.go
+internal/*/*_test.go
+internal/*/*/*_test.go
+cmd/*/*_test.go
+
+# Coverage files
+coverage.out
+coverage.html
+*.cover
+
+# Build artifacts
+bin
+dist
+build
 *.exe
-*.exe~
 *.dll
 *.so
 *.dylib
-bin/
-*.test
-*.out
-*.prof
-*.cover
+
+# Go modules
+go.sum
+go.mod
+
+# Environment files with secrets
+.env
+.env.*
+!.env.example
+!.env.docker.example
+.env.local
+.env.development
+.env.production
+
+# Temporary files
+tmp
+temp
 *.tmp
-*.go.*
+*.log
 
-# Node.js build artifacts
-node_modules/
-.next/
+# Docker files (keep docker-compose for reference, but exclude Dockerfile if you want to build from outside)
+Dockerfile*
+docker-compose*.yml
+!Dockerfile.example
+!docker-compose.example.yml
 
-# Runtime data
-uploads/
-backups/
+# Scripts that shouldn't be in the image
+scripts
+!scripts/docker-entrypoint.sh
 
-# Editor and OS files
-.idea/
-.vscode/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-.DS_Store
-Thumbs.db
-Desktop.ini
+# Vercel config
+vercel.json
+.vercel
+
+# README files (keep main one)
+README*
+
+# Travis, CircleCI, etc.
+.travis.yml
+.circleci
+.github
+
+# Local uploads (should use volumes)
+uploads
+*.upload
+
+# Database files
+*.sqlite
+*.db
+
+# Swagger gen files
+swagger.json
+swagger.yaml

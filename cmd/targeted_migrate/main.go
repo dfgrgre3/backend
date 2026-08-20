@@ -258,12 +258,6 @@ func (p *sqlParser) skip(n int) {
 	p.pos += n
 }
 
-func (p *sqlParser) advance() rune {
-	ch := p.content[p.pos]
-	p.pos++
-	return ch
-}
-
 func (p *sqlParser) handleLineComment() bool {
 	next, ok := p.peekAt(1)
 	if !ok {
@@ -310,32 +304,6 @@ func (p *sqlParser) handleDollarQuote() bool {
 	p.dollarTag = string(p.content[p.pos : j+1])
 	p.inDollar = true
 	return true
-}
-
-func (p *sqlParser) handleSemicolon() (string, bool) {
-	if p.inSingle || p.inDouble || p.inDollar || p.peek() != ';' {
-		return "", false
-	}
-	return ";", true
-}
-
-func (p *sqlParser) handleSingleQuote(buf *strings.Builder) string {
-	if p.inDouble || p.inDollar {
-		return ""
-	}
-	if p.peek() != '\'' {
-		return ""
-	}
-	if p.inSingle {
-		next, ok := p.peekAt(1)
-		if ok && next == '\'' {
-			buf.WriteRune(p.content[p.pos])
-			buf.WriteRune(p.content[p.pos+1])
-			p.skip(2)
-			return "escaped"
-		}
-	}
-	return ""
 }
 
 func splitSQL(content string) []string {

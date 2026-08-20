@@ -10,9 +10,8 @@
 -- 5. إضافة Role Levels constants
 -- =============================================================================
 
-BEGIN;
-
 -- ─────────────────────────────────────────────
+
 --  1. إضافة حقل level إلى roles
 -- ─────────────────────────────────────────────
 ALTER TABLE roles ADD COLUMN IF NOT EXISTS level INT NOT NULL DEFAULT 1;
@@ -248,6 +247,4 @@ BEGIN
 END $$;
 
 COMMENT ON COLUMN verification_codes.max_attempts IS 'الحد الأقصى لمحاولات التحقق';
-COMMENT ON COLUMN verification_codes.attempt_count IS 'عدد محاولات التحقق الحالية';
-
-COMMIT;
+COMMENT ON COLUMN verification_codes.attempt_count IS 'عدد محاولات التحقق الحالية';

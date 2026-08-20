@@ -20,6 +20,28 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// nonTransactionalStatements contains SQL patterns that cannot run inside a transaction.
+// These require special handling (outside transaction).
+var nonTransactionalStatements = []string{
+	"CREATE INDEX CONCURRENTLY",
+	"DROP INDEX CONCURRENTLY",
+	"REINDEX CONCURRENTLY",
+	"CLUSTER CONCURRENTLY",
+	"ANALYZE CONCURRENTLY",
+}
+
+// needsNonTransactionalExecution checks if any statement in the migration
+// requires execution outside a transaction block.
+func needsNonTransactionalExecution(contents string) bool {
+	upperContents := strings.ToUpper(contents)
+	for _, pattern := range nonTransactionalStatements {
+		if strings.Contains(upperContents, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
 type migrationRecord struct {
 	ID        string    `gorm:"primaryKey;column:id"`
 	Checksum  string    `gorm:"not null;column:checksum"`
@@ -179,6 +201,69 @@ func getMigrationNames() ([]string, error) {
 	return names, nil
 }
 
+// applyBaselineMigration handles the special case of the baseline schema migration.
+// It checks if tables already exist and marks the migration as applied, or applies
+// it to a fresh database.
+func applyBaselineMigration(database *gorm.DB, contents []byte, checksum, id string) error {
+	// Check if any core table exists (e.g., User table)
+	var tableExists int64
+	database.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'User' AND table_schema = 'public'").Scan(&tableExists)
+
+	if tableExists > 0 {
+		// Check if the User table has a primary key constraint
+		var hasPK int64
+		database.Raw("SELECT COUNT(*) FROM information_schema.table_constraints WHERE table_name = 'User' AND constraint_type = 'PRIMARY KEY' AND table_schema = 'public'").Scan(&hasPK)
+
+		if hasPK > 0 {
+			log.Printf("Baseline schema tables already exist with proper constraints, marking migration as applied")
+			// Manually insert the migration record using raw SQL with ON CONFLICT
+			sqlDB, _ := database.DB()
+			_, err := sqlDB.Exec(`INSERT INTO schema_migrations (id, checksum, "appliedAt") VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET checksum = EXCLUDED.checksum, "appliedAt" = EXCLUDED."appliedAt"`, id, checksum, time.Now().UTC())
+			if err != nil {
+				return fmt.Errorf("record migration %s: %w", id, err)
+			}
+			return nil
+		}
+
+		// Tables exist but don't have proper constraints - need to drop and recreate
+		log.Printf("Tables exist but missing constraints, dropping and recreating")
+		database.Exec(`DROP SCHEMA public CASCADE`)
+		database.Exec(`CREATE SCHEMA public`)
+	}
+
+	// Tables don't exist, need to apply the migration
+	log.Printf("Applying baseline schema migration")
+
+	// For fresh database, we need to handle the schema_migrations table conflict
+	// First, drop the schema_migrations table that was created by ensureMigrationTable
+	database.Exec(`DROP TABLE IF EXISTS schema_migrations CASCADE`)
+
+	// Execute the entire baseline schema as a single block to preserve dependencies
+	content := string(contents)
+	// Remove the schema_migrations table definition more comprehensively
+	content = regexp.MustCompile(`(?s)--\n-- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -\n--\n\nCREATE TABLE public\.schema_migrations \([^)]+\);\n\n--\n-- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -\n--\n\nALTER TABLE ONLY public\.schema_migrations\n    ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY \(id\);\n\n`).ReplaceAllString(content, "")
+
+	if err := database.Exec(content).Error; err != nil {
+		return fmt.Errorf("apply migration %s: %w", id, err)
+	}
+
+	// Create the schema_migrations table manually
+	database.Exec(`
+		CREATE TABLE schema_migrations (
+			id text PRIMARY KEY,
+			checksum text NOT NULL,
+			"appliedAt" timestamptz NOT NULL DEFAULT now()
+		)
+	`)
+	// Manually insert the migration record using raw SQL
+	sqlDB, _ := database.DB()
+	_, err := sqlDB.Exec(`INSERT INTO schema_migrations (id, checksum, "appliedAt") VALUES ($1, $2, $3)`, id, checksum, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("record migration %s: %w", id, err)
+	}
+	return nil
+}
+
 func applyMigration(database *gorm.DB, name string) error {
 	id := name[:len(name)-len(filepath.Ext(name))]
 	contents, err := os.ReadFile(filepath.Join(migrationsDir, name))
@@ -212,66 +297,16 @@ func applyMigration(database *gorm.DB, name string) error {
 
 	// For baseline schema, check if tables already exist and mark as applied if so
 	if id == "0000_baseline_schema" {
-		// Check if any core table exists (e.g., User table)
-		var tableExists int64
-		database.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'User' AND table_schema = 'public'").Scan(&tableExists)
-
-		if tableExists > 0 {
-			// Check if the User table has a primary key constraint
-			var hasPK int64
-			database.Raw("SELECT COUNT(*) FROM information_schema.table_constraints WHERE table_name = 'User' AND constraint_type = 'PRIMARY KEY' AND table_schema = 'public'").Scan(&hasPK)
-
-			if hasPK > 0 {
-				log.Printf("Baseline schema tables already exist with proper constraints, marking migration as applied")
-				// Manually insert the migration record using raw SQL with ON CONFLICT
-				sqlDB, _ := database.DB()
-				_, err = sqlDB.Exec(`INSERT INTO schema_migrations (id, checksum, "appliedAt") VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET checksum = EXCLUDED.checksum, "appliedAt" = EXCLUDED."appliedAt"`, id, checksum, time.Now().UTC())
-				if err != nil {
-					return fmt.Errorf("record migration %s: %w", id, err)
-				}
-				return nil
-			}
-
-			// Tables exist but don't have proper constraints - need to drop and recreate
-			log.Printf("Tables exist but missing constraints, dropping and recreating")
-			database.Exec(`DROP SCHEMA public CASCADE`)
-			database.Exec(`CREATE SCHEMA public`)
-		}
-
-		// Tables don't exist, need to apply the migration
-		log.Printf("Applying baseline schema migration")
-
-		// For fresh database, we need to handle the schema_migrations table conflict
-		// First, drop the schema_migrations table that was created by ensureMigrationTable
-		database.Exec(`DROP TABLE IF EXISTS schema_migrations CASCADE`)
-
-		// Execute the entire baseline schema as a single block to preserve dependencies
-		content := string(contents)
-		// Remove the schema_migrations table definition more comprehensively
-		content = regexp.MustCompile(`(?s)--\n-- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -\n--\n\nCREATE TABLE public\.schema_migrations \([^)]+\);\n\n--\n-- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -\n--\n\nALTER TABLE ONLY public\.schema_migrations\n    ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY \(id\);\n\n`).ReplaceAllString(content, "")
-
-		if err := database.Exec(content).Error; err != nil {
-			return fmt.Errorf("apply migration %s: %w", id, err)
-		}
-
-		// Create the schema_migrations table manually
-		database.Exec(`
-			CREATE TABLE schema_migrations (
-				id text PRIMARY KEY,
-				checksum text NOT NULL,
-				"appliedAt" timestamptz NOT NULL DEFAULT now()
-			)
-		`)
-		// Manually insert the migration record using raw SQL
-		sqlDB, _ := database.DB()
-		_, err = sqlDB.Exec(`INSERT INTO schema_migrations (id, checksum, "appliedAt") VALUES ($1, $2, $3)`, id, checksum, time.Now().UTC())
-		if err != nil {
-			return fmt.Errorf("record migration %s: %w", id, err)
-		}
-		return nil
+		return applyBaselineMigration(database, contents, checksum, id)
 	}
 
-	// For other migrations, use statement splitting
+	// Check if this migration contains non-transactional statements
+	if needsNonTransactionalExecution(string(contents)) {
+		log.Printf("Migration %s contains non-transactional statements (CONCURRENTLY), executing outside transaction", id)
+		return applyNonTransactionalMigration(database, name, id, string(contents), checksum)
+	}
+
+	// For other migrations, use statement splitting with transaction
 	return database.Transaction(func(tx *gorm.DB) error {
 		statements := splitSQLStatements(string(contents))
 		for i, stmt := range statements {
@@ -293,15 +328,59 @@ func applyMigration(database *gorm.DB, name string) error {
 	})
 }
 
-func extractTableNameFromAlter(stmt string) string {
-	// Extract table name from ALTER TABLE statement
-	// Format: ALTER TABLE ONLY public."TableName" or ALTER TABLE public."TableName"
-	re := regexp.MustCompile(`ALTER TABLE (?:ONLY )?public\."?(\w+)"?`)
-	matches := re.FindStringSubmatch(stmt)
-	if len(matches) > 1 {
-		return matches[1]
+// applyNonTransactionalMigration executes a migration that contains statements
+// which cannot run inside a transaction (e.g., CREATE INDEX CONCURRENTLY).
+// These statements must be executed one by one, outside any transaction.
+// We use the raw *sql.DB connection to bypass GORM's transaction handling.
+func applyNonTransactionalMigration(database *gorm.DB, name, id, contents, checksum string) error {
+	// Get raw database connection to bypass GORM's transaction handling
+	sqlDB, err := database.DB()
+	if err != nil {
+		return fmt.Errorf("get database connection: %w", err)
 	}
-	return ""
+
+	statements := splitSQLStatements(contents)
+	log.Printf("Migration %s: parsed %d statements", id, len(statements))
+	executedNonTransactional := false
+
+	for i, stmt := range statements {
+		trimmed := strings.TrimSpace(stmt)
+		if trimmed == "" || strings.HasPrefix(trimmed, "--") {
+			continue
+		}
+
+		// Check if this specific statement needs non-transactional execution
+		upperStmt := strings.ToUpper(trimmed)
+		isNonTransactional := false
+		for _, pattern := range nonTransactionalStatements {
+			if strings.Contains(upperStmt, pattern) {
+				isNonTransactional = true
+				break
+			}
+		}
+
+		// Use sqlDB.Exec() for all statements in non-transactional migrations
+		// This ensures DDL statements work correctly in PostgreSQL
+		log.Printf("Executing statement %d (len %d): [%.100s...]", i+1, len(trimmed), trimmed)
+		_, err := sqlDB.Exec(stmt)
+		if err != nil {
+			return fmt.Errorf("apply migration %s statement %d: %w\nStatement: %s", id, i+1, err, stmt)
+		}
+		if isNonTransactional {
+			executedNonTransactional = true
+		}
+	}
+
+	// Only record the migration after ALL statements have succeeded
+	_, err = sqlDB.Exec(`INSERT INTO schema_migrations (id, checksum, "appliedAt") VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET checksum = EXCLUDED.checksum, "appliedAt" = EXCLUDED."appliedAt"`, id, checksum, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("record migration %s: %w", id, err)
+	}
+
+	if executedNonTransactional {
+		log.Printf("Migration %s completed with non-transactional statements", id)
+	}
+	return nil
 }
 
 func splitSQLStatements(contents string) []string {
@@ -309,46 +388,120 @@ func splitSQLStatements(contents string) []string {
 	var current strings.Builder
 	var inDollarQuote bool
 	var dollarQuoteTag string
+	var inSingleQuote bool
 
-	// Find all dollar quote patterns in the content
-	dollarQuoteRegex := regexp.MustCompile(`\$[a-zA-Z_]*\$`)
+	n := len(contents)
+	for i := 0; i < n; i++ {
+		ch := contents[i]
 
-	lines := strings.Split(contents, "\n")
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "--") {
+		// Single quote handling (skip escaped quotes '')
+		if ch == '\'' && !inDollarQuote {
+			if inSingleQuote {
+				if i+1 < n && contents[i+1] == '\'' {
+					current.WriteByte('\'')
+					current.WriteByte('\'')
+					i++
+					continue
+				}
+				inSingleQuote = false
+			} else {
+				inSingleQuote = true
+			}
+			current.WriteByte(ch)
 			continue
 		}
 
-		current.WriteString(line)
-		current.WriteString("\n")
-
-		// Handle dollar-quoted strings ($$ or $tag$)
-		matches := dollarQuoteRegex.FindAllStringIndex(line, -1)
-		for _, match := range matches {
-			tag := line[match[0]:match[1]]
+		// Dollar quote handling (e.g. $$ or $tag$)
+		if ch == '$' && !inSingleQuote {
 			if !inDollarQuote {
-				// Start of dollar-quoted string
-				dollarQuoteTag = tag
-				inDollarQuote = true
-			} else if tag == dollarQuoteTag {
-				// End of dollar-quoted string (matching tag)
-				inDollarQuote = false
-				dollarQuoteTag = ""
+				j := i + 1
+				var tag string
+				if j < n && contents[j] == '$' {
+					tag = "$$"
+					j++
+				} else {
+					for j < n && (contents[j] == '_' || (contents[j] >= 'a' && contents[j] <= 'z') || (contents[j] >= 'A' && contents[j] <= 'Z') || (contents[j] >= '0' && contents[j] <= '9')) {
+						j++
+					}
+					if j < n && contents[j] == '$' {
+						tag = contents[i : j+1]
+						j++
+					}
+				}
+				if tag != "" {
+					current.WriteString(tag)
+					dollarQuoteTag = tag
+					inDollarQuote = true
+					i = j - 1
+					continue
+				}
+			} else {
+				if dollarQuoteTag == "$$" && i+1 < n && contents[i+1] == '$' {
+					current.WriteString("$$")
+					inDollarQuote = false
+					dollarQuoteTag = ""
+					i++
+					continue
+				} else if dollarQuoteTag != "$$" && strings.HasPrefix(contents[i:], dollarQuoteTag) {
+					current.WriteString(dollarQuoteTag)
+					inDollarQuote = false
+					dollarQuoteTag = ""
+					i += len(dollarQuoteTag) - 1
+					continue
+				}
 			}
 		}
 
-		// Only split on semicolon if not inside a dollar-quoted string
-		if !inDollarQuote && strings.HasSuffix(trimmed, ";") {
-			stmt := current.String()
-			statements = append(statements, stmt)
-			current.Reset()
+		// Comments handling when outside quotes: skip them without appending to statement
+		if !inSingleQuote && !inDollarQuote {
+			if ch == '-' && i+1 < n && contents[i+1] == '-' {
+				// Single line comment: skip until end of line
+				eol := strings.IndexByte(contents[i:], '\n')
+				if eol == -1 {
+					// End of content
+					break
+				}
+				i += eol
+				continue
+			}
+			if ch == '/' && i+1 < n && contents[i+1] == '*' {
+				// Multi-line comment: skip until */
+				end := strings.Index(contents[i+2:], "*/")
+				if end != -1 {
+					i += end + 3
+					continue
+				}
+			}
 		}
+
+		// Semicolon delimiter
+		if ch == ';' && !inSingleQuote && !inDollarQuote {
+			stmt := strings.TrimSpace(current.String())
+			if stmt != "" {
+				statements = append(statements, stmt)
+			}
+			current.Reset()
+			continue
+		}
+
+		current.WriteByte(ch)
 	}
 
 	if current.Len() > 0 {
-		statements = append(statements, current.String())
+		stmt := strings.TrimSpace(current.String())
+		if stmt != "" {
+			statements = append(statements, stmt)
+		}
 	}
 
 	return statements
+}
+
+// removeInlineComment removes single-line comments from SQL
+func removeInlineComment(s string) string {
+	// Find first occurrence of --
+	if idx := strings.Index(s, "--"); idx != -1 {
+		return s[:idx]
+	}
+	return s
 }

@@ -232,10 +232,10 @@ func buildInstructorUpdateMap(input instructorUpdateInput, _ *models.User) (map[
 	if input.Name != nil {
 		name := strings.TrimSpace(*input.Name)
 		if name == "" {
-			return nil, errors.New("Name cannot be empty")
+			return nil, errors.New("name cannot be empty")
 		}
 		if len(name) > maxNameLength {
-			return nil, errors.New("Name is too long")
+			return nil, errors.New("name is too long")
 		}
 		updates["name"] = name
 	}
@@ -259,7 +259,7 @@ func buildInstructorUpdateMap(input instructorUpdateInput, _ *models.User) (map[
 	if input.Bio != nil {
 		bio := strings.TrimSpace(*input.Bio)
 		if len(bio) > maxBioLength {
-			return nil, errors.New("Bio is too long")
+			return nil, errors.New("bio is too long")
 		}
 		if bio == "" {
 			updates["bio"] = nil
@@ -271,7 +271,7 @@ func buildInstructorUpdateMap(input instructorUpdateInput, _ *models.User) (map[
 	if input.Phone != nil {
 		phone := strings.TrimSpace(*input.Phone)
 		if len(phone) > maxPhoneLength {
-			return nil, errors.New("Phone is too long")
+			return nil, errors.New("phone is too long")
 		}
 		if phone == "" {
 			updates["phone"] = nil
@@ -283,7 +283,7 @@ func buildInstructorUpdateMap(input instructorUpdateInput, _ *models.User) (map[
 	if input.Country != nil {
 		country := strings.TrimSpace(*input.Country)
 		if len(country) > maxCountryLength {
-			return nil, errors.New("Country is too long")
+			return nil, errors.New("country is too long")
 		}
 		if country == "" {
 			updates["country"] = nil
@@ -295,7 +295,7 @@ func buildInstructorUpdateMap(input instructorUpdateInput, _ *models.User) (map[
 	if input.CommissionRate != nil {
 		commissionRate := *input.CommissionRate
 		if commissionRate < 0 || commissionRate > maxCommissionPercent {
-			return nil, errors.New("Commission rate must be between 0 and 100")
+			return nil, errors.New("commission rate must be between 0 and 100")
 		}
 		updates["commission_rate"] = commissionRate
 	}
@@ -303,7 +303,7 @@ func buildInstructorUpdateMap(input instructorUpdateInput, _ *models.User) (map[
 	if input.Specialties != nil {
 		specialties, err := validateStringArray(*input.Specialties, maxArrayItems, maxArrayItemLength)
 		if err != nil {
-			return nil, errors.New("Invalid specialties")
+			return nil, errors.New("invalid specialties")
 		}
 		updates["instructor_specialties"] = models.JSONStringArray(specialties)
 	}
@@ -311,7 +311,7 @@ func buildInstructorUpdateMap(input instructorUpdateInput, _ *models.User) (map[
 	if input.Languages != nil {
 		languages, err := validateStringArray(*input.Languages, maxArrayItems, maxArrayItemLength)
 		if err != nil {
-			return nil, errors.New("Invalid languages")
+			return nil, errors.New("invalid languages")
 		}
 		updates["instructor_languages"] = models.JSONStringArray(languages)
 	}
@@ -319,7 +319,7 @@ func buildInstructorUpdateMap(input instructorUpdateInput, _ *models.User) (map[
 	if input.ExperienceYears != nil {
 		experienceYears := *input.ExperienceYears
 		if experienceYears < 0 || experienceYears > maxExperienceYears {
-			return nil, errors.New("Invalid experience years")
+			return nil, errors.New("invalid experience years")
 		}
 		updates["experience_years"] = strconv.Itoa(experienceYears)
 	}
@@ -550,10 +550,6 @@ func instructorStatusSummary(baseQuery *gorm.DB) (gin.H, error) {
 	return summary, nil
 }
 
-func notImplemented(c *gin.Context, message string) {
-	apiresponse.Error(c, http.StatusNotImplemented, message)
-}
-
 func GetInstructors(c *gin.Context) {
 	database, aborted := safeDB(c)
 	if aborted {
@@ -568,7 +564,7 @@ func GetInstructors(c *gin.Context) {
 	if statusParam != "" && !strings.EqualFold(statusParam, "all") {
 		normalized, ok := validInstructorStatus(statusParam)
 		if !ok {
-			apiresponse.Error(c, http.StatusBadRequest, "Invalid instructor status")
+			apiresponse.Error(c, http.StatusBadRequest, "invalid instructor status")
 			return
 		}
 		statusFilter = normalized
@@ -685,7 +681,7 @@ func CreateInstructor(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "Invalid request body")
+		apiresponse.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -710,19 +706,19 @@ func CreateInstructor(c *gin.Context) {
 
 	bio, err := normalizeInstructorOptionalText(input.Bio, maxBioLength)
 	if err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "Bio is too long")
+		apiresponse.Error(c, http.StatusBadRequest, "bio is too long")
 		return
 	}
 
 	phone, err := normalizeInstructorOptionalText(input.Phone, maxPhoneLength)
 	if err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "Phone is too long")
+		apiresponse.Error(c, http.StatusBadRequest, "phone is too long")
 		return
 	}
 
 	country, err := normalizeInstructorOptionalText(input.Country, maxCountryLength)
 	if err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "Country is too long")
+		apiresponse.Error(c, http.StatusBadRequest, "country is too long")
 		return
 	}
 
@@ -739,7 +735,7 @@ func CreateInstructor(c *gin.Context) {
 	if input.Status != nil {
 		normalized, ok := validInstructorStatus(*input.Status)
 		if !ok {
-			apiresponse.Error(c, http.StatusBadRequest, "Invalid instructor status")
+			apiresponse.Error(c, http.StatusBadRequest, "invalid instructor status")
 			return
 		}
 		status = normalized
@@ -747,13 +743,13 @@ func CreateInstructor(c *gin.Context) {
 
 	specialties, err := validateStringArray(input.Specialties, maxArrayItems, maxArrayItemLength)
 	if err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "Invalid specialties")
+		apiresponse.Error(c, http.StatusBadRequest, "invalid specialties")
 		return
 	}
 
 	languages, err := validateStringArray(input.Languages, maxArrayItems, maxArrayItemLength)
 	if err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "Invalid languages")
+		apiresponse.Error(c, http.StatusBadRequest, "invalid languages")
 		return
 	}
 
@@ -833,7 +829,7 @@ func UpdateInstructor(c *gin.Context) {
 	var input instructorUpdateInput
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "Invalid request body")
+		apiresponse.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -1051,7 +1047,7 @@ func ReviewInstructorDocument(c *gin.Context) {
 
 	var input instructorReviewInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "Invalid request body")
+		apiresponse.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -1144,7 +1140,7 @@ func CreateInstructorContract(c *gin.Context) {
 
 	var input instructorContractInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "Invalid request body")
+		apiresponse.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -1196,7 +1192,7 @@ func CreateInstructorViolation(c *gin.Context) {
 
 	var input instructorViolationInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "Invalid request body")
+		apiresponse.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -1295,7 +1291,7 @@ func SendInstructorNotification(c *gin.Context) {
 
 	var input instructorNotificationInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "Invalid request body")
+		apiresponse.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -1395,7 +1391,7 @@ func ExportInstructors(c *gin.Context) {
 	if statusParam != "" && !strings.EqualFold(statusParam, "all") {
 		normalized, ok := validInstructorStatus(statusParam)
 		if !ok {
-			apiresponse.Error(c, http.StatusBadRequest, "Invalid instructor status")
+			apiresponse.Error(c, http.StatusBadRequest, "invalid instructor status")
 			return
 		}
 		statusFilter = normalized
@@ -1475,7 +1471,7 @@ func BulkDeleteInstructors(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "Invalid request body")
+		apiresponse.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
