@@ -272,7 +272,7 @@ func (h *OAuthHandler) OAuthCallback(c *gin.Context) {
 	}
 
 	// Set cookies
-	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("access_token", tokenPair.AccessToken, 15*60, "/", "", secureCookie(c), true)
 	c.SetCookie("refresh_token", tokenPair.RefreshToken, 30*24*60*60, "/", "", secureCookie(c), true)
 

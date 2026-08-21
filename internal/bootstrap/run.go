@@ -72,7 +72,7 @@ func Run() {
 	// Load environment variables only in development
 	if os.Getenv("APP_ENV") == "" || os.Getenv("APP_ENV") == "development" {
 		if err := godotenv.Load(); err != nil {
-			log.Println("No .env file found, using system environment variables")
+			log.Printf("Failed to load .env: %v, using system environment variables", err)
 		}
 	}
 

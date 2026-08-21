@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	authdto "thanawy-backend/internal/application/dto"
 	"thanawy-backend/internal/application/services"
@@ -25,6 +26,21 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// generateSixDigitCode returns a uniformly random 6-digit numeric code
+// ("000000"-"999999") using a CSPRNG. It replaces a previous ad-hoc
+// bit-packing scheme (byte0<<16 | byte1<<8 | byte2%1000000) whose modulo
+// bound only the last byte (Go's % has higher precedence than |), so the
+// combined 24-bit value was never actually reduced mod 1,000,000 — codes
+// were instead truncated to their first 6 characters, producing a biased,
+// non-uniform code space instead of the intended 1-in-1,000,000 code.
+func generateSixDigitCode() (string, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", n.Int64()), nil
+}
 
 // Lockout Policy Configuration
 const (
@@ -293,12 +309,7 @@ func (s *authService) Register(ctx context.Context, req *authdto.RegisterRequest
 		if user.Name != nil {
 			userName = *user.Name
 		}
-		codeBytes := make([]byte, 3)
-		if _, err := rand.Read(codeBytes); err == nil {
-			code := fmt.Sprintf("%06d", int(codeBytes[0])<<16|int(codeBytes[1])<<8|int(codeBytes[2])%1000000)
-			if len(code) > 6 {
-				code = code[:6]
-			}
+		if code, err := generateSixDigitCode(); err == nil {
 			verificationCode := &models.VerificationCode{
 				UserID:    user.ID,
 				Code:      code,
@@ -635,13 +646,9 @@ func (s *authService) ForgotPassword(ctx context.Context, email string) error {
 	}
 
 	// Generate a 6-digit verification code
-	codeBytes := make([]byte, 3)
-	if _, err := rand.Read(codeBytes); err != nil {
+	code, err := generateSixDigitCode()
+	if err != nil {
 		return errors.New("failed to generate verification code")
-	}
-	code := fmt.Sprintf("%06d", int(codeBytes[0])<<16|int(codeBytes[1])<<8|int(codeBytes[2])%1000000)
-	if len(code) > 6 {
-		code = code[:6]
 	}
 
 	// Store the verification code in Redis with 15-minute expiry
@@ -800,14 +807,9 @@ func (s *authService) ResendVerificationEmail(ctx context.Context, userID string
 	}
 
 	// Generate a 6-digit verification code
-	codeBytes := make([]byte, 3)
-	if _, err := rand.Read(codeBytes); err != nil {
+	code, err := generateSixDigitCode()
+	if err != nil {
 		return errors.New("failed to generate verification code")
-	}
-	code := fmt.Sprintf("%06d", int(codeBytes[0])<<16|int(codeBytes[1])<<8|int(codeBytes[2])%1000000)
-	// Ensure 6 digits
-	if len(code) > 6 {
-		code = code[:6]
 	}
 
 	verificationCode := &models.VerificationCode{
@@ -1209,13 +1211,9 @@ func (s *authService) InitiateAccountRecovery(ctx context.Context, email, method
 	}
 
 	ticket := uuid.New().String()
-	codeBytes := make([]byte, 3)
-	if _, err := rand.Read(codeBytes); err != nil {
+	code, err := generateSixDigitCode()
+	if err != nil {
 		return "", err
-	}
-	code := fmt.Sprintf("%06d", int(codeBytes[0])<<16|int(codeBytes[1])<<8|int(codeBytes[2])%1000000)
-	if len(code) > 6 {
-		code = code[:6]
 	}
 
 	verificationCode := &models.VerificationCode{

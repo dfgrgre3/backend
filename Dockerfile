@@ -1,16 +1,9 @@
 # ==========================================
-# Thanawy Backend - Docker Multi-Stage Build
-# ==========================================
-# Build stages:
-#   1. builder      - Compile Go binaries
-#   2. migrate      - Migration runner (small runtime)
-#   3. seed         - Admin seeder (small runtime)
-#   4. worker       - Background worker (includes asynq, redis)
-#   5. api          - Main API server (smallest production image)
+# Thanawy Backend - Secure Multi-Stage Build
 # ==========================================
 
 # ------------------------------------------
-# Stage 1: Builder - Compile all binaries
+# Stage 1: Builder - Secure Compilation
 # ------------------------------------------
 FROM golang:1.26-alpine AS builder
 
@@ -20,21 +13,16 @@ ARG BUILD_TIME=unknown
 ARG TARGETARCH
 
 LABEL maintainer="Thanawy Team"
-LABEL description="Thanawy Backend API Builder"
+LABEL description="Thanawy Backend API Builder (Secure)"
 LABEL version="1.0"
 
 # Install build dependencies
-RUN apk add --no-cache \
-    git \
-    build-base \
-    ca-certificates
+RUN apk add --no-cache git build-base ca-certificates
 
 WORKDIR /build
 
-# Copy dependency files first for layer caching
+# Copy dependency files first for optimal layer caching
 COPY go.mod go.sum ./
-
-# Download dependencies (cached unless go.mod changes)
 RUN go mod download
 
 # Copy source code
@@ -44,150 +32,102 @@ COPY . .
 RUN mkdir -p docs && \
     printf 'package docs\n\n// Placeholder Swagger docs package generated at build time.\n' > docs/docs.go
 
-# ------------------------------------------
-# API Binary (Main Server)
-# ------------------------------------------
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -ldflags="-s -w \
+# Compile all binaries with security flags:
+# -trimpath: Removes local file system paths from the compiled binary (prevents info leakage)
+# -s -w: Strips symbol table and debug info (reduces size and reverse engineering risk)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w \
         -X thanawy-backend/pkg/buildinfo.Version=${VERSION} \
         -X thanawy-backend/pkg/buildinfo.Commit=${COMMIT} \
         -X thanawy-backend/pkg/buildinfo.BuildTime=${BUILD_TIME}" \
-    -o /build/bin/api ./cmd/api/main.go
+    -o /build/bin/api ./cmd/api/main.go && \
+    \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /build/bin/migrate ./cmd/migrate/main.go && \
+    \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /build/bin/seed-admin ./cmd/seed-admin/main.go && \
+    \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /build/bin/targeted-migrate ./cmd/targeted_migrate/main.go && \
+    \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /build/bin/fix-migration-checksum ./cmd/fix-migration-checksum/main.go && \
+    \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /build/bin/cleanup-failed-migration ./cmd/cleanup-failed-migration/main.go && \
+    \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /build/bin/drop-all-tables ./cmd/drop-all-tables/main.go && \
+    \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /build/bin/drop-migrations-table ./cmd/drop-migrations-table/main.go && \
+    \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /build/bin/check-migration-status ./cmd/check-migration-status/main.go && \
+    \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /build/bin/check-user ./cmd/check-user/main.go && \
+    \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /build/bin/test-db-connection ./cmd/test-db-connection/main.go && \
+    \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /build/bin/worker ./cmd/worker/main.go
 
 # ------------------------------------------
-# Migrate Binary (Database Migrations)
-# ------------------------------------------
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -ldflags="-s -w" \
-    -o /build/bin/migrate ./cmd/migrate/main.go
-
-# ------------------------------------------
-# Seed Admin Binary
-# ------------------------------------------
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -ldflags="-s -w" \
-    -o /build/bin/seed-admin ./cmd/seed-admin/main.go
-
-# ------------------------------------------
-# Targeted Migrate Binary
-# ------------------------------------------
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -ldflags="-s -w" \
-    -o /build/bin/targeted-migrate ./cmd/targeted_migrate/main.go
-
-# ------------------------------------------
-# Fix Migration Checksum Binary
-# ------------------------------------------
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -ldflags="-s -w" \
-    -o /build/bin/fix-migration-checksum ./cmd/fix-migration-checksum/main.go
-
-# ------------------------------------------
-# Cleanup-failed-migration Binary
-# ------------------------------------------
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -ldflags="-s -w" \
-    -o /build/bin/cleanup-failed-migration ./cmd/cleanup-failed-migration/main.go
-
-# ------------------------------------------
-# Drop-all-tables Binary
-# ------------------------------------------
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -ldflags="-s -w" \
-    -o /build/bin/drop-all-tables ./cmd/drop-all-tables/main.go
-
-# ------------------------------------------
-# Drop-migrations-table Binary
-# ------------------------------------------
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -ldflags="-s -w" \
-    -o /build/bin/drop-migrations-table ./cmd/drop-migrations-table/main.go
-
-# ------------------------------------------
-# Check-migration-status Binary
-# ------------------------------------------
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -ldflags="-s -w" \
-    -o /build/bin/check-migration-status ./cmd/check-migration-status/main.go
-
-# ------------------------------------------
-# Check-user Binary
-# ------------------------------------------
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -ldflags="-s -w" \
-    -o /build/bin/check-user ./cmd/check-user/main.go
-
-# ------------------------------------------
-# Test-db-connection Binary
-# ------------------------------------------
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -ldflags="-s -w" \
-    -o /build/bin/test-db-connection ./cmd/test-db-connection/main.go
-
-# ------------------------------------------
-# Stage 2: API Runtime - Main server
+# Stage 2: API Runtime - Main server (Hardened)
 # ------------------------------------------
 FROM alpine:3.20 AS api
 
-ARG TARGETARCH
-
 LABEL maintainer="Thanawy Team"
-LABEL description="Thanawy Backend API Runtime"
+LABEL description="Thanawy Backend API Runtime (Hardened)"
 LABEL version="1.0"
 
 WORKDIR /app
 
-# Install runtime dependencies
-RUN apk add --no-cache \
-    ca-certificates \
-    tzdata \
-    curl
+# Install minimal runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata curl
 
-# Create non-root user
-RUN adduser -D -h /app nonroot
+# Create non-root user with NO shell access (-s /sbin/nologin) and no home directory (-H)
+RUN adduser -D -H -h /app -s /sbin/nologin nonroot
 
-# Copy certificates and binary
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+# Copy only the necessary binary
 COPY --from=builder /build/bin/api /app/main
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Set ownership
-RUN chown -R nonroot:nonroot /app
+# Set strict ownership and read-only permissions for the binary
+RUN chown -R nonroot:nonroot /app && \
+    chmod 555 /app/main
 
 USER nonroot
 
-# Expose port
 EXPOSE 8082
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD curl --silent --fail http://localhost:8082/health || exit 1
 
-# Default command
+# Use entrypoint to validate environment before starting
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["./main"]
 
 # ------------------------------------------
-# Stage 3: Migrate Runtime - Database migrations
+# Stage 3: Migrate Runtime - Database tools (Hardened)
 # ------------------------------------------
 FROM alpine:3.20 AS migrate
 
 LABEL maintainer="Thanawy Team"
-LABEL description="Thanawy Backend Migration Runner"
+LABEL description="Thanawy Backend Migration Runner (Hardened)"
 LABEL version="1.0"
 
 WORKDIR /app
 
-RUN apk add --no-cache \
-    ca-certificates \
-    tzdata
+RUN apk add --no-cache ca-certificates tzdata
+RUN adduser -D -H -h /app -s /sbin/nologin nonroot
 
-RUN adduser -D -h /app nonroot
-
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+# Copy all database management binaries
 COPY --from=builder /build/bin/migrate /app/migrate
 COPY --from=builder /build/bin/targeted-migrate /app/targeted-migrate
 COPY --from=builder /build/bin/fix-migration-checksum /app/fix-migration-checksum
@@ -199,36 +139,34 @@ COPY --from=builder /build/bin/check-user /app/check-user
 COPY --from=builder /build/bin/test-db-connection /app/test-db-connection
 COPY --from=builder /build/bin/seed-admin /app/seed-admin
 
-RUN chown -R nonroot:nonroot /app
+# Set strict ownership and read-only permissions
+RUN chown -R nonroot:nonroot /app && \
+    chmod 555 /app/*
 
 USER nonroot
 
-# Usage: docker run thanawy migrate [command]
-# Commands: migrate, targeted-migrate, fix-migration-checksum, cleanup-failed-migration, drop-all-tables, drop-migrations-table
-CMD ["echo"]
-
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["/app/migrate", "--help"]
 
 # ------------------------------------------
-# Stage 4: Worker Runtime - Background workers
+# Stage 4: Worker Runtime - Background workers (Hardened)
 # ------------------------------------------
 FROM alpine:3.20 AS worker
 
 LABEL maintainer="Thanawy Team"
-LABEL description="Thanawy Backend Worker"
+LABEL description="Thanawy Backend Worker (Hardened)"
 LABEL version="1.0"
 
 WORKDIR /app
 
-RUN apk add --no-cache \
-    ca-certificates \
-    tzdata
+RUN apk add --no-cache ca-certificates tzdata
+RUN adduser -D -H -h /app -s /sbin/nologin nonroot
 
-RUN adduser -D -h /app nonroot
+# Copy the dedicated worker binary
+COPY --from=builder /build/bin/worker /app/worker
 
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /build/bin/api /app/worker
-
-RUN chown -R nonroot:nonroot /app
+RUN chown -R nonroot:nonroot /app && \
+    chmod 555 /app/worker
 
 USER nonroot
 
@@ -237,9 +175,8 @@ EXPOSE 8082
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD wget --spider -q http://localhost:8082/health || exit 1
 
-# Run in worker mode: APP_MODE=worker ./worker
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["./worker"]
-
 
 # ------------------------------------------
 # Stage 5: Developer Tools - Debug and dev
@@ -251,14 +188,11 @@ LABEL description="Thanawy Backend Developer Image"
 LABEL version="1.0"
 
 WORKDIR /app
-
 COPY . .
 
 # Install delve for debugging
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
-# Expose delve debugger
 EXPOSE 40000
 
-# Default to running the API with dlv
 CMD ["dlv", "--listen=:40000", "--headless=true", "--api-version=2", "--accept-multiclient", "run", "./cmd/api/main.go"]

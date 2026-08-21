@@ -78,7 +78,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// Set access token cookie
 	cfg := config.Load()
-	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("access_token", res.AccessToken, 15*60, "/", cfg.CookieDomain, secureCookie(c), true)
 
 	// Set refresh token cookie
@@ -86,6 +86,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if req.RememberMe {
 		refreshMaxAge = 90 * 24 * 60 * 60 // 90 days if remember me
 	}
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("refresh_token", res.RefreshToken, refreshMaxAge, "/", cfg.CookieDomain, secureCookie(c), true)
 
 	response.Success(c, gin.H{
@@ -165,7 +166,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 
 	// Set new cookies
 	cfg := config.Load()
-	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("access_token", res.AccessToken, 15*60, "/", cfg.CookieDomain, secureCookie(c), true)
 	c.SetCookie("refresh_token", res.RefreshToken, 30*24*60*60, "/", cfg.CookieDomain, secureCookie(c), true)
 
@@ -200,7 +201,7 @@ func (h *AuthHandler) RefreshSession(c *gin.Context) {
 	}
 
 	cfg := config.Load()
-	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("access_token", res.AccessToken, 15*60, "/", cfg.CookieDomain, secureCookie(c), true)
 	c.SetCookie("refresh_token", res.RefreshToken, 30*24*60*60, "/", cfg.CookieDomain, secureCookie(c), true)
 
@@ -487,7 +488,7 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 	}
 
 	cfg := config.Load()
-	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("access_token", res.AccessToken, 15*60, "/", cfg.CookieDomain, secureCookie(c), true)
 	c.SetCookie("refresh_token", res.RefreshToken, 30*24*60*60, "/", cfg.CookieDomain, secureCookie(c), true)
 
