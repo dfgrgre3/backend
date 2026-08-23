@@ -67,6 +67,10 @@ func SetupHexagonalRoutes(router *gin.Engine, handlers *application.Handlers) {
 			courseAdmin.POST("/:id/sections/:sectionId/lessons/:lessonId/attachments", handlers.CourseRESTHandler.AddLessonAttachment)
 			courseAdmin.DELETE("/:id/sections/:sectionId/lessons/:lessonId/attachments/:attachmentId", handlers.CourseRESTHandler.DeleteLessonAttachment)
 
+			// Lesson exam link
+			courseAdmin.POST("/:id/sections/:sectionId/lessons/:lessonId/exam", handlers.CourseRESTHandler.LinkLessonExam)
+			courseAdmin.DELETE("/:id/sections/:sectionId/lessons/:lessonId/exam", handlers.CourseRESTHandler.UnlinkLessonExam)
+
 			// Instructors (multi-teacher assignment)
 			courseAdmin.GET("/:id/instructors", handlers.CourseRESTHandler.ListCourseInstructors)
 			courseAdmin.POST("/:id/instructors", handlers.CourseRESTHandler.AddCourseInstructor)
