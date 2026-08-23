@@ -55,7 +55,10 @@ func (h *CourseRESTHandler) GetPricing(c *gin.Context) {
 	api_response.Success(c, gin.H{"pricing": pricing})
 }
 
-// SetPricing creates or updates the pricing configuration for a course.
+// SetPricing creates or updates the pricing configuration for a course. A
+// course has at most one active pricing row here, so this upserts: if one
+// already exists it is loaded and saved in place (preserving its ID), rather
+// than inserting a new row on every save.
 func (h *CourseRESTHandler) SetPricing(c *gin.Context) {
 	courseID := c.Param("id")
 	parsedCourseID, err := uuid.Parse(courseID)
@@ -75,26 +78,43 @@ func (h *CourseRESTHandler) SetPricing(c *gin.Context) {
 		return
 	}
 
-	pricing := &models.LmsPricing{
-		CourseID:                 parsedCourseID,
-		Type:                     models.PriceType(req.Type),
-		Amount:                   decimal.NewFromFloat(req.Amount),
-		CurrencyCode:             req.CurrencyCode,
-		SubscriptionDurationDays: req.SubscriptionDurationDays,
-		DiscountPrice:            decimalPtrFromFloatPtr(req.DiscountPrice),
-		SubscriptionPlanID:       req.SubscriptionPlanID,
-		IsActive:                 true,
+	existing, err := h.courseService.ListPricings(parsedCourseID)
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to load existing pricing")
+		return
 	}
+
+	var pricing *models.LmsPricing
+	if len(existing) > 0 {
+		pricing = &existing[0]
+	} else {
+		pricing = &models.LmsPricing{CourseID: parsedCourseID}
+	}
+
+	pricing.Type = models.PriceType(req.Type)
+	pricing.Amount = decimal.NewFromFloat(req.Amount)
+	pricing.CurrencyCode = req.CurrencyCode
+	pricing.SubscriptionDurationDays = req.SubscriptionDurationDays
+	pricing.DiscountPrice = decimalPtrFromFloatPtr(req.DiscountPrice)
+	pricing.SubscriptionPlanID = req.SubscriptionPlanID
+	pricing.IsActive = true
+	pricing.DiscountStartAt = nil
 	if req.DiscountStartAt != nil {
 		discountStartAt := time.Unix(*req.DiscountStartAt, 0)
 		pricing.DiscountStartAt = &discountStartAt
 	}
+	pricing.DiscountEndAt = nil
 	if req.DiscountEndAt != nil {
 		discountEndAt := time.Unix(*req.DiscountEndAt, 0)
 		pricing.DiscountEndAt = &discountEndAt
 	}
 
-	result, err := h.courseService.AddPricing(parsedCourseID, pricing.Type, pricing.Amount.InexactFloat64(), pricing.CurrencyCode, pricing.SubscriptionDurationDays)
+	var result *models.LmsPricing
+	if pricing.ID != uuid.Nil {
+		result, err = h.courseService.UpdatePricing(pricing)
+	} else {
+		result, err = h.courseService.CreatePricing(pricing)
+	}
 	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to set pricing")
 		return

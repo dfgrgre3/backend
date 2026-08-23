@@ -145,11 +145,14 @@ func DuplicateCourse(c *gin.Context) {
 	})
 }
 
-// BatchCourseAction performs batch operations (publish, unpublish, activate, deactivate, delete) on multiple courses
+// BatchCourseAction performs batch operations on multiple courses.
+// Supported actions: publish, unpublish, activate, deactivate, delete,
+// archive, unarchive, assign_teacher, remove_teacher.
 func BatchCourseAction(c *gin.Context) {
 	var input struct {
-		IDs    []string `json:"ids" binding:"required"`
-		Action string   `json:"action" binding:"required"`
+		IDs       []string `json:"ids" binding:"required"`
+		Action    string   `json:"action" binding:"required"`
+		TeacherID string   `json:"teacherId"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		api_response.Error(c, http.StatusBadRequest, "IDs and Action are required")
@@ -164,13 +167,60 @@ func BatchCourseAction(c *gin.Context) {
 	var err error
 	switch input.Action {
 	case "publish":
-		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Update("is_published", true).Error
+		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Updates(map[string]interface{}{
+			"is_published": true,
+			"status":       models.CourseStatusPublished,
+			"published_at": time.Now(),
+		}).Error
 	case "unpublish":
-		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Update("is_published", false).Error
+		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Updates(map[string]interface{}{
+			"is_published": false,
+			"status":       models.CourseStatusDraft,
+		}).Error
 	case "activate":
 		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Update("is_active", true).Error
 	case "deactivate":
 		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Update("is_active", false).Error
+	case "archive":
+		updates := map[string]interface{}{
+			"is_published": false,
+			"is_active":    false,
+			"status":       models.CourseStatusArchived,
+			"archived_at":  time.Now(),
+		}
+		if adminID, exists := c.Get("userId"); exists {
+			if adminIDStr, ok := adminID.(string); ok && adminIDStr != "" {
+				updates["archived_by"] = adminIDStr
+			}
+		}
+		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Updates(updates).Error
+	case "unarchive":
+		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Updates(map[string]interface{}{
+			"is_active":   true,
+			"status":      models.CourseStatusDraft,
+			"archived_at": nil,
+			"archived_by": nil,
+		}).Error
+	case "assign_teacher":
+		if input.TeacherID == "" {
+			api_response.Error(c, http.StatusBadRequest, "Teacher ID is required for assign_teacher")
+			return
+		}
+		var teacher models.User
+		if err := db.DB.Where("id = ? AND role = ?", input.TeacherID, models.RoleTeacher).First(&teacher).Error; err != nil {
+			api_response.Error(c, http.StatusBadRequest, "Teacher not found")
+			return
+		}
+		teacherName := firstNonEmpty(stringOrEmpty(teacher.Name), stringOrEmpty(teacher.Username), teacher.Email)
+		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Updates(map[string]interface{}{
+			"instructor_id":   teacher.ID,
+			"instructor_name": teacherName,
+		}).Error
+	case "remove_teacher":
+		err = db.DB.Model(&models.Subject{}).Where("id IN ?", input.IDs).Updates(map[string]interface{}{
+			"instructor_id":   nil,
+			"instructor_name": nil,
+		}).Error
 	case "delete":
 		var count int64
 		db.DB.Model(&models.Enrollment{}).Where("subject_id IN ?", input.IDs).Count(&count)

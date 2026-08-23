@@ -165,7 +165,92 @@ func buildSubjectFilters(query *gorm.DB, c *gin.Context) *gorm.DB {
 	if isNew := c.Query("isNew"); isValidBoolean(isNew) && isNew == "true" {
 		query = query.Where("is_new = ?", true)
 	}
+
+	// price=0 -> free courses only, price=>0 -> paid courses only
+	switch c.Query("price") {
+	case "0":
+		query = query.Where("price = 0")
+	case ">0":
+		query = query.Where("price > 0")
+	}
+
+	if instructorID := c.Query("instructorId"); instructorID != "" {
+		if _, err := uuid.Parse(instructorID); err == nil {
+			query = query.Where("instructor_id = ?", instructorID)
+		}
+	}
+
+	// Explicit id list (used by the admin panel to export the current selection)
+	if ids := parseIDList(c.Query("ids")); len(ids) > 0 {
+		query = query.Where("id IN ?", ids)
+	}
+
 	return query
+}
+
+// subjectFilterCacheFragment builds a cache-key fragment covering every query
+// parameter honoured by buildSubjectFilters (plus sort), so that two different
+// filter combinations can never share a cached payload.
+func subjectFilterCacheFragment(c *gin.Context) string {
+	keys := []string{
+		"categoryId", "search", "level", "isPublished", "isActive", "status",
+		"isFeatured", "isTrending", "isNew", "price", "instructorId", "ids", "sort",
+	}
+	var b strings.Builder
+	for _, key := range keys {
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(c.Query(key))
+		b.WriteByte(':')
+	}
+	return b.String()
+}
+
+// parseIDList parses a comma-separated list of UUIDs, dropping invalid entries.
+func parseIDList(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	ids := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if _, err := uuid.Parse(part); err != nil {
+			continue
+		}
+		ids = append(ids, part)
+		if len(ids) >= 500 {
+			break
+		}
+	}
+	return ids
+}
+
+// subjectSortClause maps a client sort key to a safe SQL ORDER BY clause.
+func subjectSortClause(sort string) string {
+	switch sort {
+	case "oldest":
+		return "created_at asc"
+	case "name", "name_asc", "title_asc":
+		return "name asc"
+	case "name_desc", "title_desc":
+		return "name desc"
+	case "price-asc", "price_asc":
+		return "price asc"
+	case "price-desc", "price_desc":
+		return "price desc"
+	case "enrollments", "popular":
+		return "enrolled_count desc"
+	case "rating":
+		return "rating desc"
+	case "updated":
+		return "updated_at desc"
+	default:
+		return "created_at desc"
+	}
 }
 
 // applyIDOrSlugQuery applies where clause based on whether id is a UUID or a slug

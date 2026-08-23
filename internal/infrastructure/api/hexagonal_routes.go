@@ -41,6 +41,10 @@ func SetupHexagonalRoutes(router *gin.Engine, handlers *application.Handlers) {
 			courseAdmin.POST("/:id/archive", handlers.CourseRESTHandler.ArchiveCourse)
 			courseAdmin.POST("/:id/unarchive", handlers.CourseRESTHandler.UnarchiveCourse)
 
+			// Course Review Comments
+			courseAdmin.GET("/:id/review-comments", handlers.CourseRESTHandler.ListCourseReviewComments)
+			courseAdmin.POST("/:id/review-comments", handlers.CourseRESTHandler.AddCourseReviewComment)
+
 			// Course Review Queue
 			courseAdmin.GET("/pending-review", handlers.CourseRESTHandler.GetCoursesPendingReview)
 			courseAdmin.POST("/bulk-status", handlers.CourseRESTHandler.BulkStatusChange)
@@ -59,14 +63,27 @@ func SetupHexagonalRoutes(router *gin.Engine, handlers *application.Handlers) {
 			courseAdmin.PATCH("/:id/sections/:sectionId/lessons/:lessonId", handlers.CourseRESTHandler.UpdateLesson)
 			courseAdmin.DELETE("/:id/sections/:sectionId/lessons/:lessonId", handlers.CourseRESTHandler.DeleteLesson)
 
+			// Lesson attachments
+			courseAdmin.POST("/:id/sections/:sectionId/lessons/:lessonId/attachments", handlers.CourseRESTHandler.AddLessonAttachment)
+			courseAdmin.DELETE("/:id/sections/:sectionId/lessons/:lessonId/attachments/:attachmentId", handlers.CourseRESTHandler.DeleteLessonAttachment)
+
+			// Instructors (multi-teacher assignment)
+			courseAdmin.GET("/:id/instructors", handlers.CourseRESTHandler.ListCourseInstructors)
+			courseAdmin.POST("/:id/instructors", handlers.CourseRESTHandler.AddCourseInstructor)
+			courseAdmin.DELETE("/:id/instructors/:instructorId", handlers.CourseRESTHandler.RemoveCourseInstructor)
+
 			// Enrollments
-			courseAdmin.GET("/:id/enrollments", handlers.CourseRESTHandler.GetEnrollment)
+			courseAdmin.GET("/:id/enrollments", handlers.CourseRESTHandler.ListEnrollments)
 			courseAdmin.POST("/:id/enrollments", handlers.CourseRESTHandler.EnrollUser)
+			courseAdmin.GET("/:id/enrollments/:userId", handlers.CourseRESTHandler.GetEnrollment)
 			courseAdmin.PATCH("/:id/enrollments/:userId", handlers.CourseRESTHandler.UpdateProgress)
 
 			// Pricing
 			courseAdmin.GET("/:id/pricing", handlers.CourseRESTHandler.GetPricing)
 			courseAdmin.PUT("/:id/pricing", handlers.CourseRESTHandler.SetPricing)
+			// The admin frontend calls POST for this upsert — kept as an alias
+			// alongside PUT rather than changing every frontend call site.
+			courseAdmin.POST("/:id/pricing", handlers.CourseRESTHandler.SetPricing)
 
 			// Versioning
 			courseAdmin.GET("/:id/versions", handlers.CourseRESTHandler.ListCourseVersions)

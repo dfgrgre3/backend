@@ -40,6 +40,9 @@ func setAllValidRequiredVars(t *testing.T) {
 	setTestEnv(t, "S3_ACCESS_KEY", "s3_access_key_actual_secret_value_here_and_long_enough")
 	setTestEnv(t, "S3_SECRET_KEY", "s3_secret_key_actual_secret_value_here_and_long_enough")
 	setTestEnv(t, "S3_BUCKET", "s3_bucket_actual_secret_value_here_and_long_enough")
+	// DefaultSecretsValidatorConfig() also requires a JWT signing secret
+	// (RequireJWTSecret) — part of "all required vars" for that config.
+	setTestEnv(t, "JWT_SECRET_KEY", "jwt_signing_secret_actual_value_here_and_long_enough")
 }
 
 func TestValidateSecrets_MissingVars(t *testing.T) {
@@ -222,6 +225,95 @@ func TestValidateSecrets_ProductionMode(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+func TestValidateSecrets_MissingJWTSecret(t *testing.T) {
+	setAllValidRequiredVars(t)
+	unsetTestEnv(t, "JWT_SECRET_KEY")
+	unsetTestEnv(t, "JWT_SECRET")
+	setTestEnv(t, "NODE_ENV", "production")
+
+	router := setupTestRouter()
+	router.Use(ValidateSecrets(DefaultSecretsValidatorConfig()))
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+func TestValidateSecrets_WeakJWTSecret(t *testing.T) {
+	setAllValidRequiredVars(t)
+	unsetTestEnv(t, "JWT_SECRET_KEY")
+	setTestEnv(t, "JWT_SECRET", "too-short")
+	setTestEnv(t, "NODE_ENV", "production")
+
+	router := setupTestRouter()
+	router.Use(ValidateSecrets(DefaultSecretsValidatorConfig()))
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+func TestValidateSecrets_JWTSecretFallbackName(t *testing.T) {
+	setAllValidRequiredVars(t)
+	// JWT_SECRET_KEY (set by setAllValidRequiredVars) takes priority over
+	// JWT_SECRET, matching config.go's getEnv fallback chain — clear it so
+	// this test actually exercises the JWT_SECRET fallback path.
+	unsetTestEnv(t, "JWT_SECRET_KEY")
+	setTestEnv(t, "JWT_SECRET", "jwt_signing_secret_actual_value_here_and_long_enough")
+	setTestEnv(t, "NODE_ENV", "production")
+
+	router := setupTestRouter()
+	router.Use(ValidateSecrets(DefaultSecretsValidatorConfig()))
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestValidateSecrets_CustomConfigDoesNotRequireJWTSecret(t *testing.T) {
+	unsetTestEnv(t, "JWT_SECRET_KEY")
+	unsetTestEnv(t, "JWT_SECRET")
+	setTestEnv(t, "CUSTOM_SECRET", "a_valid_custom_secret_value_here")
+	setTestEnv(t, "NODE_ENV", "production")
+
+	cfg := SecretsValidatorConfig{
+		RequiredVars: []string{"CUSTOM_SECRET"},
+		SkipInDev:    false,
+		// RequireJWTSecret intentionally left false.
+	}
+
+	router := setupTestRouter()
+	router.Use(ValidateSecrets(cfg))
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestValidateSecrets_EmptyRequiredVars(t *testing.T) {

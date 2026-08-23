@@ -1,6 +1,7 @@
 package protected
 
 import (
+	"errors"
 	"net/http"
 	models "thanawy-backend/internal/domain/common"
 	api_response "thanawy-backend/internal/infrastructure/api/response"
@@ -65,4 +66,35 @@ func UpdateLessonProgress(c *gin.Context) {
 	}
 
 	api_response.Success(c, nil)
+}
+
+// GetLessonProgress returns the authenticated user's saved progress for a
+// lesson, enabling server-authoritative "resume playback" across devices.
+func GetLessonProgress(c *gin.Context) {
+	userId, ok := getAuthenticatedUserID(c)
+	if !ok {
+		return
+	}
+	lessonId := c.Param("id")
+
+	var progress models.LessonProgress
+	err := db.ReadDB().
+		Where("user_id = ? AND sub_topic_id = ?", userId, lessonId).
+		First(&progress).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// No progress yet — not an error, just nothing to resume from.
+			api_response.Success(c, gin.H{
+				"lastWatchedPosition": 0,
+				"completed":           false,
+				"status":              models.ProgressStatusNotStarted,
+			})
+			return
+		}
+		api_response.Error(c, http.StatusInternalServerError, "Failed to load lesson progress: "+err.Error())
+		return
+	}
+
+	api_response.Success(c, progress)
 }

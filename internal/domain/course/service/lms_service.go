@@ -182,8 +182,30 @@ func (s *LmsService) CreateSection(courseID uuid.UUID, title string, orderIndex 
 	return section, nil
 }
 
+func (s *LmsService) GetSection(id uuid.UUID) (*models.LmsSection, error) {
+	return s.repo.GetSectionByID(id)
+}
+
+// UpdateSection persists changes to an existing section. Callers must load
+// the current row first (GetSection) and mutate only the fields that
+// changed, since this does a full Save.
+func (s *LmsService) UpdateSection(section *models.LmsSection) (*models.LmsSection, error) {
+	if err := s.repo.UpdateSection(section); err != nil {
+		return nil, err
+	}
+	return section, nil
+}
+
+func (s *LmsService) DeleteSection(id uuid.UUID) error {
+	return s.repo.DeleteSection(id)
+}
+
 func (s *LmsService) ListSections(courseID uuid.UUID) ([]models.LmsSection, error) {
 	return s.repo.ListSectionsByCourseID(courseID)
+}
+
+func (s *LmsService) ReorderSections(courseID uuid.UUID, sectionIDs []uuid.UUID) error {
+	return s.repo.ReorderSections(courseID, sectionIDs)
 }
 
 func (s *LmsService) CreateLesson(sectionID uuid.UUID, title string, lessonType models.LessonType, orderIndex int) (*models.LmsLesson, error) {
@@ -203,8 +225,39 @@ func (s *LmsService) GetLesson(id uuid.UUID) (*models.LmsLesson, error) {
 	return s.repo.GetLessonByID(id)
 }
 
+// UpdateLesson persists changes to an existing lesson. Callers must load the
+// current row first (GetLesson) and mutate only the fields that changed,
+// since this does a full Save.
+func (s *LmsService) UpdateLesson(lesson *models.LmsLesson) (*models.LmsLesson, error) {
+	if err := s.repo.UpdateLesson(lesson); err != nil {
+		return nil, err
+	}
+	return lesson, nil
+}
+
+func (s *LmsService) DeleteLesson(id uuid.UUID) error {
+	return s.repo.DeleteLesson(id)
+}
+
 func (s *LmsService) ListLessons(sectionID uuid.UUID) ([]models.LmsLesson, error) {
 	return s.repo.ListLessonsBySectionID(sectionID)
+}
+
+func (s *LmsService) ReorderLessons(sectionID uuid.UUID, lessonIDs []uuid.UUID) error {
+	return s.repo.ReorderLessons(sectionID, lessonIDs)
+}
+
+// LinkExam associates a lesson with an exam (one exam per lesson).
+func (s *LmsService) LinkExam(lessonID uuid.UUID, examID string) (*models.LmsLesson, error) {
+	if err := s.repo.LinkExamToLesson(lessonID, &examID); err != nil {
+		return nil, err
+	}
+	return s.repo.GetLessonByID(lessonID)
+}
+
+// UnlinkExam removes a lesson's exam link, if any.
+func (s *LmsService) UnlinkExam(lessonID uuid.UUID) error {
+	return s.repo.LinkExamToLesson(lessonID, nil)
 }
 
 // ----------------------------
@@ -256,6 +309,11 @@ func (s *LmsService) CompleteCourse(courseID, userID uuid.UUID) error {
 // ListUserEnrollments returns all enrollments for a user.
 func (s *LmsService) ListUserEnrollments(userID uuid.UUID) ([]models.LmsEnrollment, error) {
 	return s.repo.ListEnrollmentsByUserID(userID)
+}
+
+// ListCourseEnrollments returns all enrollments for a course.
+func (s *LmsService) ListCourseEnrollments(courseID uuid.UUID) ([]models.LmsEnrollment, error) {
+	return s.repo.ListEnrollmentsByCourseID(courseID)
 }
 
 // ----------------------------
@@ -322,6 +380,10 @@ func (s *LmsService) ListAttachments(lessonID uuid.UUID) ([]models.LmsAttachment
 	return s.repo.ListAttachments(lessonID)
 }
 
+func (s *LmsService) DeleteAttachment(id uuid.UUID) error {
+	return s.repo.DeleteAttachment(id)
+}
+
 func (s *LmsService) AddSubtitle(lessonID uuid.UUID, language, vttURL string) (*models.LmsSubtitle, error) {
 	sub := &models.LmsSubtitle{
 		LessonID: lessonID,
@@ -378,6 +440,22 @@ func (s *LmsService) AddPricing(courseID uuid.UUID, priceType models.PriceType, 
 		return nil, err
 	}
 	return p, nil
+}
+
+func (s *LmsService) UpdatePricing(pricing *models.LmsPricing) (*models.LmsPricing, error) {
+	if err := s.repo.UpdatePricing(pricing); err != nil {
+		return nil, err
+	}
+	return pricing, nil
+}
+
+// CreatePricing inserts a fully-populated pricing row (including discount and
+// subscription-plan fields, which AddPricing's narrower signature drops).
+func (s *LmsService) CreatePricing(pricing *models.LmsPricing) (*models.LmsPricing, error) {
+	if err := s.repo.CreatePricing(pricing); err != nil {
+		return nil, err
+	}
+	return pricing, nil
 }
 
 func (s *LmsService) ListPricings(courseID uuid.UUID) ([]models.LmsPricing, error) {
@@ -501,21 +579,99 @@ func (s *LmsService) ListVersions(courseID uuid.UUID) ([]models.LmsCourseVersion
 	return s.repo.ListVersions(courseID)
 }
 
-// CreateVersion snapshots the current course state as a new version.
-func (s *LmsService) CreateVersion(courseID uuid.UUID, versionNumber int) (*models.LmsCourseVersion, error) {
+// CreateVersion snapshots the current course state as a new version, using
+// the next sequential version number for this course (existing versions'
+// max + 1), so every snapshot gets a distinct, orderable number instead of
+// every call minting a duplicate "version 1".
+func (s *LmsService) CreateVersion(courseID uuid.UUID) (*models.LmsCourseVersion, error) {
+	existing, err := s.repo.ListVersions(courseID)
+	if err != nil {
+		return nil, err
+	}
+	nextVersion := 1
+	for _, v := range existing {
+		if v.VersionNumber >= nextVersion {
+			nextVersion = v.VersionNumber + 1
+		}
+	}
+
 	snapshot, err := s.repo.SnapshotCourse(courseID)
 	if err != nil {
 		return nil, err
 	}
 	v := &models.LmsCourseVersion{
 		CourseID:      courseID,
-		VersionNumber: versionNumber,
+		VersionNumber: nextVersion,
 		Snapshot:      snapshot,
 	}
 	if err := s.repo.CreateVersion(v); err != nil {
 		return nil, err
 	}
 	return v, nil
+}
+
+// RestoreVersion overwrites a course's top-level (scalar) fields with the
+// values captured in a prior version snapshot. Nested associations
+// (sections/lessons/pricing/instructors) are intentionally left untouched —
+// restoring those safely requires a transactional replace of every nested
+// row, which is out of scope until this endpoint has a real caller; doing a
+// partial job silently would be worse than restoring the fields that are
+// safe to overwrite in place.
+func (s *LmsService) RestoreVersion(courseID uuid.UUID, versionNumber int) (*models.LmsCourse, error) {
+	version, err := s.repo.GetVersion(courseID, versionNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	var snapshot models.LmsCourse
+	if err := json.Unmarshal(version.Snapshot, &snapshot); err != nil {
+		return nil, fmt.Errorf("failed to parse version snapshot: %w", err)
+	}
+
+	current, err := s.repo.GetCourseByID(courseID)
+	if err != nil {
+		return nil, err
+	}
+
+	current.Title = snapshot.Title
+	current.Slug = snapshot.Slug
+	current.ShortDescription = snapshot.ShortDescription
+	current.LongDescription = snapshot.LongDescription
+	current.CoverImageURL = snapshot.CoverImageURL
+	current.PromoVideoURL = snapshot.PromoVideoURL
+	current.Status = snapshot.Status
+	current.Level = snapshot.Level
+	current.Language = snapshot.Language
+	current.EstimatedDurationMins = snapshot.EstimatedDurationMins
+	current.HasCertificate = snapshot.HasCertificate
+	current.CertificateTemplate = snapshot.CertificateTemplate
+	current.MaxStudents = snapshot.MaxStudents
+	current.IsFeatured = snapshot.IsFeatured
+	current.IsTrending = snapshot.IsTrending
+	current.IsNew = snapshot.IsNew
+	current.NewFrom = snapshot.NewFrom
+	current.NewUntil = snapshot.NewUntil
+	current.SEOTitle = snapshot.SEOTitle
+	current.SEODescription = snapshot.SEODescription
+	current.SEOKeywords = snapshot.SEOKeywords
+	current.PrerequisitesText = snapshot.PrerequisitesText
+	current.TargetAudience = snapshot.TargetAudience
+	current.LearningOutcomes = snapshot.LearningOutcomes
+	current.PrimaryInstructorID = snapshot.PrimaryInstructorID
+	current.AvailableFrom = snapshot.AvailableFrom
+	current.AvailableUntil = snapshot.AvailableUntil
+
+	// Prevent GORM's default association-save behavior from touching nested
+	// rows — Save() only writes columns on the LmsCourse row itself.
+	current.Sections = nil
+	current.Pricings = nil
+	current.Instructors = nil
+	current.AvailabilityWindows = nil
+
+	if err := s.repo.UpdateCourse(current); err != nil {
+		return nil, err
+	}
+	return current, nil
 }
 
 // CloneCourse duplicates a course into a new draft.

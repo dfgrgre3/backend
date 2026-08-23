@@ -66,13 +66,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-
     -o /build/bin/check-migration-status ./cmd/check-migration-status/main.go && \
     \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/check-user ./cmd/check-user/main.go && \
-    \
-    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/test-db-connection ./cmd/test-db-connection/main.go && \
-    \
-    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/worker ./cmd/worker/main.go
+    -o /build/bin/test-db-connection ./cmd/test-db-connection/main.go
 
 # ------------------------------------------
 # Stage 2: API Runtime - Main server (Hardened)
@@ -135,13 +129,16 @@ COPY --from=builder /build/bin/cleanup-failed-migration /app/cleanup-failed-migr
 COPY --from=builder /build/bin/drop-all-tables /app/drop-all-tables
 COPY --from=builder /build/bin/drop-migrations-table /app/drop-migrations-table
 COPY --from=builder /build/bin/check-migration-status /app/check-migration-status
-COPY --from=builder /build/bin/check-user /app/check-user
 COPY --from=builder /build/bin/test-db-connection /app/test-db-connection
 COPY --from=builder /build/bin/seed-admin /app/seed-admin
 
+# SQL migration files (read at runtime, relative to WORKDIR)
+COPY --from=builder /build/internal/infrastructure/database/migration/migrations /app/internal/infrastructure/database/migration/migrations
+
 # Set strict ownership and read-only permissions
 RUN chown -R nonroot:nonroot /app && \
-    chmod 555 /app/*
+    chmod 555 /app/* && \
+    chmod -R 555 /app/internal
 
 USER nonroot
 

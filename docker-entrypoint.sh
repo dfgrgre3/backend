@@ -21,15 +21,21 @@ wait_for_database() {
     echo "[ENTRYPOINT] Waiting for database to be ready..."
 
     while [ $attempt -le $max_attempts ]; do
-        # Try to connect to PostgreSQL using psql if available, otherwise use curl to health endpoint
+        # Try to connect to PostgreSQL using psql if available, otherwise fall back
+        # to a plain TCP check (psql and /app/migrate aren't present in every stage,
+        # e.g. the api runtime image only ships /app/main).
         if command -v psql > /dev/null 2>&1; then
-            if PGPASSWORD="${POSTGRES_PASSWORD:- Thanawy}" psql -h "${DATABASE_HOST:-postgres}" -U "${POSTGRES_USER:-thanawy}" -d "${POSTGRES_DB:-thanawy}" -c "SELECT 1" > /dev/null 2>&1; then
+            if PGPASSWORD="${POSTGRES_PASSWORD:-Thanawy}" psql -h "${DATABASE_HOST:-postgres}" -U "${POSTGRES_USER:-thanawy}" -d "${POSTGRES_DB:-thanawy}" -c "SELECT 1" > /dev/null 2>&1; then
                 echo "[ENTRYPOINT] Database is ready!"
                 return 0
             fi
-        else
-            # Fallback: check if the migrate binary can connect
+        elif [ -x /app/migrate ]; then
             if /app/migrate status > /dev/null 2>&1; then
+                echo "[ENTRYPOINT] Database is ready!"
+                return 0
+            fi
+        elif command -v nc > /dev/null 2>&1; then
+            if nc -z "${DATABASE_HOST:-postgres}" "${DATABASE_PORT:-5432}" > /dev/null 2>&1; then
                 echo "[ENTRYPOINT] Database is ready!"
                 return 0
             fi

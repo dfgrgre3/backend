@@ -39,9 +39,9 @@ build
 *.so
 *.dylib
 
-# Go modules
-go.sum
-go.mod
+# Go modules - included in build context
+!go.sum
+!go.mod
 
 # Environment files with secrets
 .env
@@ -58,11 +58,9 @@ temp
 *.tmp
 *.log
 
-# Docker files (keep docker-compose for reference, but exclude Dockerfile if you want to build from outside)
-Dockerfile*
-docker-compose*.yml
-!Dockerfile.example
-!docker-compose.example.yml
+# Docker files
+!Dockerfile*
+!docker-compose*.yml
 
 # Scripts that shouldn't be in the image
 scripts

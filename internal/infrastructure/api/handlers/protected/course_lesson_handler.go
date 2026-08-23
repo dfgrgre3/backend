@@ -15,9 +15,12 @@ import (
 // Lesson Endpoints
 // =============================================================
 
-// CreateLessonRequest represents the REST request body for creating a lesson
+// CreateLessonRequest represents the REST request body for creating a lesson.
+// SectionID is optional in the body — the route is always nested under
+// /courses/:id/sections/:sectionId/lessons, so the URL param is the source
+// of truth; the body field is accepted for backward compatibility only.
 type CreateLessonRequest struct {
-	SectionID        string  `json:"sectionId" binding:"required"`
+	SectionID        string  `json:"sectionId"`
 	Title            string  `json:"title" binding:"required"`
 	Type             string  `json:"type" binding:"required"`
 	Content          *string `json:"content"`
@@ -52,8 +55,18 @@ func (h *CourseRESTHandler) CreateLesson(c *gin.Context) {
 		return
 	}
 
+	sectionID := c.Param("sectionId")
+	if sectionID == "" {
+		sectionID = req.SectionID
+	}
+	sectionUUID, err := uuid.Parse(sectionID)
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid section ID")
+		return
+	}
+
 	lesson := &models.LmsLesson{
-		SectionID:        uuid.MustParse(req.SectionID),
+		SectionID:        sectionUUID,
 		Title:            req.Title,
 		Type:             models.LessonType(req.Type),
 		Content:          req.Content,
@@ -70,7 +83,6 @@ func (h *CourseRESTHandler) CreateLesson(c *gin.Context) {
 	}
 	lesson.DripDelayDays = req.DripDelayDays
 
-	sectionUUID, _ := uuid.Parse(req.SectionID)
 	createdLesson, err := h.courseService.CreateLesson(sectionUUID, lesson.Title, lesson.Type, lesson.OrderIndex)
 	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to create lesson: "+err.Error())
@@ -82,7 +94,7 @@ func (h *CourseRESTHandler) CreateLesson(c *gin.Context) {
 
 // UpdateLesson updates a lesson
 func (h *CourseRESTHandler) UpdateLesson(c *gin.Context) {
-	id := c.Param("id")
+	id := c.Param("lessonId")
 
 	var req UpdateLessonRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -96,8 +108,10 @@ func (h *CourseRESTHandler) UpdateLesson(c *gin.Context) {
 		return
 	}
 
-	lesson := &models.LmsLesson{
-		ID: parsedID,
+	lesson, err := h.courseService.GetLesson(parsedID)
+	if err != nil {
+		api_response.Error(c, http.StatusNotFound, "Lesson not found")
+		return
 	}
 
 	if req.Title != nil {
@@ -132,8 +146,7 @@ func (h *CourseRESTHandler) UpdateLesson(c *gin.Context) {
 		lesson.DripDelayDays = req.DripDelayDays
 	}
 
-	lessonUUID, _ := uuid.Parse(id)
-	updatedLesson, err := h.courseService.CreateLesson(lessonUUID, lesson.Title, lesson.Type, lesson.OrderIndex)
+	updatedLesson, err := h.courseService.UpdateLesson(lesson)
 	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to update lesson: "+err.Error())
 		return
@@ -144,9 +157,18 @@ func (h *CourseRESTHandler) UpdateLesson(c *gin.Context) {
 
 // DeleteLesson deletes a lesson
 func (h *CourseRESTHandler) DeleteLesson(c *gin.Context) {
-	id := c.Param("id")
+	id := c.Param("lessonId")
 
-	_ = id
+	parsedID, err := uuid.Parse(id)
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid lesson ID")
+		return
+	}
+
+	if err := h.courseService.DeleteLesson(parsedID); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to delete lesson: "+err.Error())
+		return
+	}
 
 	api_response.Success(c, gin.H{"message": "Lesson deleted successfully"})
 }
@@ -182,8 +204,26 @@ func (h *CourseRESTHandler) ReorderLessons(c *gin.Context) {
 		return
 	}
 
-	_ = sectionID
-	_ = req.LessonIDs
+	parsedSectionID, err := uuid.Parse(sectionID)
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid section ID")
+		return
+	}
+
+	lessonUUIDs := make([]uuid.UUID, 0, len(req.LessonIDs))
+	for _, id := range req.LessonIDs {
+		parsed, err := uuid.Parse(id)
+		if err != nil {
+			api_response.Error(c, http.StatusBadRequest, "Invalid lesson ID: "+id)
+			return
+		}
+		lessonUUIDs = append(lessonUUIDs, parsed)
+	}
+
+	if err := h.courseService.ReorderLessons(parsedSectionID, lessonUUIDs); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to reorder lessons: "+err.Error())
+		return
+	}
 
 	api_response.Success(c, gin.H{"message": "Lessons reordered successfully"})
 }

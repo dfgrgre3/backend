@@ -94,5 +94,18 @@ func (s *S3Storage) GeneratePresignedUploadURL(ctx context.Context, filename str
 		return "", fmt.Errorf("failed to generate presigned upload url: %w", err)
 	}
 
+	// The minio client signs the URL against the internal S3_ENDPOINT (e.g. the
+	// Docker-network hostname "minio:9000"), which is unreachable from the
+	// browser. Rewrite scheme+host to the browser-reachable S3_PUBLIC_URL so
+	// the signature (computed over method/path/headers, not the host) stays
+	// valid while the URL itself is one the browser can actually connect to.
+	if s.publicURL != "" {
+		publicParsed, err := url.Parse(s.publicURL)
+		if err == nil && publicParsed.Host != "" {
+			presignedURL.Scheme = publicParsed.Scheme
+			presignedURL.Host = publicParsed.Host
+		}
+	}
+
 	return presignedURL.String(), nil
 }

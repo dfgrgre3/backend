@@ -1,7 +1,6 @@
 package protected
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	models "thanawy-backend/internal/domain/common"
@@ -11,6 +10,7 @@ import (
 	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // MegaMenuTrackRequest represents the payload sent by the MegaMenu component
@@ -85,7 +85,7 @@ func TrackMegaMenuEvent(c *gin.Context) {
 	}
 
 	event := models.AnalyticsEvent{
-		EventID:    fmt.Sprintf("mega-menu-%s-%d", req.Type, time.Now().UnixNano()),
+		EventID:    "mega-menu-" + uuid.NewString(),
 		EventType:  "mega_menu_" + req.Type,
 		UserID:     userID,
 		Payload:    payload,

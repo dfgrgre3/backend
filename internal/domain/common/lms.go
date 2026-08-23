@@ -113,14 +113,19 @@ type LmsLesson struct {
 	AvailabilityType AvailabilityType `gorm:"default:'CALENDAR_DATE';column:availability_type" json:"availabilityType"`
 	AvailableFrom    *time.Time       `gorm:"column:available_from" json:"availableFrom,omitempty"`
 	DripDelayDays    *int             `gorm:"column:drip_delay_days" json:"dripDelayDays,omitempty"`
-	CreatedAt        time.Time        `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt        time.Time        `gorm:"column:updated_at" json:"updatedAt"`
-	DeletedAt        gorm.DeletedAt   `gorm:"index;column:deleted_at" json:"-"`
+	// ExamID links this lesson to a single exam from the legacy Subject-scoped
+	// Exam table. Loose reference by design (no FK constraint) — Exam rows
+	// live outside the Course/Section/Lesson hierarchy. Mirrors SubTopic.ExamID.
+	ExamID    *string        `gorm:"index;type:uuid;column:exam_id" json:"examId,omitempty"`
+	CreatedAt time.Time      `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt time.Time      `gorm:"column:updated_at" json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
 
 	// Associations
 	Attachments []LmsAttachment      `gorm:"foreignKey:LessonID;constraint:OnDelete:CASCADE" json:"attachments,omitempty"`
 	Subtitles   []LmsSubtitle        `gorm:"foreignKey:LessonID;constraint:OnDelete:CASCADE" json:"subtitles,omitempty"`
 	Quizzes     []LmsInteractiveQuiz `gorm:"foreignKey:LessonID;constraint:OnDelete:CASCADE" json:"quizzes,omitempty"`
+	Exam        *Exam                `gorm:"foreignKey:ExamID" json:"exam,omitempty"`
 }
 
 func (LmsLesson) TableName() string {

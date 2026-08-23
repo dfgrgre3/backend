@@ -83,13 +83,15 @@ func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
 	// Determine write source DSN.
 	sourceDSN := appDSN
 	if writeDSN != "" {
-		// For write DSN, also apply app role to respect RLS.
-		writeAppDSN, err := GetDSNForRole(writeDSN, RoleApp)
-		if err != nil {
-			log.Printf("[WARN] Failed to add app role to write DSN: %v", err)
-			sourceDSN = writeDSN
-		} else {
-			sourceDSN = writeAppDSN
+		sourceDSN = writeDSN
+		if useAppRole {
+			// For write DSN, also apply app role to respect RLS.
+			writeAppDSN, err := GetDSNForRole(writeDSN, RoleApp)
+			if err != nil {
+				log.Printf("[WARN] Failed to add app role to write DSN: %v", err)
+			} else {
+				sourceDSN = writeAppDSN
+			}
 		}
 	}
 

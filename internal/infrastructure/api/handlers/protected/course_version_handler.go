@@ -1,7 +1,6 @@
 package protected
 
 import (
-	"fmt"
 	"net/http"
 
 	api_response "thanawy-backend/internal/infrastructure/api/response"
@@ -18,9 +17,13 @@ import (
 func (h *CourseRESTHandler) CreateCourseVersion(c *gin.Context) {
 	id := c.Param("id")
 
-	courseUUID, _ := uuid.Parse(id)
-	versionNumber := 1
-	version, err := h.courseService.CreateVersion(courseUUID, versionNumber)
+	courseUUID, err := uuid.Parse(id)
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid course ID")
+		return
+	}
+
+	version, err := h.courseService.CreateVersion(courseUUID)
 	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to create version: "+err.Error())
 		return
@@ -43,7 +46,9 @@ func (h *CourseRESTHandler) ListCourseVersions(c *gin.Context) {
 	api_response.Success(c, gin.H{"versions": versions})
 }
 
-// RestoreCourseVersion restores a course to a specific version
+// RestoreCourseVersion restores a course's top-level fields to a specific
+// prior version snapshot (see LmsService.RestoreVersion for what "restore"
+// covers — nested sections/lessons are not touched).
 func (h *CourseRESTHandler) RestoreCourseVersion(c *gin.Context) {
 	id := c.Param("id")
 
@@ -55,8 +60,13 @@ func (h *CourseRESTHandler) RestoreCourseVersion(c *gin.Context) {
 		return
 	}
 
-	courseUUID, _ := uuid.Parse(id)
-	course, err := h.courseService.CloneCourse(courseUUID, fmt.Sprintf("restored-%d", req.VersionNumber))
+	courseUUID, err := uuid.Parse(id)
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid course ID")
+		return
+	}
+
+	course, err := h.courseService.RestoreVersion(courseUUID, req.VersionNumber)
 	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to restore version: "+err.Error())
 		return

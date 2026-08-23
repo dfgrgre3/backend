@@ -255,13 +255,6 @@ func AdminBookReviews(c *gin.Context) {
 }
 
 func AdminCourseAction(c *gin.Context) {
-	if c.FullPath() == "/api/admin/courses/export" {
-		c.Header("Content-Type", "text/csv; charset=utf-8")
-		c.Header("Content-Disposition", `attachment; filename="courses.csv"`)
-		c.String(http.StatusOK, "id,title,status\n")
-		return
-	}
-
 	switch c.Request.Method {
 	case http.MethodPost, http.MethodPatch, http.MethodPut:
 		api_response.Success(c, nil)

@@ -110,6 +110,7 @@ func SetupProtectedRoutes(router *gin.Engine) {
 			userRoutes.POST("/courses/:id/complete", handlers.CompleteCourse)
 			userRoutes.POST("/courses/:id/checkout", handlers.CourseCheckout)
 			userRoutes.GET("/courses/:id/curriculum", handlers.GetSubjectCurriculum)
+			userRoutes.GET("/courses/lessons/:id/progress", handlers.GetLessonProgress)
 			userRoutes.POST("/courses/lessons/:id/progress", handlers.UpdateLessonProgress)
 			userRoutes.POST("/courses/lessons/:id/view", handlers.TrackLessonView) // Track view stats
 
@@ -121,6 +122,7 @@ func SetupProtectedRoutes(router *gin.Engine) {
 			// Lesson Notes & Reviews
 			userRoutes.GET("/courses/lessons/:id/notes", handlers.GetLessonNotes)
 			userRoutes.POST("/courses/lessons/:id/notes", handlers.CreateLessonNote)
+			userRoutes.GET("/courses/lessons/:id/transcript", handlers.GetLessonTranscript)
 			userRoutes.POST("/courses/:id/reviews", handlers.CreateCourseReview)
 
 			// Upload

@@ -15,9 +15,12 @@ import (
 // Section Endpoints
 // =============================================================
 
-// CreateSectionRequest represents the REST request body for creating a section
+// CreateSectionRequest represents the REST request body for creating a section.
+// CourseID is optional in the body — the route is always nested under
+// /courses/:id/sections, so the URL param is the source of truth; the body
+// field is accepted for backward compatibility only.
 type CreateSectionRequest struct {
-	CourseID      string `json:"courseId" binding:"required"`
+	CourseID      string `json:"courseId"`
 	Title         string `json:"title" binding:"required"`
 	OrderIndex    int    `json:"orderIndex"`
 	AvailableFrom *int64 `json:"availableFrom"`
@@ -40,8 +43,18 @@ func (h *CourseRESTHandler) CreateSection(c *gin.Context) {
 		return
 	}
 
+	courseID := c.Param("id")
+	if courseID == "" {
+		courseID = req.CourseID
+	}
+	courseUUID, err := uuid.Parse(courseID)
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid course ID")
+		return
+	}
+
 	section := &models.LmsSection{
-		CourseID:   uuid.MustParse(req.CourseID),
+		CourseID:   courseUUID,
 		Title:      req.Title,
 		OrderIndex: req.OrderIndex,
 	}
@@ -52,7 +65,6 @@ func (h *CourseRESTHandler) CreateSection(c *gin.Context) {
 	}
 	section.DripDelayDays = req.DripDelayDays
 
-	courseUUID, _ := uuid.Parse(req.CourseID)
 	createdSection, err := h.courseService.CreateSection(courseUUID, section.Title, section.OrderIndex)
 	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to create section: "+err.Error())
@@ -78,8 +90,10 @@ func (h *CourseRESTHandler) UpdateSection(c *gin.Context) {
 		return
 	}
 
-	section := &models.LmsSection{
-		ID: parsedID,
+	section, err := h.courseService.GetSection(parsedID)
+	if err != nil {
+		api_response.Error(c, http.StatusNotFound, "Section not found")
+		return
 	}
 
 	if req.Title != nil {
@@ -96,8 +110,7 @@ func (h *CourseRESTHandler) UpdateSection(c *gin.Context) {
 		section.DripDelayDays = req.DripDelayDays
 	}
 
-	sectionUUID, _ := uuid.Parse(id)
-	updatedSection, err := h.courseService.CreateSection(sectionUUID, section.Title, section.OrderIndex)
+	updatedSection, err := h.courseService.UpdateSection(section)
 	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to update section: "+err.Error())
 		return
@@ -108,17 +121,25 @@ func (h *CourseRESTHandler) UpdateSection(c *gin.Context) {
 
 // DeleteSection deletes a section
 func (h *CourseRESTHandler) DeleteSection(c *gin.Context) {
-	id := c.Param("id")
+	id := c.Param("sectionId")
 
-	sectionUUID, _ := uuid.Parse(id)
-	_ = sectionUUID
+	sectionUUID, err := uuid.Parse(id)
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid section ID")
+		return
+	}
+
+	if err := h.courseService.DeleteSection(sectionUUID); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to delete section: "+err.Error())
+		return
+	}
 
 	api_response.Success(c, gin.H{"message": "Section deleted successfully"})
 }
 
 // ListSections lists sections for a course
 func (h *CourseRESTHandler) ListSections(c *gin.Context) {
-	courseID := c.Param("courseId")
+	courseID := c.Param("id")
 
 	parsedCourseID, err := uuid.Parse(courseID)
 	if err != nil {
@@ -137,7 +158,7 @@ func (h *CourseRESTHandler) ListSections(c *gin.Context) {
 
 // ReorderSections reorders sections in a course
 func (h *CourseRESTHandler) ReorderSections(c *gin.Context) {
-	courseID := c.Param("courseId")
+	courseID := c.Param("id")
 
 	var req struct {
 		SectionIDs []string `json:"sectionIds" binding:"required"`
@@ -147,8 +168,26 @@ func (h *CourseRESTHandler) ReorderSections(c *gin.Context) {
 		return
 	}
 
-	_ = courseID
-	_ = req.SectionIDs
+	parsedCourseID, err := uuid.Parse(courseID)
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid course ID")
+		return
+	}
+
+	sectionUUIDs := make([]uuid.UUID, 0, len(req.SectionIDs))
+	for _, id := range req.SectionIDs {
+		parsed, err := uuid.Parse(id)
+		if err != nil {
+			api_response.Error(c, http.StatusBadRequest, "Invalid section ID: "+id)
+			return
+		}
+		sectionUUIDs = append(sectionUUIDs, parsed)
+	}
+
+	if err := h.courseService.ReorderSections(parsedCourseID, sectionUUIDs); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to reorder sections: "+err.Error())
+		return
+	}
 
 	api_response.Success(c, gin.H{"message": "Sections reordered successfully"})
 }

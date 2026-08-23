@@ -134,6 +134,21 @@ func (r *LmsRepository) ListSectionsByCourseID(courseID uuid.UUID) ([]models.Lms
 	return sections, err
 }
 
+// ReorderSections persists a new order_index for each section id in
+// sectionIDs, in the order given (0-based), all in one transaction.
+func (r *LmsRepository) ReorderSections(courseID uuid.UUID, sectionIDs []uuid.UUID) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for i, sectionID := range sectionIDs {
+			if err := tx.Model(&models.LmsSection{}).
+				Where("id = ? AND course_id = ?", sectionID, courseID).
+				Update("order_index", i).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // ----------------------------
 // Lesson CRUD
 // ----------------------------
@@ -144,7 +159,7 @@ func (r *LmsRepository) CreateLesson(lesson *models.LmsLesson) error {
 
 func (r *LmsRepository) GetLessonByID(id uuid.UUID) (*models.LmsLesson, error) {
 	var l models.LmsLesson
-	err := r.db.Preload("Attachments").Preload("Subtitles").Preload("Quizzes").First(&l, "id = ?", id).Error
+	err := r.db.Preload("Attachments").Preload("Subtitles").Preload("Quizzes").Preload("Exam").First(&l, "id = ?", id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -161,8 +176,29 @@ func (r *LmsRepository) DeleteLesson(id uuid.UUID) error {
 
 func (r *LmsRepository) ListLessonsBySectionID(sectionID uuid.UUID) ([]models.LmsLesson, error) {
 	var lessons []models.LmsLesson
-	err := r.db.Where("section_id = ?", sectionID).Order("order_index ASC").Find(&lessons).Error
+	err := r.db.Preload("Attachments").Preload("Exam").Where("section_id = ?", sectionID).Order("order_index ASC").Find(&lessons).Error
 	return lessons, err
+}
+
+// LinkExamToLesson sets (or clears, if examID is nil) a lesson's linked exam.
+func (r *LmsRepository) LinkExamToLesson(lessonID uuid.UUID, examID *string) error {
+	return r.db.Model(&models.LmsLesson{}).Where("id = ?", lessonID).Update("exam_id", examID).Error
+}
+
+// ReorderLessons persists a new order_index for each lesson id in lessonIDs,
+// in the order given (0-based). All updates run in one transaction so a
+// partial failure never leaves the list half-reordered.
+func (r *LmsRepository) ReorderLessons(sectionID uuid.UUID, lessonIDs []uuid.UUID) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for i, lessonID := range lessonIDs {
+			if err := tx.Model(&models.LmsLesson{}).
+				Where("id = ? AND section_id = ?", lessonID, sectionID).
+				Update("order_index", i).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // ----------------------------

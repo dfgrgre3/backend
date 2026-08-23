@@ -406,12 +406,16 @@ func SetupAdminRoutes(router *gin.Engine) {
 
 		// Course Students (view list of enrolled students)
 		admin.GET("/courses/:id/students", handlers.GetCourseStudents)
+		admin.GET("/courses/:id/students/export", handlers.ExportCourseStudentsCSV)
+		admin.GET("/courses/:id/overview-stats", handlers.GetCourseOverviewStats)
+		admin.GET("/courses/:id/analytics", handlers.GetCourseAnalytics)
 
 		// Manual Enroll
 		admin.GET("/courses/enrollments", handlers.GetCourseEnrollments)
 		admin.POST("/courses/enroll", handlers.ManualEnroll)
 		admin.POST("/courses/unenroll", handlers.UnenrollUser)
-		admin.POST("/courses/lessons/attachments", handlers.AddLessonAttachment)
+		admin.POST("/courses/lessons/:id/attachments", handlers.AddLessonAttachment)
+		admin.DELETE("/courses/lessons/attachments/:attachmentId", handlers.DeleteLessonAttachment)
 
 		// Notifications Broadcast
 		admin.POST("/notifications/broadcast", handlers.SendNotificationBroadcast)
@@ -459,7 +463,8 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.POST(adminCoursesActionRoute, admindelivery.AdminCourseAction)
 		admin.PATCH(adminCoursesActionRoute, admindelivery.AdminCourseAction)
 		admin.PUT(adminCoursesActionRoute, admindelivery.AdminCourseAction)
-		admin.GET("/courses/export", admindelivery.AdminCourseAction)
+		admin.GET("/courses/export", handlers.ExportSubjectsCSV)
+		admin.GET("/courses/stats", handlers.GetCourseStats)
 
 		// Settings (write = admin-only, read = open to moderators)
 		admin.GET(adminSettingsRoute, admindelivery.AdminSettings)
@@ -482,6 +487,10 @@ func SetupAdminRoutes(router *gin.Engine) {
 		admin.GET("/interactive-questions/:id", handlers.GetInteractiveQuestion)
 		admin.PATCH("/interactive-questions", handlers.UpdateInteractiveQuestion)
 		admin.DELETE("/interactive-questions/:id", handlers.DeleteInteractiveQuestion)
+
+		// Lesson Transcripts (SRT/VTT upload for the video player's transcript panel)
+		admin.POST("/courses/lessons/:lessonId/transcript", handlers.UpsertLessonTranscript)
+		admin.DELETE("/courses/lessons/:lessonId/transcript", handlers.DeleteLessonTranscript)
 
 		// Course Pricing, Versioning and Bundles are registered in
 		// hexagonal_routes.go via CourseRESTHandler.

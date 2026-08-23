@@ -35,18 +35,19 @@ func (h *CourseRESTHandler) ApproveCourse(c *gin.Context) {
 	id := c.Param("id")
 
 	var req struct {
-		ReviewerID string `json:"reviewerId" binding:"required"`
-		Notes      string `json:"notes"`
+		Notes string `json:"notes"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api_response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
+	_ = c.ShouldBindJSON(&req)
+
+	reviewerID, ok := currentUserID(c)
+	if !ok {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
-	var err error
 	courseUUID, _ := uuid.Parse(id)
-	reviewerUUID, _ := uuid.Parse(req.ReviewerID)
-	err = h.courseService.ApproveCourse(courseUUID, reviewerUUID, req.Notes)
+	reviewerUUID, _ := uuid.Parse(reviewerID)
+	err := h.courseService.ApproveCourse(courseUUID, reviewerUUID, req.Notes)
 	if err != nil {
 		api_response.Error(c, http.StatusBadRequest, "Failed to approve course: "+err.Error())
 		return
@@ -69,16 +70,21 @@ func (h *CourseRESTHandler) RejectCourse(c *gin.Context) {
 	id := c.Param("id")
 
 	var req struct {
-		ReviewerID string `json:"reviewerId" binding:"required"`
-		Reason     string `json:"reason" binding:"required"`
+		Reason string `json:"reason" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		api_response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
 		return
 	}
 
+	reviewerID, ok := currentUserID(c)
+	if !ok {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	courseUUID, _ := uuid.Parse(id)
-	reviewerUUID, _ := uuid.Parse(req.ReviewerID)
+	reviewerUUID, _ := uuid.Parse(reviewerID)
 	err := h.courseService.RejectCourse(courseUUID, reviewerUUID, req.Reason)
 	if err != nil {
 		api_response.Error(c, http.StatusBadRequest, "Failed to reject course: "+err.Error())
@@ -101,8 +107,9 @@ func (h *CourseRESTHandler) RejectCourse(c *gin.Context) {
 func (h *CourseRESTHandler) ArchiveCourse(c *gin.Context) {
 	id := c.Param("id")
 
+	userID, _ := currentUserID(c)
 	courseUUID, _ := uuid.Parse(id)
-	userUUID, _ := uuid.Parse("00000000-0000-0000-0000-000000000000")
+	userUUID, _ := uuid.Parse(userID)
 	err := h.courseService.ArchiveCourse(courseUUID, userUUID)
 	if err != nil {
 		api_response.Error(c, http.StatusBadRequest, "Failed to archive course: "+err.Error())
@@ -137,4 +144,57 @@ func (h *CourseRESTHandler) UnarchiveCourse(c *gin.Context) {
 		"message": "Course unarchived",
 		"status":  string(models.CourseStatusDraft),
 	})
+}
+
+// ListCourseReviewComments returns the workflow review comments of a course
+func (h *CourseRESTHandler) ListCourseReviewComments(c *gin.Context) {
+	courseUUID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid course id")
+		return
+	}
+
+	comments, err := h.courseService.ListReviewComments(courseUUID)
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to list review comments: "+err.Error())
+		return
+	}
+
+	api_response.Success(c, gin.H{"comments": comments})
+}
+
+// AddCourseReviewComment adds a workflow review comment to a course
+func (h *CourseRESTHandler) AddCourseReviewComment(c *gin.Context) {
+	courseUUID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid course id")
+		return
+	}
+
+	var req struct {
+		Comment string `json:"comment" binding:"required"`
+		Status  string `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
+		return
+	}
+	if req.Status == "" {
+		req.Status = "pending"
+	}
+
+	reviewerID, ok := currentUserID(c)
+	if !ok {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	reviewerUUID, _ := uuid.Parse(reviewerID)
+
+	comment, err := h.courseService.AddReviewComment(courseUUID, reviewerUUID, req.Comment, req.Status)
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to add review comment: "+err.Error())
+		return
+	}
+
+	api_response.Created(c, gin.H{"comment": comment})
 }

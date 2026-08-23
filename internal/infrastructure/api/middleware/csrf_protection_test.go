@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCSRFProtection_SkipsAuthHandshakePaths(t *testing.T) {
+func TestCSRFMiddleware_SkipsAuthHandshakePaths(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	r.Use(CSRFProtection())
+	r.Use(CSRFMiddleware())
 	r.POST("/api/auth/login", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})

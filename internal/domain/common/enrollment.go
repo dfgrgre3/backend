@@ -52,6 +52,53 @@ func (LessonProgress) TableName() string {
 	return "TopicProgress"
 }
 
+// LessonNoteContent stores a user's notes for one lesson as a single
+// serialized blob (the video player composes free-form text plus a
+// timestamped-lines block client-side and overwrites the whole thing on
+// every save — see src/components/video/player/hooks/useTimelineNotes.ts).
+type LessonNoteContent struct {
+	ID        string    `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	UserID    string    `gorm:"not null;type:uuid;column:user_id;index:idx_note_user_lesson,unique" json:"userId"`
+	LessonID  string    `gorm:"not null;type:uuid;column:lesson_id;index:idx_note_user_lesson,unique" json:"lessonId"`
+	Content   string    `gorm:"not null;type:text;default:'';column:content" json:"content"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt time.Time `gorm:"column:updated_at" json:"updatedAt"`
+}
+
+func (LessonNoteContent) TableName() string {
+	return "LessonNoteContent"
+}
+
+func (n *LessonNoteContent) BeforeCreate(tx *gorm.DB) (err error) {
+	if n.ID == "" {
+		n.ID = uuid.New().String()
+	}
+	return
+}
+
+// LessonTranscript stores an admin/instructor-uploaded SRT or VTT transcript
+// for a lesson, used by the video player's searchable-transcript panel.
+type LessonTranscript struct {
+	ID        string    `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	LessonID  string    `gorm:"not null;type:uuid;column:lesson_id;uniqueIndex" json:"lessonId"`
+	Format    string    `gorm:"not null;default:'srt';column:format" json:"format"`
+	Content   string    `gorm:"not null;type:text;column:content" json:"content"`
+	Language  string    `gorm:"not null;default:'ar';column:language" json:"language"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt time.Time `gorm:"column:updated_at" json:"updatedAt"`
+}
+
+func (LessonTranscript) TableName() string {
+	return "LessonTranscript"
+}
+
+func (t *LessonTranscript) BeforeCreate(tx *gorm.DB) (err error) {
+	if t.ID == "" {
+		t.ID = uuid.New().String()
+	}
+	return
+}
+
 func (e *Enrollment) BeforeCreate(tx *gorm.DB) (err error) {
 	if e.ID == "" {
 		e.ID = uuid.New().String()

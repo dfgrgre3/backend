@@ -7,7 +7,7 @@ A high-performance Go backend API for the Thanawy education platform, built with
 - **Go 1.26** - Latest stable version
 - **Gin Framework** - High-performance HTTP router
 - **GORM** - ORM with PostgreSQL
-- **Redis** - Caching, rate limiting, workers
+- **Redis** - Caching, rate limiting, workers, **and account-lockout brute-force protection** (see Security note below — this makes Redis a hard security dependency, not just a performance cache)
 - **MinIO** - S3-compatible object storage
 - **Clean Architecture** - Hexagonal architecture pattern
 - **Docker Ready** - Full containerization support
@@ -171,6 +171,14 @@ SMTP_PASS=your_password
 ```
 
 See `.env.example` for complete configuration options.
+
+> **Security note — `REDIS_URL` is required in production, not optional.**
+> Login brute-force protection (account lockout after repeated failed
+> attempts) is implemented entirely via Redis
+> (`internal/domain/auth/service/auth_service.go`). If Redis is unreachable
+> or unconfigured, that check fails **open** — no lockout is enforced and no
+> error is raised — rather than blocking logins. Never run production
+> without Redis configured.
 
 ## API Documentation
 

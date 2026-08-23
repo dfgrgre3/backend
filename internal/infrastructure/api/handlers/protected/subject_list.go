@@ -36,14 +36,10 @@ func GetSubjects(c *gin.Context) {
 		page = (offset / limit) + 1
 	}
 
-	categoryId := c.Query("categoryId")
-	search := c.Query("search")
-	level := c.Query("level")
-	isPublished := c.Query("isPublished")
-	isActive := c.Query("isActive")
-
-	cacheKey := fmt.Sprintf("subject:list:page=%d:limit=%d:offset=%d:cat=%s:search=%s:level=%s:pub=%s:act=%s",
-		page, limit, offset, categoryId, search, level, isPublished, isActive)
+	// The cache key must cover every filter applied by buildSubjectFilters,
+	// otherwise different filter combinations collide on the same entry.
+	cacheKey := fmt.Sprintf("subject:list:page=%d:limit=%d:offset=%d:%s",
+		page, limit, offset, subjectFilterCacheFragment(c))
 
 	if cache.Redis != nil {
 		cached, err := cache.Redis.Get(c.Request.Context(), cacheKey).Result()
@@ -72,7 +68,7 @@ func GetSubjects(c *gin.Context) {
 	countQuery = buildSubjectFilters(countQuery, c)
 	countQuery.Count(&total)
 
-	if err := query.Order("created_at desc").Offset(offset).Limit(limit).Find(&subjects).Error; err != nil {
+	if err := query.Order(subjectSortClause(c.Query("sort"))).Offset(offset).Limit(limit).Find(&subjects).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch subjects")
 		return
 	}

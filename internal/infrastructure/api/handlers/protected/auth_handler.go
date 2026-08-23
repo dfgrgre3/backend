@@ -22,6 +22,31 @@ func secureCookie(c *gin.Context) bool {
 	return c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
 }
 
+func (h *AuthHandler) setAuthTokenCookies(c *gin.Context, accessToken, refreshToken string, rememberMe bool) {
+	cfg := config.Load()
+	secure := secureCookie(c)
+
+	// Access token cookie (15 minutes expiration)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("access_token", accessToken, 15*60, "/", cfg.CookieDomain, secure, true)
+
+	// Refresh token cookie (30 days default, 90 days if remember me)
+	refreshMaxAge := 30 * 24 * 60 * 60
+	if rememberMe {
+		refreshMaxAge = 90 * 24 * 60 * 60
+	}
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("refresh_token", refreshToken, refreshMaxAge, "/", cfg.CookieDomain, secure, true)
+}
+
+func (h *AuthHandler) clearAuthCookies(c *gin.Context) {
+	cfg := config.Load()
+	secure := secureCookie(c)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("access_token", "", -1, "/", cfg.CookieDomain, secure, true)
+	c.SetCookie("refresh_token", "", -1, "/", cfg.CookieDomain, secure, true)
+}
+
 func NewAuthHandler(authService authservice.AuthService) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
@@ -76,18 +101,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Set access token cookie
-	cfg := config.Load()
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("access_token", res.AccessToken, 15*60, "/", cfg.CookieDomain, secureCookie(c), true)
-
-	// Set refresh token cookie
-	refreshMaxAge := 30 * 24 * 60 * 60 // 30 days default
-	if req.RememberMe {
-		refreshMaxAge = 90 * 24 * 60 * 60 // 90 days if remember me
-	}
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("refresh_token", res.RefreshToken, refreshMaxAge, "/", cfg.CookieDomain, secureCookie(c), true)
+	// Set unified auth cookies
+	h.setAuthTokenCookies(c, res.AccessToken, res.RefreshToken, req.RememberMe)
 
 	response.Success(c, gin.H{
 		"accessToken":  res.AccessToken,
@@ -129,11 +144,8 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		}
 	}
 
-	// Clear cookies
-	cfg := config.Load()
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("access_token", "", -1, "/", cfg.CookieDomain, secureCookie(c), true)
-	c.SetCookie("refresh_token", "", -1, "/", cfg.CookieDomain, secureCookie(c), true)
+	// Clear unified cookies
+	h.clearAuthCookies(c)
 
 	response.Success(c, gin.H{"message": "Logged out successfully"})
 }
@@ -149,6 +161,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		// Try from body
 		var req authdto.RefreshTokenRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
+			h.clearAuthCookies(c)
 			response.Error(c, http.StatusUnauthorized, "Refresh token is required")
 			return
 		}
@@ -160,15 +173,13 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 
 	res, err := h.authService.RefreshToken(c.Request.Context(), refreshToken, userAgent, ip)
 	if err != nil {
+		h.clearAuthCookies(c)
 		response.Error(c, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	// Set new cookies
-	cfg := config.Load()
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("access_token", res.AccessToken, 15*60, "/", cfg.CookieDomain, secureCookie(c), true)
-	c.SetCookie("refresh_token", res.RefreshToken, 30*24*60*60, "/", cfg.CookieDomain, secureCookie(c), true)
+	// Set unified cookies
+	h.setAuthTokenCookies(c, res.AccessToken, res.RefreshToken, false)
 
 	response.Success(c, gin.H{
 		"accessToken":  res.AccessToken,
@@ -185,6 +196,7 @@ func (h *AuthHandler) RefreshSession(c *gin.Context) {
 	if err != nil || refreshToken == "" {
 		var req authdto.RefreshTokenRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
+			h.clearAuthCookies(c)
 			response.Error(c, http.StatusUnauthorized, "Refresh token is required")
 			return
 		}
@@ -196,18 +208,19 @@ func (h *AuthHandler) RefreshSession(c *gin.Context) {
 
 	res, err := h.authService.RefreshToken(c.Request.Context(), refreshToken, userAgent, ip)
 	if err != nil {
+		h.clearAuthCookies(c)
 		response.Error(c, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	cfg := config.Load()
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("access_token", res.AccessToken, 15*60, "/", cfg.CookieDomain, secureCookie(c), true)
-	c.SetCookie("refresh_token", res.RefreshToken, 30*24*60*60, "/", cfg.CookieDomain, secureCookie(c), true)
+	h.setAuthTokenCookies(c, res.AccessToken, res.RefreshToken, false)
 
-	// Get user data for refresh session
+	// Get user data cleanly
 	userID := c.GetString("userId")
-	user, _ := h.authService.GetCurrentUser(c.Request.Context(), userID)
+	var user *authdto.UserDTO
+	if userID != "" {
+		user, _ = h.authService.GetCurrentUser(c.Request.Context(), userID)
+	}
 
 	response.Success(c, gin.H{
 		"accessToken":  res.AccessToken,
@@ -240,399 +253,4 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"user": user})
-}
-
-// ─────────────────────────────────────────────
-//  Forgot Password
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) ForgotPassword(c *gin.Context) {
-	var req authdto.ForgotPasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
-		return
-	}
-
-	if err := h.authService.ForgotPassword(c.Request.Context(), req.Email); err != nil {
-		response.Error(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{
-		"message": "If an account with this email exists, a verification code has been sent.",
-	})
-}
-
-// ─────────────────────────────────────────────
-//  Verify Forgot Password Code
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) VerifyForgotPasswordCode(c *gin.Context) {
-	var req authdto.VerifyForgotPasswordCodeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
-		return
-	}
-
-	resetToken, err := h.authService.VerifyForgotPasswordCode(c.Request.Context(), req.Email, req.Code)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	response.Success(c, authdto.VerifyForgotPasswordCodeResponse{
-		ResetToken: resetToken,
-		Message:    "Code verified successfully. You can now reset your password.",
-	})
-}
-
-// ─────────────────────────────────────────────
-//  Reset Password
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) ResetPassword(c *gin.Context) {
-	var req authdto.ResetPasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
-		return
-	}
-
-	if err := h.authService.ResetPassword(c.Request.Context(), req.Token, req.NewPassword); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{"message": "Password reset successfully. Please login with your new password."})
-}
-
-// ─────────────────────────────────────────────
-//  Verify Email
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) VerifyEmail(c *gin.Context) {
-	userIDValue, exists := c.Get("userId")
-	if !exists {
-		response.Error(c, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-	userID := userIDValue.(string)
-
-	var req authdto.VerifyEmailRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
-		return
-	}
-
-	if err := h.authService.VerifyEmail(c.Request.Context(), userID, req.Code); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{"message": "Email verified successfully"})
-}
-
-// ─────────────────────────────────────────────
-//  Resend Verification Email
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) ResendVerification(c *gin.Context) {
-	userIDValue, exists := c.Get("userId")
-	if !exists {
-		response.Error(c, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-	userID := userIDValue.(string)
-
-	var req authdto.ResendVerificationRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		// No body, use user ID
-	}
-
-	if err := h.authService.ResendVerificationEmail(c.Request.Context(), userID); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{"message": "Verification code sent successfully"})
-}
-
-// ─────────────────────────────────────────────
-//  Change Password
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) ChangePassword(c *gin.Context) {
-	userID, exists := c.Get("userId")
-	if !exists {
-		response.Error(c, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
-	var req authdto.ChangePasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
-		return
-	}
-
-	if err := h.authService.ChangePassword(c.Request.Context(), userID.(string), req.OldPassword, req.NewPassword); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	// Clear cookies to force re-login
-	cfg := config.Load()
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("access_token", "", -1, "/", cfg.CookieDomain, secureCookie(c), true)
-	c.SetCookie("refresh_token", "", -1, "/", cfg.CookieDomain, secureCookie(c), true)
-
-	response.Success(c, gin.H{"message": "Password changed successfully. Please login again."})
-}
-
-// ─────────────────────────────────────────────
-//  Update Profile
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) UpdateProfile(c *gin.Context) {
-	userID, exists := c.Get("userId")
-	if !exists {
-		response.Error(c, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
-	var req authdto.UpdateProfileRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
-		return
-	}
-
-	user, err := h.authService.UpdateProfile(c.Request.Context(), userID.(string), &req)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{"message": "Profile updated successfully", "user": user})
-}
-
-// ─────────────────────────────────────────────
-//  Delete Account
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) DeleteAccount(c *gin.Context) {
-	userID, exists := c.Get("userId")
-	if !exists {
-		response.Error(c, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
-	var req authdto.DeleteAccountRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
-		return
-	}
-
-	if err := h.authService.DeleteAccount(c.Request.Context(), userID.(string), req.Password, req.Reason); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	// Clear cookies
-	cfg := config.Load()
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("access_token", "", -1, "/", cfg.CookieDomain, secureCookie(c), true)
-	c.SetCookie("refresh_token", "", -1, "/", cfg.CookieDomain, secureCookie(c), true)
-
-	response.Success(c, gin.H{"message": "Account deleted successfully"})
-}
-
-// ─────────────────────────────────────────────
-//  Social Login (Provider redirect)
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) SocialLogin(c *gin.Context) {
-	provider := c.Param("provider")
-	if provider == "" {
-		response.Error(c, http.StatusBadRequest, "Provider is required")
-		return
-	}
-
-	redirectURL, err := h.authService.GetOAuthRedirectURL(c.Request.Context(), provider)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{"redirectUrl": redirectURL})
-}
-
-// ─────────────────────────────────────────────
-//  OAuth Callback
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) OAuthCallback(c *gin.Context) {
-	provider := c.Param("provider")
-	code := c.Query("code")
-	state := c.Query("state")
-
-	if code == "" || state == "" {
-		response.Error(c, http.StatusBadRequest, "Missing code or state parameter")
-		return
-	}
-
-	userAgent := c.Request.UserAgent()
-	ip := c.ClientIP()
-
-	res, err := h.authService.HandleOAuthCallback(c.Request.Context(), provider, code, state, userAgent, ip)
-	if err != nil {
-		response.Error(c, http.StatusUnauthorized, err.Error())
-		return
-	}
-
-	cfg := config.Load()
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("access_token", res.AccessToken, 15*60, "/", cfg.CookieDomain, secureCookie(c), true)
-	c.SetCookie("refresh_token", res.RefreshToken, 30*24*60*60, "/", cfg.CookieDomain, secureCookie(c), true)
-
-	response.Success(c, gin.H{
-		"accessToken":  res.AccessToken,
-		"refreshToken": res.RefreshToken,
-		"user":         res.User,
-	})
-}
-
-// ─────────────────────────────────────────────
-//  Link OAuth Provider
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) LinkProvider(c *gin.Context) {
-	userID, exists := c.Get("userId")
-	if !exists {
-		response.Error(c, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
-	var req authdto.LinkProviderRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
-		return
-	}
-
-	if err := h.authService.LinkOAuthProvider(c.Request.Context(), userID.(string), req.Provider, req.Code, req.State); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{"message": "Provider linked successfully"})
-}
-
-// ─────────────────────────────────────────────
-//  Unlink OAuth Provider
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) UnlinkProvider(c *gin.Context) {
-	userID, exists := c.Get("userId")
-	if !exists {
-		response.Error(c, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
-	var req authdto.UnlinkProviderRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
-		return
-	}
-
-	if err := h.authService.UnlinkOAuthProvider(c.Request.Context(), userID.(string), req.Provider); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{"message": "Provider unlinked successfully"})
-}
-
-// ─────────────────────────────────────────────
-//  Get Linked OAuth Accounts
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) GetLinkedAccounts(c *gin.Context) {
-	userID, exists := c.Get("userId")
-	if !exists {
-		response.Error(c, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
-	accounts, err := h.authService.GetLinkedAccounts(c.Request.Context(), userID.(string))
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{"accounts": accounts})
-}
-
-// ─────────────────────────────────────────────
-//  Token Validation
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) ValidateToken(c *gin.Context) {
-	var req authdto.ValidateTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
-		return
-	}
-
-	claims, err := h.authService.ValidateAccessToken(c.Request.Context(), req.Token)
-	if err != nil {
-		response.Success(c, authdto.ValidateTokenResponse{Valid: false})
-		return
-	}
-
-	response.Success(c, authdto.ValidateTokenResponse{
-		Valid:       true,
-		UserID:      claims.UserID,
-		Role:        claims.Role,
-		Permissions: claims.Permissions,
-		ExpiresAt:   claims.ExpiresAt,
-	})
-}
-
-// ─────────────────────────────────────────────
-//  Account Recovery
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) AccountRecovery(c *gin.Context) {
-	var req authdto.AccountRecoveryRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
-		return
-	}
-
-	ticket, err := h.authService.InitiateAccountRecovery(c.Request.Context(), req.Email, req.Method)
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	response.Success(c, authdto.AccountRecoveryResponse{
-		Ticket:  ticket,
-		Message: "Recovery initiated. Check your email/phone for verification code.",
-	})
-}
-
-// ─────────────────────────────────────────────
-//  Recover Account (Finalize)
-// ─────────────────────────────────────────────
-
-func (h *AuthHandler) RecoverAccount(c *gin.Context) {
-	var req authdto.RecoverAccountRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid input: "+err.Error())
-		return
-	}
-
-	if err := h.authService.FinalizeAccountRecovery(c.Request.Context(), req.Ticket, req.Code, req.NewPassword); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{"message": "Account recovered successfully. Please login with your new password."})
 }

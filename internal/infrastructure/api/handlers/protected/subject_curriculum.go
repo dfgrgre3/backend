@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	models "thanawy-backend/internal/domain/common"
 	api_response "thanawy-backend/internal/infrastructure/api/response"
@@ -39,6 +40,7 @@ type Lesson struct {
 	HasChapters        bool   `json:"hasChapters,omitempty"`
 	ViewCount          int    `json:"viewCount,omitempty"`
 	CompletionCount    int    `json:"completionCount,omitempty"`
+	Attachments        []models.LessonAttachment `json:"attachments,omitempty"`
 }
 
 func GetCourseLessons(c *gin.Context) {
@@ -55,6 +57,11 @@ func GetCourseLessons(c *gin.Context) {
 	if err := query.First(&subject).Error; err != nil {
 		handleSubjectError(c, id, err, "fetching course lessons")
 		return
+	}
+
+	sortAttachments := func(atts []models.LessonAttachment) []models.LessonAttachment {
+		sort.Slice(atts, func(i, j int) bool { return atts[i].CreatedAt.Before(atts[j].CreatedAt) })
+		return atts
 	}
 
 	var lessons []Lesson
@@ -78,6 +85,7 @@ func GetCourseLessons(c *gin.Context) {
 				IsContentProtected: st.IsContentProtected,
 				ViewCount:          st.ViewCount,
 				CompletionCount:    st.CompletionCount,
+				Attachments:        sortAttachments(st.Attachments),
 			}
 			if st.DripReleaseDate != nil {
 				l.DripReleaseDate = st.DripReleaseDate.Format(time.RFC3339)
@@ -446,4 +454,31 @@ func AddLessonAttachment(c *gin.Context) {
 	}
 
 	api_response.Created(c, attachment)
+}
+
+func DeleteLessonAttachment(c *gin.Context) {
+	attachmentId := c.Param("attachmentId")
+
+	var attachment models.LessonAttachment
+	if err := db.DB.First(&attachment, idQuery, attachmentId).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Attachment not found")
+		return
+	}
+
+	if err := db.DB.Delete(&attachment).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to delete attachment")
+		return
+	}
+
+	// Invalidate parent subject cache
+	var subTopic models.SubTopic
+	if err := db.DB.First(&subTopic, idQuery, attachment.SubTopicID).Error; err == nil {
+		var topic models.Topic
+		if err := db.DB.First(&topic, idQuery, subTopic.TopicID).Error; err == nil && topic.SubjectID != "" {
+			getSubjectRepo().InvalidateSubjectCache(topic.SubjectID)
+			cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), topic.SubjectID)
+		}
+	}
+
+	api_response.Success(c, gin.H{"success": true})
 }

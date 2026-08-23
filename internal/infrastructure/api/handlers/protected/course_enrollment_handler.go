@@ -7,6 +7,7 @@ import (
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // =============================================================
@@ -38,9 +39,27 @@ func (h *CourseRESTHandler) EnrollUser(c *gin.Context) {
 	api_response.Created(c, gin.H{"enrollment": enrollment})
 }
 
-// GetEnrollment retrieves user enrollment
+// ListEnrollments lists all enrollments for a course
+func (h *CourseRESTHandler) ListEnrollments(c *gin.Context) {
+	courseID := c.Param("id")
+	parsedCourseID, err := uuid.Parse(courseID)
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid course ID")
+		return
+	}
+
+	enrollments, err := h.courseService.ListCourseEnrollments(parsedCourseID)
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to list enrollments: "+err.Error())
+		return
+	}
+
+	api_response.Success(c, gin.H{"enrollments": enrollments})
+}
+
+// GetEnrollment retrieves a single user's enrollment in a course
 func (h *CourseRESTHandler) GetEnrollment(c *gin.Context) {
-	courseID := c.Param("courseId")
+	courseID := c.Param("id")
 	userID := c.Param("userId")
 
 	query := command.GetEnrollmentQuery{
@@ -59,7 +78,7 @@ func (h *CourseRESTHandler) GetEnrollment(c *gin.Context) {
 
 // UpdateProgress updates enrollment progress
 func (h *CourseRESTHandler) UpdateProgress(c *gin.Context) {
-	courseID := c.Param("courseId")
+	courseID := c.Param("id")
 	userID := c.Param("userId")
 
 	var req struct {

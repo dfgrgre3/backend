@@ -28,9 +28,9 @@ func Initialize(database *gorm.DB) (*Handlers, error) {
 	lmsRepo := courserepo.NewLmsRepository(database)
 	courService := courseservice.NewLmsService(lmsRepo)
 	searchCoursesHandler := courseservice.NewSearchCoursesHandler(database)
-	getEnrollmentHandler := courseservice.NewGetEnrollmentHandler()
+	getEnrollmentHandler := courseservice.NewGetEnrollmentHandler(database)
 	enrollUserHandler := courseservice.NewEnrollUserHandler(database)
-	updateProgressHandler := courseservice.NewUpdateProgressHandler()
+	updateProgressHandler := courseservice.NewUpdateProgressHandler(database)
 
 	// Course REST Handler
 	courseRESTHandler := coursedelivery.NewCourseRESTHandler(

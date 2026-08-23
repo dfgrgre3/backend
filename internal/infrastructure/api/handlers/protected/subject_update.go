@@ -42,6 +42,7 @@ func UpdateSubject(c *gin.Context) {
 		api_response.Error(c, http.StatusBadRequest, "Invalid array input format: "+err.Error())
 		return
 	}
+	syncSubjectStatusWithPublishFlag(updates, &subject)
 
 	if err := db.DB.Model(&models.Subject{}).Where(idQuery, subject.ID).
 		Updates(updates).Error; err != nil {
@@ -57,6 +58,30 @@ func UpdateSubject(c *gin.Context) {
 
 	LogAudit(c, "UPDATE", "subject", id, input)
 	api_response.Success(c, gin.H{"course": subject})
+}
+
+// syncSubjectStatusWithPublishFlag keeps the `status` column consistent with the
+// legacy `is_published` boolean. The admin panel toggles publishing through
+// `isPublished` alone, which would otherwise leave a published course sitting in
+// DRAFT status (and vice versa). An explicit `status` in the payload wins.
+func syncSubjectStatusWithPublishFlag(updates map[string]interface{}, subject *models.Subject) {
+	if _, hasStatus := updates["status"]; hasStatus {
+		return
+	}
+	published, ok := updates["is_published"].(bool)
+	if !ok {
+		return
+	}
+	if published {
+		updates["status"] = models.CourseStatusPublished
+		if subject.PublishedAt == nil {
+			updates["published_at"] = time.Now()
+		}
+		return
+	}
+	if subject.Status == models.CourseStatusPublished {
+		updates["status"] = models.CourseStatusDraft
+	}
 }
 
 func mapInputToSubjectUpdatesMap(input map[string]interface{}) (map[string]interface{}, error) {
