@@ -15,8 +15,6 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-const adminEmail = "ffyoussef12@gmail.com"
-
 func main() {
 	if err := godotenv.Load(".env"); err != nil {
 		log.Println("No .env file found - using system environment")
@@ -25,6 +23,14 @@ func main() {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		log.Fatal("DATABASE_URL is not set")
+	}
+
+	// Target email is env-driven rather than hardcoded so this script isn't
+	// tied to one specific account (and doesn't bake a personal email into
+	// source control).
+	adminEmail := os.Getenv("ADMIN_EMAIL")
+	if adminEmail == "" {
+		log.Fatal("ADMIN_EMAIL is not set")
 	}
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{

@@ -18,7 +18,11 @@ func GetTimeAnalytics(c *gin.Context) {
 		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	userId := userIdValue.(string)
+	userId, ok := userIdValue.(string)
+	if !ok || userId == "" {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
 
 	result, err := analyticsQuery.GetTimeAnalytics(userId)
 	if err != nil {

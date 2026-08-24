@@ -20,6 +20,43 @@ var (
 	gamificationQuery = gamificationservice.NewGamificationQueryService()
 )
 
+// resolveGamificationUserID returns the user ID whose gamification data the
+// caller may view: their own by default, or another user's only if the
+// caller holds an admin/moderator role. Without this check, any
+// authenticated user could pass ?userId=<victim> and read another user's
+// progress/achievements (BOLA/IDOR) — see GetLessons for the same pattern
+// applied elsewhere in this package.
+func resolveGamificationUserID(c *gin.Context) (string, bool) {
+	authUserIDVal, exists := c.Get("userId")
+	if !exists {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return "", false
+	}
+	authUserID, _ := authUserIDVal.(string)
+
+	userID := c.Query("userId")
+	if userID == "" {
+		userID = authUserID
+	}
+
+	if userID != authUserID {
+		role, _ := c.Get("role")
+		roleStr, _ := role.(string)
+		isAdmin := roleStr == "ADMIN" || roleStr == "SUPER_ADMIN" || roleStr == "MODERATOR"
+		if !isAdmin {
+			api_response.Error(c, http.StatusForbidden, "You are not authorized to view this user's data")
+			return "", false
+		}
+	}
+
+	if userID == "" {
+		api_response.Error(c, http.StatusBadRequest, "User ID is required")
+		return "", false
+	}
+
+	return userID, true
+}
+
 // GetLeaderboard returns the top users by XP
 func GetLeaderboard(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "10")
@@ -56,14 +93,9 @@ func GetLeaderboard(c *gin.Context) {
 
 // GetUserProgress returns the current gamification progress for a specific user.
 func GetUserProgress(c *gin.Context) {
-	userID := c.Query("userId")
-	if userID == "" {
-		ctxID, exists := c.Get("userId")
-		if !exists {
-			api_response.Error(c, http.StatusBadRequest, "User ID is required")
-			return
-		}
-		userID = ctxID.(string)
+	userID, ok := resolveGamificationUserID(c)
+	if !ok {
+		return
 	}
 
 	progress, err := gamificationQuery.GetUserProgress(userID)
@@ -186,14 +218,9 @@ func UpdateCustomGoal(c *gin.Context) {
 
 // GetUserAchievements returns achievements for a specific user
 func GetUserAchievements(c *gin.Context) {
-	userID := c.Query("userId")
-	if userID == "" {
-		ctxID, exists := c.Get("userId")
-		if !exists {
-			api_response.Error(c, http.StatusBadRequest, "User ID is required")
-			return
-		}
-		userID = ctxID.(string)
+	userID, ok := resolveGamificationUserID(c)
+	if !ok {
+		return
 	}
 
 	achievements, err := gamificationQuery.GetUserAchievements(userID)

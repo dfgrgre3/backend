@@ -35,6 +35,12 @@ type SubscriptionPlan struct {
 	Interval    SubscriptionInterval `gorm:"not null;default:'MONTHLY';column:interval" json:"interval"`
 	IsActive    bool                 `gorm:"default:true;index;column:is_active" json:"isActive"`
 
+	// GroupKey links interval variants (MONTHLY/YEARLY/FOREVER) of the same
+	// plan tier together, e.g. "Premium" priced monthly and priced yearly.
+	// Defaults to the plan's own ID when unset, so a standalone plan with no
+	// sibling variants still forms a valid single-member group.
+	GroupKey string `gorm:"column:group_key;index" json:"groupKey"`
+
 	Features JSONStringArray `gorm:"type:jsonb;column:features" json:"features"`
 
 	CreatedAt time.Time `gorm:"column:created_at" json:"createdAt"`
@@ -70,6 +76,9 @@ func (SubscriptionPlan) TableName() string {
 func (sp *SubscriptionPlan) BeforeCreate(tx *gorm.DB) (err error) {
 	if sp.ID == "" {
 		sp.ID = uuid.New().String()
+	}
+	if sp.GroupKey == "" {
+		sp.GroupKey = sp.ID
 	}
 	return
 }

@@ -1,0 +1,273 @@
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+
+	"gorm.io/gorm"
+)
+
+type migrationRecord struct {
+	ID        string    `gorm:"primaryKey;column:id"`
+	Checksum  string    `gorm:"not null;column:checksum"`
+	AppliedAt time.Time `gorm:"not null;column:appliedAt"`
+}
+
+func (migrationRecord) TableName() string {
+	return "schema_migrations"
+}
+
+// migrationsDir is the on-disk location of the SQL migration files, relative to
+// the repository root (this command must be run from there).
+const migrationsDir = "internal/infrastructure/database/migration/migrations"
+
+func runSQLMigrations(database *gorm.DB) error {
+	if err := database.Exec(`SELECT pg_advisory_lock(hashtext('thanawy_backend_schema_migrations'))`).Error; err != nil {
+		return fmt.Errorf("acquire migration lock: %w", err)
+	}
+	defer func() {
+		if err := database.Exec(`SELECT pg_advisory_unlock(hashtext('thanawy_backend_schema_migrations'))`).Error; err != nil {
+			log.Printf("failed to release migration lock: %v", err)
+		}
+	}()
+
+	if err := ensureMigrationTable(database); err != nil {
+		return err
+	}
+
+	names, err := getMigrationNames()
+	if err != nil {
+		return err
+	}
+
+	for _, name := range names {
+		if err := applyMigration(database, name); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func ensureMigrationTable(database *gorm.DB) error {
+	// Create the migration table if it doesn't exist
+	// This needs to be done before running migrations
+	err := database.Exec(`
+		CREATE TABLE IF NOT EXISTS "schema_migrations" (
+			id text PRIMARY KEY,
+			checksum text NOT NULL,
+			"appliedAt" timestamptz NOT NULL DEFAULT now()
+		)
+	`).Error
+	if err != nil {
+		return fmt.Errorf("ensure schema_migrations: %w", err)
+	}
+	return nil
+}
+
+func getMigrationNames() ([]string, error) {
+	// Read from filesystem instead of embed
+	entries, err := os.ReadDir(migrationsDir)
+	if err != nil {
+		return nil, fmt.Errorf("read migrations: %w", err)
+	}
+
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".sql" {
+			names = append(names, entry.Name())
+		}
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func applyMigration(database *gorm.DB, name string) error {
+	id := name[:len(name)-len(filepath.Ext(name))]
+	contents, err := os.ReadFile(filepath.Join(migrationsDir, name))
+	if err != nil {
+		return fmt.Errorf("read migration %s: %w", name, err)
+	}
+
+	if len(contents) == 0 {
+		log.Printf("Skipping empty migration file %s", name)
+		return nil
+	}
+
+	sum := sha256.Sum256(contents)
+	checksum := hex.EncodeToString(sum[:])
+
+	var existing migrationRecord
+	err = database.First(&existing, "id = ?", id).Error
+	if err == nil {
+		if existing.Checksum != checksum {
+			return fmt.Errorf("migration %s checksum mismatch: applied checksum %s, file checksum %s", id, existing.Checksum, checksum)
+		}
+		log.Printf("Migration %s already applied (checksum matches)", id)
+		return nil
+	}
+
+	if err != gorm.ErrRecordNotFound {
+		return fmt.Errorf("check migration %s: %w", id, err)
+	}
+
+	log.Printf("Applying database migration %s", id)
+
+	// For baseline schema, check if tables already exist and mark as applied if so
+	if id == "0000_baseline_schema" {
+		return applyBaselineMigration(database, contents, checksum, id)
+	}
+
+	// Check if this migration contains non-transactional statements
+	if needsNonTransactionalExecution(string(contents)) {
+		log.Printf("Migration %s contains non-transactional statements (CONCURRENTLY), executing outside transaction", id)
+		return applyNonTransactionalMigration(database, name, id, string(contents), checksum)
+	}
+
+	// For other migrations, use statement splitting with transaction
+	return database.Transaction(func(tx *gorm.DB) error {
+		statements := splitSQLStatements(string(contents))
+		for i, stmt := range statements {
+			trimmed := strings.TrimSpace(stmt)
+			if trimmed == "" || strings.HasPrefix(trimmed, "--") {
+				continue
+			}
+			// Skip CREATE TABLE IF NOT EXISTS for schema_migrations as it's already created
+			if strings.Contains(strings.ToUpper(trimmed), "CREATE TABLE") &&
+				strings.Contains(strings.ToUpper(trimmed), "SCHEMA_MIGRATIONS") {
+				log.Printf("Skipping schema_migrations table creation (already exists)")
+				continue
+			}
+			if err := tx.Exec(stmt).Error; err != nil {
+				return fmt.Errorf("apply migration %s statement %d: %w\nStatement: %.200s", id, i+1, err, stmt)
+			}
+		}
+		return tx.Exec(`INSERT INTO schema_migrations (id, checksum, "appliedAt") VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET checksum = EXCLUDED.checksum, "appliedAt" = EXCLUDED."appliedAt"`, id, checksum, time.Now().UTC()).Error
+	})
+}
+
+// applyBaselineMigration handles the special case of the baseline schema migration.
+// It checks if tables already exist and marks the migration as applied, or applies
+// it to a fresh database.
+func applyBaselineMigration(database *gorm.DB, contents []byte, checksum, id string) error {
+	// Check if any core table exists (e.g., User table)
+	var tableExists int64
+	database.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'User' AND table_schema = 'public'").Scan(&tableExists)
+
+	if tableExists > 0 {
+		// Check if the User table has a primary key constraint
+		var hasPK int64
+		database.Raw("SELECT COUNT(*) FROM information_schema.table_constraints WHERE table_name = 'User' AND constraint_type = 'PRIMARY KEY' AND table_schema = 'public'").Scan(&hasPK)
+
+		if hasPK > 0 {
+			log.Printf("Baseline schema tables already exist with proper constraints, marking migration as applied")
+			// Manually insert the migration record using raw SQL with ON CONFLICT
+			sqlDB, _ := database.DB()
+			_, err := sqlDB.Exec(`INSERT INTO schema_migrations (id, checksum, "appliedAt") VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET checksum = EXCLUDED.checksum, "appliedAt" = EXCLUDED."appliedAt"`, id, checksum, time.Now().UTC())
+			if err != nil {
+				return fmt.Errorf("record migration %s: %w", id, err)
+			}
+			return nil
+		}
+
+		// Tables exist but don't have proper constraints - need to drop and recreate
+		log.Printf("Tables exist but missing constraints, dropping and recreating")
+		database.Exec(`DROP SCHEMA public CASCADE`)
+		database.Exec(`CREATE SCHEMA public`)
+	}
+
+	// Tables don't exist, need to apply the migration
+	log.Printf("Applying baseline schema migration")
+
+	// For fresh database, we need to handle the schema_migrations table conflict
+	// First, drop the schema_migrations table that was created by ensureMigrationTable
+	database.Exec(`DROP TABLE IF EXISTS schema_migrations CASCADE`)
+
+	// Execute the entire baseline schema as a single block to preserve dependencies
+	content := string(contents)
+	// Remove the schema_migrations table definition more comprehensively
+	content = regexp.MustCompile(`(?s)--\n-- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -\n--\n\nCREATE TABLE public\.schema_migrations \([^)]+\);\n\n--\n-- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -\n--\n\nALTER TABLE ONLY public\.schema_migrations\n    ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY \(id\);\n\n`).ReplaceAllString(content, "")
+
+	if err := database.Exec(content).Error; err != nil {
+		return fmt.Errorf("apply migration %s: %w", id, err)
+	}
+
+	// Create the schema_migrations table manually
+	database.Exec(`
+		CREATE TABLE schema_migrations (
+			id text PRIMARY KEY,
+			checksum text NOT NULL,
+			"appliedAt" timestamptz NOT NULL DEFAULT now()
+		)
+	`)
+	// Manually insert the migration record using raw SQL
+	sqlDB, _ := database.DB()
+	_, err := sqlDB.Exec(`INSERT INTO schema_migrations (id, checksum, "appliedAt") VALUES ($1, $2, $3)`, id, checksum, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("record migration %s: %w", id, err)
+	}
+	return nil
+}
+
+// applyNonTransactionalMigration executes a migration that contains statements
+// which cannot run inside a transaction (e.g., CREATE INDEX CONCURRENTLY).
+// These statements must be executed one by one, outside any transaction.
+// We use the raw *sql.DB connection to bypass GORM's transaction handling.
+func applyNonTransactionalMigration(database *gorm.DB, name, id, contents, checksum string) error {
+	// Get raw database connection to bypass GORM's transaction handling
+	sqlDB, err := database.DB()
+	if err != nil {
+		return fmt.Errorf("get database connection: %w", err)
+	}
+
+	statements := splitSQLStatements(contents)
+	log.Printf("Migration %s: parsed %d statements", id, len(statements))
+	executedNonTransactional := false
+
+	for i, stmt := range statements {
+		trimmed := strings.TrimSpace(stmt)
+		if trimmed == "" || strings.HasPrefix(trimmed, "--") {
+			continue
+		}
+
+		// Check if this specific statement needs non-transactional execution
+		upperStmt := strings.ToUpper(trimmed)
+		isNonTransactional := false
+		for _, pattern := range nonTransactionalStatements {
+			if strings.Contains(upperStmt, pattern) {
+				isNonTransactional = true
+				break
+			}
+		}
+
+		// Use sqlDB.Exec() for all statements in non-transactional migrations
+		// This ensures DDL statements work correctly in PostgreSQL
+		log.Printf("Executing statement %d (len %d): [%.100s...]", i+1, len(trimmed), trimmed)
+		_, err := sqlDB.Exec(stmt)
+		if err != nil {
+			return fmt.Errorf("apply migration %s statement %d: %w\nStatement: %s", id, i+1, err, stmt)
+		}
+		if isNonTransactional {
+			executedNonTransactional = true
+		}
+	}
+
+	// Only record the migration after ALL statements have succeeded
+	_, err = sqlDB.Exec(`INSERT INTO schema_migrations (id, checksum, "appliedAt") VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET checksum = EXCLUDED.checksum, "appliedAt" = EXCLUDED."appliedAt"`, id, checksum, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("record migration %s: %w", id, err)
+	}
+
+	if executedNonTransactional {
+		log.Printf("Migration %s completed with non-transactional statements", id)
+	}
+	return nil
+}

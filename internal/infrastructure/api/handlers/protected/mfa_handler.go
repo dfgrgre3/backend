@@ -33,8 +33,13 @@ func NewMFAHandler(mfaService authservice.MFAService, tokenSvc authservice.AuthT
 }
 
 func (h *MFAHandler) SetupMFA(c *gin.Context) {
-	userID, exists := c.Get("userId")
+	userIDVal, exists := c.Get("userId")
 	if !exists {
+		response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	userID, ok := userIDVal.(string)
+	if !ok || userID == "" {
 		response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
@@ -58,7 +63,7 @@ func (h *MFAHandler) SetupMFA(c *gin.Context) {
 
 	// Store secret in TwoFactorCredential table
 	twoFactorCredential := models.TwoFactorCredential{
-		UserID: userID.(string),
+		UserID: userID,
 		Secret: secret,
 	}
 	if err := db.DB.WithContext(c.Request.Context()).Save(&twoFactorCredential).Error; err != nil {

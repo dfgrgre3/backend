@@ -2,13 +2,17 @@ package worker
 
 import (
 	"os"
+	"sync"
 	"thanawy-backend/internal/infrastructure/cache"
 	"time"
 
 	"github.com/hibiken/asynq"
 )
 
-var client *asynq.Client
+var (
+	client     *asynq.Client
+	clientOnce sync.Once
+)
 
 // isRedisDisabled returns true when Redis should not be used or is unavailable.
 func isRedisDisabled() bool {
@@ -22,17 +26,24 @@ func isRedisDisabled() bool {
 }
 
 // GetClient returns the asynq client, or nil if Redis is disabled/unavailable.
+//
+// CONCURRENCY: previously used a bare check-then-set on the package-level
+// `client` variable, which is a data race under concurrent callers (the
+// Enqueue* helpers below can be invoked from many request-handling
+// goroutines at once) — multiple goroutines could all observe client == nil
+// and each construct + assign their own *asynq.Client, leaking every
+// instance but the last. sync.Once makes the construction happen exactly
+// once regardless of concurrent callers.
 func GetClient() *asynq.Client {
-	if client == nil {
+	clientOnce.Do(func() {
 		redisAddr := os.Getenv("REDIS_URL")
 		if redisAddr == "" || isRedisDisabled() {
-			return nil
+			return
 		}
 
 		opts := cache.ParseAsynqRedisConnOpt(redisAddr)
-
 		client = asynq.NewClient(opts)
-	}
+	})
 	return client
 }
 

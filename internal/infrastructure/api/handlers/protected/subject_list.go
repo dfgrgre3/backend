@@ -137,11 +137,24 @@ func GetSubject(c *gin.Context) {
 	}
 
 	var enrollment *models.Enrollment
+	isEnrolled := false
 	if userID != "" {
 		var e models.Enrollment
 		if err := database.Where("user_id = ? AND subject_id = ?", userID, subject.ID).First(&e).Error; err == nil {
 			enrollment = &e
+			isEnrolled = true
 		}
+	}
+
+	// SECURITY: this endpoint is public and unauthenticated. Serializing
+	// `subject` directly would include every SubTopic's VideoUrl, AudioUrl,
+	// Content, ExternalLinkUrl and Attachments regardless of IsFree — i.e.
+	// full paid-lesson content (video links, notes, downloadable files)
+	// exposed to any visitor. Redact non-free lessons unless the caller is
+	// enrolled, matching the rule GetAvailableLessons already applies
+	// elsewhere for this same content.
+	if !isEnrolled {
+		redactLockedLessonContent(&subject)
 	}
 
 	// Wrap for frontend
@@ -157,4 +170,25 @@ func GetSubject(c *gin.Context) {
 	}
 
 	api_response.Success(c, response)
+}
+
+// redactLockedLessonContent strips playable/downloadable content (video,
+// audio, external links, attachments, notes) from every non-free lesson in
+// subject, in place. Lesson titles, order, duration, and other metadata are
+// left intact so the course structure still previews correctly.
+func redactLockedLessonContent(subject *models.Subject) {
+	for ti := range subject.Topics {
+		subTopics := subject.Topics[ti].SubTopics
+		for si := range subTopics {
+			if subTopics[si].IsFree {
+				continue
+			}
+			subTopics[si].VideoUrl = nil
+			subTopics[si].AudioUrl = nil
+			subTopics[si].Content = nil
+			subTopics[si].ExternalLinkUrl = nil
+			subTopics[si].ExternalLinkTitle = nil
+			subTopics[si].Attachments = nil
+		}
+	}
 }

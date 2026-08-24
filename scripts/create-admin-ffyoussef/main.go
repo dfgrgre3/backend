@@ -29,8 +29,16 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	email := "ffyoussef12@gmail.com"
-	password := "Khaled@2008"
+	// SECURITY: previously hardcoded a real email + plaintext password here,
+	// committed and pushed to git history (see also cmd/seed-admin/main.go,
+	// which had the identical issue). Read from env instead so no credential
+	// lives in source; the old hardcoded password must still be treated as
+	// compromised and rotated in the live database.
+	email := os.Getenv("SEED_ADMIN_EMAIL")
+	password := os.Getenv("SEED_ADMIN_PASSWORD")
+	if email == "" || password == "" {
+		log.Fatal("SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD must both be set")
+	}
 
 	// Hash the password
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
@@ -82,5 +90,5 @@ func main() {
 		fmt.Printf("✅ Created new admin user: %s\n", email)
 	}
 
-	fmt.Println("Password: Khaled@2008")
+	fmt.Println("Password set from SEED_ADMIN_PASSWORD env var")
 }

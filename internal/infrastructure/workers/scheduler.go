@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"log"
 	"os"
 	"thanawy-backend/internal/infrastructure/cache"
@@ -8,11 +9,21 @@ import (
 	"github.com/hibiken/asynq"
 )
 
-// StartScheduler starts the periodic task scheduler.
-// It runs CQRS materialized view refresh every 5 minutes.
-// Cron expressions that include a time-of-day are evaluated in the local
-// timezone returned by SchedulerLocation() (default: Africa/Cairo).
+// StartScheduler is kept for backwards-compatibility; it runs until the
+// process exits, with no way to stop the underlying asynq.Scheduler early.
+// Prefer StartSchedulerWithContext.
 func StartScheduler() {
+	StartSchedulerWithContext(context.Background())
+}
+
+// StartSchedulerWithContext starts the periodic task scheduler and blocks
+// until ctx is cancelled, at which point it calls Shutdown() on the
+// underlying asynq.Scheduler so the goroutine (and the scheduler's internal
+// Redis connections/ticker) stop cleanly instead of leaking for the rest of
+// the process's life. It runs CQRS materialized view refresh every 5
+// minutes. Cron expressions that include a time-of-day are evaluated in the
+// local timezone returned by SchedulerLocation() (default: Africa/Cairo).
+func StartSchedulerWithContext(ctx context.Context) {
 	redisAddr := os.Getenv("REDIS_URL")
 	if redisAddr == "" || isRedisDisabled() {
 		log.Println("[Scheduler] Redis not configured or disabled, skipping scheduler start")
@@ -50,5 +61,11 @@ func StartScheduler() {
 	log.Printf("[Scheduler] Periodic tasks scheduled (timezone: %s): CQRS refresh (5m), Session cleanup (1h), Drip check (5m)", loc)
 	if err := scheduler.Start(); err != nil {
 		log.Printf("Failed to start scheduler: %v", err)
+		return
 	}
+
+	<-ctx.Done()
+	log.Println("[Scheduler] Shutdown signal received — stopping periodic task scheduler...")
+	scheduler.Shutdown()
+	log.Println("[Scheduler] Periodic task scheduler stopped")
 }

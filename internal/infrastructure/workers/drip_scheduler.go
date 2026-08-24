@@ -4,16 +4,12 @@ import (
 	"encoding/json"
 	"log"
 	models "thanawy-backend/internal/domain/common"
-	"thanawy-backend/internal/infrastructure/cache"
 	"time"
 
 	notificationservice "thanawy-backend/internal/domain/notification/service"
 	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/hibiken/asynq"
-	// ⚠️ تأكد من استيراد حزمة models والمسار الصحيح لـ asynq config helpers
-	// "thanawy-backend/internal/domain/course/models"
-	// "thanawy-backend/internal/infrastructure/queue"
 )
 
 // =============================================================
@@ -59,14 +55,11 @@ func ScheduleDripContentRelease(dripSchedule *models.LessonDripSchedule, subject
 		return nil
 	}
 
-	redisAddr := getRedisAddr()
-	if redisAddr == "" {
+	client := GetClient()
+	if client == nil {
 		log.Printf("[DripScheduler] Redis not configured, cannot schedule drip task")
 		return nil
 	}
-
-	client := asynq.NewClient(getRedisConnOpt())
-	defer client.Close()
 
 	payload := DripContentPayload{
 		SubTopicID: dripSchedule.SubTopicID,
@@ -147,14 +140,11 @@ func HandleDripContentRelease(task *asynq.Task) error {
 
 // ScheduleCourseAvailability schedules a course availability change
 func ScheduleCourseAvailability(subjectID, courseName, action, windowType string, at time.Time) error {
-	redisAddr := getRedisAddr()
-	if redisAddr == "" {
+	client := GetClient()
+	if client == nil {
 		log.Printf("[AvailabilityScheduler] Redis not configured, cannot schedule availability task")
 		return nil
 	}
-
-	client := asynq.NewClient(getRedisConnOpt())
-	defer client.Close()
 
 	payload := CourseAvailabilityPayload{
 		SubjectID:  subjectID,
@@ -228,31 +218,3 @@ func HandleCourseAvailability(task *asynq.Task) error {
 	return nil
 }
 
-// =============================================================
-// Helper Functions
-// =============================================================
-
-// asynqConfig holds the Redis configuration for Asynq
-// ⚠️ TODO: Replace with your actual config source (e.g., viper, env vars)
-var asynqConfig = struct {
-	redisAddr string
-}{
-	redisAddr: "", // Set this via init or config loader
-}
-
-func getRedisAddr() string {
-	return asynqConfig.redisAddr
-}
-
-func getRedisConnOpt() asynq.RedisConnOpt {
-	return cache.ParseAsynqRedisConnOpt(getRedisAddr())
-}
-
-// ⚠️ Placeholder: Implement or import these from your infrastructure package
-// func cache.ParseAsynqRedisConnOpt(addr string) asynq.RedisConnOpt { ... }
-// func SchedulerLocation() *time.Location { ... }
-
-func init() {
-	// Initialize asynqConfig.redisAddr from your configuration source here
-	// Example: asynqConfig.redisAddr = os.Getenv("REDIS_URL")
-}

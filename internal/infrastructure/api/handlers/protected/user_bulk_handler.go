@@ -132,7 +132,43 @@ func BulkDeleteUsers(c *gin.Context) {
 	api_response.Success(c, gin.H{"deleted": deleted, "failed": failed})
 }
 
-// BulkSuspendUsers suspends multiple users.
+// findExistingUserIDs returns the subset of ids that exist as User rows, in
+// a single query, so bulk handlers can distinguish "updated" from "not
+// found" without issuing one query per id.
+func findExistingUserIDs(ids []string) (map[string]bool, error) {
+	var found []string
+	if err := db.DB.Model(&models.User{}).Where(idQuery, ids).Pluck("id", &found).Error; err != nil {
+		return nil, err
+	}
+	set := make(map[string]bool, len(found))
+	for _, id := range found {
+		set[id] = true
+	}
+	return set, nil
+}
+
+// bulkUserActionResult reports which of the requested ids were updated and
+// invalidates caches / writes an audit entry only for those.
+func bulkUserActionResult(c *gin.Context, requestedIDs []string, existing map[string]bool, action string, auditPayload gin.H) gin.H {
+	success := int64(0)
+	failed := int64(0)
+	var errors []gin.H
+	for _, uid := range requestedIDs {
+		if existing[uid] {
+			success++
+			middleware.InvalidateRolePermsCache(uid)
+			getUserRepo().InvalidateCache(uid)
+			LogAudit(c, action, "user", uid, auditPayload)
+		} else {
+			failed++
+			errors = append(errors, gin.H{"id": uid, "error": errUserNotFound})
+		}
+	}
+	return gin.H{"success": success, "failed": failed, "errors": errors}
+}
+
+// BulkSuspendUsers suspends multiple users in a single batched update
+// (previously issued one UPDATE per user id — an N+1 query pattern).
 func BulkSuspendUsers(c *gin.Context) {
 	var req struct {
 		UserIDs []string `json:"userIds" binding:"required,min=1"`
@@ -142,28 +178,26 @@ func BulkSuspendUsers(c *gin.Context) {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	success := int64(0)
-	failed := int64(0)
-	var errors []gin.H
-	for _, uid := range req.UserIDs {
-		if err := db.DB.Model(&models.User{}).Where(idQuery, uid).Updates(map[string]interface{}{
+	existing, err := findExistingUserIDs(req.UserIDs)
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to look up users")
+		return
+	}
+	if len(existing) > 0 {
+		if err := db.DB.Model(&models.User{}).Where(idQuery, req.UserIDs).Updates(map[string]interface{}{
 			"status":        models.StatusSuspended,
 			"status_reason": req.Reason,
 			"updated_at":    time.Now(),
 		}).Error; err != nil {
-			failed++
-			errors = append(errors, gin.H{"id": uid, "error": err.Error()})
-		} else {
-			success++
-			middleware.InvalidateRolePermsCache(uid)
-			getUserRepo().InvalidateCache(uid)
-			LogAudit(c, "BULK_SUSPEND", "user", uid, gin.H{"reason": req.Reason})
+			api_response.Error(c, http.StatusInternalServerError, "Failed to suspend users")
+			return
 		}
 	}
-	api_response.Success(c, gin.H{"success": success, "failed": failed, "errors": errors})
+	api_response.Success(c, bulkUserActionResult(c, req.UserIDs, existing, "BULK_SUSPEND", gin.H{"reason": req.Reason}))
 }
 
-// BulkActivateUsers activates multiple users.
+// BulkActivateUsers activates multiple users in a single batched update
+// (previously issued one UPDATE per user id — an N+1 query pattern).
 func BulkActivateUsers(c *gin.Context) {
 	var req struct {
 		UserIDs []string `json:"userIds" binding:"required,min=1"`
@@ -172,28 +206,26 @@ func BulkActivateUsers(c *gin.Context) {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	success := int64(0)
-	failed := int64(0)
-	var errors []gin.H
-	for _, uid := range req.UserIDs {
-		if err := db.DB.Model(&models.User{}).Where(idQuery, uid).Updates(map[string]interface{}{
+	existing, err := findExistingUserIDs(req.UserIDs)
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to look up users")
+		return
+	}
+	if len(existing) > 0 {
+		if err := db.DB.Model(&models.User{}).Where(idQuery, req.UserIDs).Updates(map[string]interface{}{
 			"status":        models.StatusActive,
 			"status_reason": nil,
 			"updated_at":    time.Now(),
 		}).Error; err != nil {
-			failed++
-			errors = append(errors, gin.H{"id": uid, "error": err.Error()})
-		} else {
-			success++
-			middleware.InvalidateRolePermsCache(uid)
-			getUserRepo().InvalidateCache(uid)
-			LogAudit(c, "BULK_ACTIVATE", "user", uid, nil)
+			api_response.Error(c, http.StatusInternalServerError, "Failed to activate users")
+			return
 		}
 	}
-	api_response.Success(c, gin.H{"success": success, "failed": failed, "errors": errors})
+	api_response.Success(c, bulkUserActionResult(c, req.UserIDs, existing, "BULK_ACTIVATE", nil))
 }
 
-// BulkRestoreUsers restores multiple soft-deleted users.
+// BulkRestoreUsers restores multiple soft-deleted users in a single batched
+// update (previously issued one UPDATE per user id — an N+1 query pattern).
 func BulkRestoreUsers(c *gin.Context) {
 	var req struct {
 		UserIDs []string `json:"userIds" binding:"required,min=1"`
@@ -202,24 +234,26 @@ func BulkRestoreUsers(c *gin.Context) {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	success := int64(0)
-	failed := int64(0)
-	var errors []gin.H
-	for _, uid := range req.UserIDs {
-		if err := db.DB.Model(&models.User{}).Unscoped().Where("id = ?", uid).Update("deleted_at", nil).Error; err != nil {
-			failed++
-			errors = append(errors, gin.H{"id": uid, "error": err.Error()})
-		} else {
-			success++
-			middleware.InvalidateRolePermsCache(uid)
-			getUserRepo().InvalidateCache(uid)
-			LogAudit(c, "BULK_RESTORE", "user", uid, nil)
+	var existingIDs []string
+	if err := db.DB.Model(&models.User{}).Unscoped().Where(idQuery, req.UserIDs).Pluck("id", &existingIDs).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to look up users")
+		return
+	}
+	existing := make(map[string]bool, len(existingIDs))
+	for _, id := range existingIDs {
+		existing[id] = true
+	}
+	if len(existing) > 0 {
+		if err := db.DB.Model(&models.User{}).Unscoped().Where(idQuery, req.UserIDs).Update("deleted_at", nil).Error; err != nil {
+			api_response.Error(c, http.StatusInternalServerError, "Failed to restore users")
+			return
 		}
 	}
-	api_response.Success(c, gin.H{"success": success, "failed": failed, "errors": errors})
+	api_response.Success(c, bulkUserActionResult(c, req.UserIDs, existing, "BULK_RESTORE", nil))
 }
 
-// BulkAssignRole assigns a role to multiple users.
+// BulkAssignRole assigns a role to multiple users in a single batched update
+// (previously issued one UPDATE per user id — an N+1 query pattern).
 func BulkAssignRole(c *gin.Context) {
 	var req struct {
 		UserIDs []string `json:"userIds" binding:"required,min=1"`
@@ -233,24 +267,21 @@ func BulkAssignRole(c *gin.Context) {
 		api_response.Error(c, http.StatusBadRequest, "invalid role")
 		return
 	}
-	success := int64(0)
-	failed := int64(0)
-	var errors []gin.H
-	for _, uid := range req.UserIDs {
-		if err := db.DB.Model(&models.User{}).Where(idQuery, uid).Updates(map[string]interface{}{
+	existing, err := findExistingUserIDs(req.UserIDs)
+	if err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to look up users")
+		return
+	}
+	if len(existing) > 0 {
+		if err := db.DB.Model(&models.User{}).Where(idQuery, req.UserIDs).Updates(map[string]interface{}{
 			"role":       req.Role,
 			"updated_at": time.Now(),
 		}).Error; err != nil {
-			failed++
-			errors = append(errors, gin.H{"id": uid, "error": err.Error()})
-		} else {
-			success++
-			middleware.InvalidateRolePermsCache(uid)
-			getUserRepo().InvalidateCache(uid)
-			LogAudit(c, "BULK_ASSIGN_ROLE", "user", uid, gin.H{"role": req.Role})
+			api_response.Error(c, http.StatusInternalServerError, "Failed to assign role")
+			return
 		}
 	}
-	api_response.Success(c, gin.H{"success": success, "failed": failed, "errors": errors})
+	api_response.Success(c, bulkUserActionResult(c, req.UserIDs, existing, "BULK_ASSIGN_ROLE", gin.H{"role": req.Role}))
 }
 
 // SendActivationLink sends an activation/verification link to the user.

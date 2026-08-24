@@ -20,6 +20,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 // AdminExamsBulkUpload imports questions for a new exam from a CSV file.
@@ -172,6 +173,12 @@ func applyCoupon(couponCode string, price float64) (*models.Coupon, float64) {
 	return &coupon, price
 }
 
+// SubscriptionCheckout is the single entry point the storefront's plan
+// upgrade flow calls, covering all three payment methods it offers:
+// card / wallet (Paymob) and internal_wallet (platform balance). It looks
+// the plan up by real id — resolving billingCycle to the sibling plan row
+// sharing the same GroupKey when the caller wants the other interval — so
+// pricing always comes from the SubscriptionPlan table, never a guess.
 func SubscriptionCheckout(c *gin.Context) {
 	userId, ok := getAuthenticatedUserID(c)
 	if !ok {
@@ -180,7 +187,8 @@ func SubscriptionCheckout(c *gin.Context) {
 
 	var req struct {
 		PlanID        string `json:"planId" binding:"required"`
-		PaymentMethod string `json:"paymentMethod" binding:"required"`
+		BillingCycle  string `json:"billingCycle"` // "monthly" | "yearly" (optional)
+		PaymentMethod string `json:"paymentMethod" binding:"required,oneof=card wallet internal_wallet"`
 		CouponCode    string `json:"couponCode"`
 	}
 
@@ -189,19 +197,23 @@ func SubscriptionCheckout(c *gin.Context) {
 		return
 	}
 
-	planPrices := map[string]float64{
-		"basic": 150,
-		"pro":   350,
-		"elite": 600,
-	}
-	price, ok := planPrices[req.PlanID]
-	if !ok {
-		api_response.Error(c, http.StatusBadRequest, "Invalid plan ID")
+	plan, err := resolveCheckoutPlan(req.PlanID, req.BillingCycle)
+	if err != nil {
+		api_response.Error(c, http.StatusNotFound, errPlanNotFound)
 		return
 	}
 
+	price, _ := plan.Price.Float64()
 	appliedCoupon, discountedPrice := applyCoupon(req.CouponCode, price)
 	price = discountedPrice
+
+	if req.PaymentMethod == "internal_wallet" {
+		checkoutPurchasePlanWithWallet(c, userId, plan, price, appliedCoupon)
+		return
+	}
+
+	var user models.User
+	db.DB.First(&user, queryID, userId)
 
 	paymobSvc := paymentservice.NewPaymobService()
 	token, err := paymobSvc.Authenticate()
@@ -213,9 +225,9 @@ func SubscriptionCheckout(c *gin.Context) {
 	amountCents := int64(price * 100)
 	items := []interface{}{
 		map[string]interface{}{
-			"name":         fmt.Sprintf("Subscription: %s", req.PlanID),
+			"name":         fmt.Sprintf("Subscription: %s", plan.Name),
 			"amount_cents": amountCents,
-			"description":  fmt.Sprintf("Plan ID: %s", req.PlanID),
+			"description":  fmt.Sprintf("Plan ID: %s", plan.ID),
 			"quantity":     1,
 		},
 	}
@@ -225,9 +237,6 @@ func SubscriptionCheckout(c *gin.Context) {
 		api_response.Error(c, http.StatusInternalServerError, "فشل إنشاء طلب الدفع")
 		return
 	}
-
-	var user models.User
-	db.DB.First(&user, queryID, userId)
 
 	billingData := getBillingData(user)
 	integrationID := getIntegrationID(paymobSvc, req.PaymentMethod)
@@ -240,10 +249,12 @@ func SubscriptionCheckout(c *gin.Context) {
 
 	payment := models.Payment{
 		UserID:        userId,
+		PlanID:        plan.ID,
 		Amount:        decimal.NewFromFloat(price),
-		Method:        req.PaymentMethod,
+		Currency:      plan.Currency,
+		Method:        "PAYMOB_" + req.PaymentMethod,
 		Status:        models.PaymentPending,
-		Reference:     fmt.Sprintf("SUB-%d", time.Now().Unix()),
+		Reference:     generateSecureReference("SUB"),
 		PaymobOrderID: orderID,
 	}
 	if err := SafeCreate(db.DB, &payment); err != nil {
@@ -257,15 +268,74 @@ func SubscriptionCheckout(c *gin.Context) {
 
 	if req.PaymentMethod == "wallet" {
 		walletUrl, _ := paymobSvc.CreateWalletRequest(paymentKey, billingData["phone_number"])
-		api_response.Success(c, gin.H{"redirectUrl": walletUrl, "orderId": orderID})
+		api_response.Success(c, gin.H{"success": true, "paymentKey": paymentKey, "redirectUrl": walletUrl, "orderId": orderID})
 		return
 	}
 
 	api_response.Success(c, gin.H{
+		"success":    true,
 		"paymentKey": paymentKey,
 		"iframeId":   paymobSvc.IframeID,
 		"orderId":    orderID,
 	})
+}
+
+// resolveCheckoutPlan looks the requested plan up by id, then — if the
+// caller asked for the other billing cycle — swaps it for the sibling plan
+// sharing the same GroupKey with a matching Interval, when one exists.
+// Falls back to the originally requested plan if no such sibling was set up
+// by an admin, so a tier without a yearly variant still checks out fine.
+func resolveCheckoutPlan(planID, billingCycle string) (models.SubscriptionPlan, error) {
+	var plan models.SubscriptionPlan
+	if err := db.DB.First(&plan, idQuery, planID).Error; err != nil {
+		return plan, err
+	}
+
+	wantInterval := models.SubscriptionInterval("")
+	switch billingCycle {
+	case "yearly":
+		wantInterval = models.IntervalYearly
+	case "monthly":
+		wantInterval = models.IntervalMonthly
+	}
+	if wantInterval == "" || plan.Interval == wantInterval {
+		return plan, nil
+	}
+
+	var sibling models.SubscriptionPlan
+	if err := db.DB.Where("group_key = ? AND interval = ? AND "+isActiveQuery, plan.GroupKey, wantInterval, true).
+		First(&sibling).Error; err != nil {
+		return plan, nil
+	}
+	return sibling, nil
+}
+
+// checkoutPurchasePlanWithWallet handles the internal_wallet payment method:
+// deduct the platform balance immediately and activate the subscription,
+// mirroring PurchasePlan's transaction but reusing the coupon already
+// applied by the caller (avoids redeeming the same coupon twice).
+func checkoutPurchasePlanWithWallet(c *gin.Context, userId string, plan models.SubscriptionPlan, finalPrice float64, appliedCoupon *models.Coupon) {
+	paymentRef := generateSecureReference("SUB")
+
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		var user models.User
+		if err := tx.Where(idQuery, userId).First(&user).Error; err != nil {
+			return err
+		}
+		if err := subDeductUserBalance(tx, userId, &user, finalPrice, fmt.Sprintf("ترقية اشتراك: %s", plan.NameAr), paymentRef); err != nil {
+			return err
+		}
+		if appliedCoupon != nil {
+			tx.Model(appliedCoupon).UpdateColumn("used_count", appliedCoupon.UsedCount+1)
+		}
+		return createSubscriptionRecords(tx, userId, plan, finalPrice, paymentRef)
+	})
+
+	if err != nil {
+		subHandlePurchaseError(c, err)
+		return
+	}
+	api_response.Success(c, gin.H{"success": true})
 }
 
 func handleBookFileUpload(c *gin.Context, fieldName, prefix string) string {

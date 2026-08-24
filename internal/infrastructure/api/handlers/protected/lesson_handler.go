@@ -189,7 +189,7 @@ func TrackLessonView(c *gin.Context) {
 // GetLessonSubtitles returns subtitle tracks for a lesson.
 func GetLessonSubtitles(c *gin.Context) {
 	lessonID := c.Param("lessonId")
-	if !lessonExists(c, lessonID) {
+	if !lessonContentAccessible(c, lessonID) {
 		return
 	}
 
@@ -208,7 +208,7 @@ func GetLessonSubtitles(c *gin.Context) {
 // GetVideoChapters returns active video chapters for a lesson.
 func GetVideoChapters(c *gin.Context) {
 	lessonID := c.Param("lessonId")
-	if !lessonExists(c, lessonID) {
+	if !lessonContentAccessible(c, lessonID) {
 		return
 	}
 
@@ -224,7 +224,15 @@ func GetVideoChapters(c *gin.Context) {
 	api_response.Success(c, gin.H{"chapters": chapters})
 }
 
-func lessonExists(c *gin.Context, lessonID string) bool {
+// lessonContentAccessible reports whether the caller may view a lesson's
+// supplementary content (subtitles, chapter markers). Writes the appropriate
+// error response and returns false if not. A lesson is accessible if it is
+// marked free, or the caller is enrolled in its parent course — the same
+// rule GetAvailableLessons applies to the lesson's video itself. Without
+// this check, GetLessonSubtitles/GetVideoChapters (both public,
+// unauthenticated routes) would leak paid-course content — e.g. full
+// subtitle transcripts — to anyone who knows or enumerates a lesson ID.
+func lessonContentAccessible(c *gin.Context, lessonID string) bool {
 	var lesson models.SubTopic
 	if err := db.DB.WithContext(c.Request.Context()).First(&lesson, "id = ?", lessonID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -234,5 +242,31 @@ func lessonExists(c *gin.Context, lessonID string) bool {
 		}
 		return false
 	}
+
+	if lesson.IsFree {
+		return true
+	}
+
+	var topic models.Topic
+	if err := db.DB.WithContext(c.Request.Context()).Select("subject_id").First(&topic, "id = ?", lesson.TopicID).Error; err != nil {
+		api_response.Error(c, http.StatusForbidden, "This lesson requires enrollment")
+		return false
+	}
+
+	userIDVal, exists := c.Get("userId")
+	userID, _ := userIDVal.(string)
+	if !exists || userID == "" {
+		api_response.Error(c, http.StatusForbidden, "This lesson requires enrollment")
+		return false
+	}
+
+	isEnrolled := db.DB.WithContext(c.Request.Context()).
+		Where("user_id = ? AND subject_id = ?", userID, topic.SubjectID).
+		First(&models.Enrollment{}).Error == nil
+	if !isEnrolled {
+		api_response.Error(c, http.StatusForbidden, "This lesson requires enrollment")
+		return false
+	}
+
 	return true
 }

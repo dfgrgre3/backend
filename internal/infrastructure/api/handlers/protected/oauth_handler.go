@@ -200,9 +200,25 @@ func (h *OAuthHandler) OAuthCallback(c *gin.Context) {
 				response.Error(c, http.StatusInternalServerError, "Failed to create user profile")
 				return
 			}
+		} else {
+			// SECURITY: an existing account matched by email, but with no
+			// prior OAuth link for this provider, must NOT be silently
+			// linked and logged into. Doing so would let anyone who can get
+			// an OAuth provider to report a given email address (e.g. by
+			// adding that email, verified or not, to their own provider
+			// account — see the GitHub email-fallback note in
+			// oauth_provider.go) take over the matching Thanawy account
+			// without ever proving they control it. Require the user to log
+			// in normally first and link the provider explicitly from
+			// account settings (LinkOAuthProvider), which operates on an
+			// already-authenticated session.
+			tx.Rollback()
+			response.Error(c, http.StatusConflict, "An account with this email already exists. Please log in and link this provider from your account settings.")
+			return
 		}
 
-		// 3. Create OAuth link
+		// 3. Create OAuth link (new user only — see the SECURITY note above
+		// for the existing-account-by-email case, which returns early).
 		oauthAccount = models.OAuthAccount{
 			UserID:         user.ID,
 			Provider:       providerName,

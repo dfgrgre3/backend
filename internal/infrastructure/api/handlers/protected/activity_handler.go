@@ -31,14 +31,30 @@ const (
 
 const userIDQuery = "user_id = ?"
 
-// Tasks
-func GetTasks(c *gin.Context) {
+// activityAuthUserID returns the authenticated user's ID, or writes a 401 and
+// returns ok=false. Centralizes the exists+type-assertion check so callers in
+// this file can't accidentally skip either half (a bare c.Get(...).(string)
+// panics if the value is ever missing or a non-string type).
+func activityAuthUserID(c *gin.Context) (string, bool) {
 	userIdValue, exists := c.Get("userId")
 	if !exists || userIdValue == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return "", false
+	}
+	userId, ok := userIdValue.(string)
+	if !ok || userId == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return "", false
+	}
+	return userId, true
+}
+
+// Tasks
+func GetTasks(c *gin.Context) {
+	userId, ok := activityAuthUserID(c)
+	if !ok {
 		return
 	}
-	userId := userIdValue.(string)
 
 	limit := 100
 	if v, err := strconv.Atoi(c.DefaultQuery("limit", "100")); err == nil && v > 0 {
@@ -68,12 +84,11 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
-	userIdValue, exists := c.Get("userId")
-	if !exists || userIdValue == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	userId, ok := activityAuthUserID(c)
+	if !ok {
 		return
 	}
-	task.UserID = userIdValue.(string)
+	task.UserID = userId
 
 	if err := SafeCreate(db.DB, &task); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create task"})
@@ -84,12 +99,10 @@ func CreateTask(c *gin.Context) {
 
 func UpdateTask(c *gin.Context) {
 	id := c.Param("id")
-	userIdValue, exists := c.Get("userId")
-	if !exists || userIdValue == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	uid, ok := activityAuthUserID(c)
+	if !ok {
 		return
 	}
-	uid := userIdValue.(string)
 
 	var existingTask models.Task
 	if err := db.DB.Where("id = ? AND user_id = ?", id, uid).Take(&existingTask).Error; err != nil {
@@ -126,12 +139,10 @@ func UpdateTask(c *gin.Context) {
 
 func DeleteTask(c *gin.Context) {
 	id := c.Param("id")
-	userIdValue, exists := c.Get("userId")
-	if !exists || userIdValue == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	uid, ok := activityAuthUserID(c)
+	if !ok {
 		return
 	}
-	uid := userIdValue.(string)
 
 	if err := db.DB.Where("id = ? AND user_id = ?", id, uid).Delete(&models.Task{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete task"})
@@ -142,12 +153,10 @@ func DeleteTask(c *gin.Context) {
 
 // Study Sessions
 func GetStudySessions(c *gin.Context) {
-	userIdValue, exists := c.Get("userId")
-	if !exists || userIdValue == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	userId, ok := activityAuthUserID(c)
+	if !ok {
 		return
 	}
-	userId := userIdValue.(string)
 
 	limit := parseStudySessionsLimit(c)
 	cacheKey := fmt.Sprintf("study_sessions:%s:%d", userId, limit)
@@ -254,10 +263,11 @@ func CreateStudySession(c *gin.Context) {
 		return
 	}
 
-	userId, _ := c.Get("userId")
-	if userId != nil {
-		session.UserID = userId.(string)
+	userId, ok := activityAuthUserID(c)
+	if !ok {
+		return
 	}
+	session.UserID = userId
 
 	if err := SafeCreate(db.DB, &session); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create study session"})
@@ -287,12 +297,10 @@ func invalidateStudySessionsCache(userID string) {
 
 // Schedule
 func GetSchedule(c *gin.Context) {
-	userIdValue, exists := c.Get("userId")
-	if !exists || userIdValue == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	userId, ok := activityAuthUserID(c)
+	if !ok {
 		return
 	}
-	userId := userIdValue.(string)
 
 	readDB := db.ReadDB()
 	if readDB == nil {
@@ -316,8 +324,10 @@ func UpdateSchedule(c *gin.Context) {
 		return
 	}
 
-	userId, _ := c.Get("userId")
-	uid := userId.(string)
+	uid, ok := activityAuthUserID(c)
+	if !ok {
+		return
+	}
 
 	var schedule models.Schedule
 	err := db.DB.Where(userIDQuery, uid).Take(&schedule).Error
@@ -338,12 +348,10 @@ func UpdateSchedule(c *gin.Context) {
 
 // Reminders
 func GetReminders(c *gin.Context) {
-	userIdValue, exists := c.Get("userId")
-	if !exists || userIdValue == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	userId, ok := activityAuthUserID(c)
+	if !ok {
 		return
 	}
-	userId := userIdValue.(string)
 
 	var reminders []models.Reminder
 	if err := db.DB.Where(userIDQuery, userId).Order("remind_at asc").Limit(100).Find(&reminders).Error; err != nil {
@@ -360,10 +368,11 @@ func CreateReminder(c *gin.Context) {
 		return
 	}
 
-	userId, _ := c.Get("userId")
-	if userId != nil {
-		reminder.UserID = userId.(string)
+	userId, ok := activityAuthUserID(c)
+	if !ok {
+		return
 	}
+	reminder.UserID = userId
 
 	if err := SafeCreate(db.DB, &reminder); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create reminder"})

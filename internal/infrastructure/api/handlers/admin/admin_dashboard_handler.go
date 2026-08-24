@@ -36,11 +36,15 @@ func GetAdminDashboard(c *gin.Context) {
 		cacheKey = fmt.Sprintf("admin:dashboard:stats:%s", timeParam)
 	}
 
-	if payload, ok := getCachedAdminDashboard(context.Background(), cacheKey); ok {
+	if payload, ok := getCachedAdminDashboard(c.Request.Context(), cacheKey); ok {
 		api_response.Success(c, filterDashboardPayload(c, payload))
 		return
 	}
 
+	// This closure may serve multiple concurrent callers via singleflight, so
+	// it intentionally uses context.Background() rather than this request's
+	// context: cancelling it because *this* caller disconnected would also
+	// abort the response every other waiting request needs.
 	payload, err, _ := adminDashboardSF.Do(cacheKey, func() (interface{}, error) {
 		if cached, ok := getCachedAdminDashboard(context.Background(), cacheKey); ok {
 			return cached, nil

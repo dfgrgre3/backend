@@ -175,6 +175,13 @@ func (r *SubjectRepository) cacheSubject(subject *models.Subject) {
 }
 
 // InvalidateSubjectCache clears cached subject data when relations are updated
+//
+// PERFORMANCE/CORRECTNESS: Redis DEL does not glob-expand its key argument —
+// a literal `Del(ctx, "subject:list:*")` only deletes a key named exactly
+// "subject:list:*" (which never exists), so this call was a silent no-op and
+// list caches never actually got invalidated here. Fixed to SCAN for
+// matching keys and DEL each one, same pattern already used correctly by
+// InvalidateAllSubjectCache below.
 func (r *SubjectRepository) InvalidateSubjectCache(id string) {
 	if cache.Redis == nil {
 		return
@@ -185,8 +192,22 @@ func (r *SubjectRepository) InvalidateSubjectCache(id string) {
 
 	// Delete single subject cache
 	cache.Redis.Del(ctx, fmt.Sprintf(subjectCacheKeyFormat, SubjectCachePrefix, id))
-	// Delete list caches that might contain stale data
-	cache.Redis.Del(ctx, fmt.Sprintf("%slist:*", SubjectCachePrefix))
+
+	// Delete list caches that might contain stale data (glob pattern requires
+	// SCAN + DEL per matched key — see comment above).
+	listPattern := fmt.Sprintf("%slist:*", SubjectCachePrefix)
+	iter := cache.Redis.Scan(ctx, 0, listPattern, 100).Iterator()
+	for iter.Next(ctx) {
+		if err := iter.Err(); err != nil {
+			log.Printf("[SubjectRepo] Error during list cache scan: %v", err)
+			break
+		}
+		cache.Redis.Del(ctx, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		log.Printf("[SubjectRepo] Final list cache scan error: %v", err)
+	}
+
 	// Invalidate dependent dashboard stats
 	cache.Redis.Del(ctx, "admin:dashboard:stats")
 }

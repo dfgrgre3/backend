@@ -41,18 +41,23 @@ type UpdateCourseCommand struct {
 	EstimatedDurationMins *int
 	HasCertificate        *bool
 	CertificateTemplate   *string
-	MaxStudents           *int
-	IsFeatured            *bool
-	IsTrending            *bool
-	IsNew                 *bool
-	SEOTitle              *string
-	SEODescription        *string
-	SEOKeywords           []string
-	PrerequisitesText     *string
-	TargetAudience        *string
-	LearningOutcomes      []string
-	PrimaryInstructorID   *string
-	CategoryIDs           []string
+	// ClearCertificateTemplate is set when the caller explicitly sent
+	// certificateTemplate: null (as opposed to omitting the field), since a
+	// nil CertificateTemplate can't otherwise distinguish "leave it" from
+	// "clear it".
+	ClearCertificateTemplate bool
+	MaxStudents              *int
+	IsFeatured               *bool
+	IsTrending               *bool
+	IsNew                    *bool
+	SEOTitle                 *string
+	SEODescription           *string
+	SEOKeywords              []string
+	PrerequisitesText        *string
+	TargetAudience           *string
+	LearningOutcomes         []string
+	PrimaryInstructorID      *string
+	CategoryIDs              []string
 }
 
 // EnrollUserCommand represents a command to enroll a user in a course

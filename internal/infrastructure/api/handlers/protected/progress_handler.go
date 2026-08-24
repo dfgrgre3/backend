@@ -21,8 +21,16 @@ type ProgressSummary struct {
 }
 
 func GetProgressSummary(c *gin.Context) {
-	userId, _ := c.Get("userId")
-	uid := userId.(string)
+	userId, exists := c.Get("userId")
+	if !exists {
+		apiresponse.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	uid, ok := userId.(string)
+	if !ok || uid == "" {
+		apiresponse.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
 
 	summary, err := progressQuery.GetSummary(uid)
 	if err != nil {

@@ -46,6 +46,9 @@ func GetInteractiveQuestions(c *gin.Context) {
 
 	lessonID := strings.TrimSpace(c.Param("lessonId"))
 	if lessonID == "" {
+		lessonID = strings.TrimSpace(c.Param("id"))
+	}
+	if lessonID == "" {
 		apiresponse.Error(c, http.StatusBadRequest, "Lesson id is required")
 		return
 	}
@@ -66,6 +69,9 @@ func CreateInteractiveQuestion(c *gin.Context) {
 	}
 
 	lessonID := strings.TrimSpace(c.Param("lessonId"))
+	if lessonID == "" {
+		lessonID = strings.TrimSpace(c.Param("id"))
+	}
 	if lessonID == "" {
 		apiresponse.Error(c, http.StatusBadRequest, "Lesson id is required")
 		return

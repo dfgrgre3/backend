@@ -30,6 +30,13 @@ func (r *SecurityLogRepository) FindByUserID(userID string, limit int) ([]models
 	return logs, err
 }
 
+// DeleteByUserID permanently deletes every security log row owned by the
+// given user. Returns the number of rows deleted.
+func (r *SecurityLogRepository) DeleteByUserID(userID string) (int64, error) {
+	result := r.db.Where("user_id = ?", userID).Delete(&models.SecurityLog{})
+	return result.RowsAffected, result.Error
+}
+
 func (r *SecurityLogRepository) FindAll(limit, offset int) ([]models.SecurityLog, int64, error) {
 	var logs []models.SecurityLog
 	var count int64

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	models "thanawy-backend/internal/domain/common"
+	courseservice "thanawy-backend/internal/domain/course/service"
 	apiresponse "thanawy-backend/internal/infrastructure/api/response"
 	db "thanawy-backend/internal/infrastructure/database"
 
@@ -18,15 +19,37 @@ const maxTranscriptContentBytes = 2 * 1024 * 1024 // 2MB — generous for an SRT
 // GetLessonTranscript is student-facing (mounted under /api/courses) — any
 // enrolled viewer can read a lesson's transcript, same access level as its
 // video and notes.
+//
+// SECURITY: this used to skip entitlement entirely, so any authenticated
+// user (not just enrolled ones) could read the transcript of a paid lesson
+// by guessing/observing its lesson id. Now gated by the same
+// CheckLessonEligibility check ProtectedLessonContent already enforces for
+// the lesson's video/notes.
 func GetLessonTranscript(c *gin.Context) {
+	userID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		return
+	}
+
 	lessonID := strings.TrimSpace(c.Param("id"))
 	if lessonID == "" {
 		apiresponse.Error(c, http.StatusBadRequest, "Lesson id is required")
 		return
 	}
 
+	lessonService := courseservice.NewLessonService()
+	eligibility, err := lessonService.CheckLessonEligibility(userID, lessonID)
+	if err != nil {
+		apiresponse.Error(c, http.StatusNotFound, err.Error())
+		return
+	}
+	if !eligibility.Eligible {
+		apiresponse.Error(c, http.StatusForbidden, eligibility.Reason)
+		return
+	}
+
 	var transcript models.LessonTranscript
-	err := db.ReadDB().Where("lesson_id = ?", lessonID).First(&transcript).Error
+	err = db.ReadDB().Where("lesson_id = ?", lessonID).First(&transcript).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			apiresponse.Success(c, gin.H{"content": "", "format": "srt", "language": "ar"})
@@ -43,6 +66,9 @@ func GetLessonTranscript(c *gin.Context) {
 // /api/admin) — replaces the lesson's transcript with the uploaded content.
 func UpsertLessonTranscript(c *gin.Context) {
 	lessonID := strings.TrimSpace(c.Param("lessonId"))
+	if lessonID == "" {
+		lessonID = strings.TrimSpace(c.Param("id"))
+	}
 	if lessonID == "" {
 		apiresponse.Error(c, http.StatusBadRequest, "Lesson id is required")
 		return
@@ -98,6 +124,9 @@ func UpsertLessonTranscript(c *gin.Context) {
 // DeleteLessonTranscript removes a lesson's transcript (admin/instructor-facing).
 func DeleteLessonTranscript(c *gin.Context) {
 	lessonID := strings.TrimSpace(c.Param("lessonId"))
+	if lessonID == "" {
+		lessonID = strings.TrimSpace(c.Param("id"))
+	}
 	if lessonID == "" {
 		apiresponse.Error(c, http.StatusBadRequest, "Lesson id is required")
 		return

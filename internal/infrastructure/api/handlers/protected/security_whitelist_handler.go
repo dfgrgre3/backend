@@ -58,7 +58,16 @@ func AddIPToWhitelist(c *gin.Context) {
 		return
 	}
 
-	adminID, _ := c.Get("userId")
+	adminIDVal, exists := c.Get("userId")
+	if !exists {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	adminID, ok := adminIDVal.(string)
+	if !ok || adminID == "" {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
 
 	entry := models.IPWhitelistEntry{
 		IPAddress:   req.IPAddress,
@@ -68,7 +77,7 @@ func AddIPToWhitelist(c *gin.Context) {
 		Status:      "active",
 		IsTemporary: !req.ExpiresAt.IsZero(),
 		ExpiresAt:   &req.ExpiresAt,
-		CreatedBy:   adminID.(string),
+		CreatedBy:   adminID,
 		CreatedAt:   time.Now(),
 	}
 

@@ -17,6 +17,12 @@ import (
 //  Update Profile
 // ─────────────────────────────────────────────
 
+// NOTE: This is the legacy `/api/auth/profile` endpoint. The canonical,
+// actively-used profile endpoint is `/api/users/profile`
+// (see protected/user_profile_handler.go's UpdateProfile), which the
+// frontend settings page targets and which accepts the full profile field
+// set (phone, city, gender, school, birthDate, etc.). This handler is kept
+// for backward compatibility only — do not extend it, extend the other one.
 func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	userID, exists := c.Get("userId")
 	if !exists {

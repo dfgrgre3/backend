@@ -2,18 +2,12 @@ package protected
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	models "thanawy-backend/internal/domain/common"
-	"time"
-
-	api_response "thanawy-backend/internal/infrastructure/api/response"
-	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // SearchResultItem represents a single unified search result returned to the frontend.
@@ -88,8 +82,11 @@ func PublicSearch(c *gin.Context) {
 		typeFilter = "all"
 	}
 
-	// Build ILIKE pattern for PostgreSQL case-insensitive search
-	pattern := "%" + q + "%"
+	// Build ILIKE pattern for PostgreSQL case-insensitive search. Escape
+	// ILIKE's own wildcard characters (% and _) in the user's query so a
+	// literal search for e.g. "100%" or "a_b" matches that exact text
+	// instead of being interpreted as a pattern.
+	pattern := "%" + escapeLikePattern(q) + "%"
 
 	var results []SearchResultItem
 
@@ -260,308 +257,10 @@ func PublicSearch(c *gin.Context) {
 	})
 }
 
-// computeRelevance calculates a simple relevance score (0-100) based on
-// how well the query matches the title and description.
-// Title matches weigh more than description matches.
-func computeRelevance(query, title, description string) int {
-	if query == "" {
-		return 0
-	}
-
-	queryLower := strings.ToLower(query)
-	titleLower := strings.ToLower(title)
-	descLower := strings.ToLower(description)
-
-	score := 0
-
-	// Exact title match → highest
-	if titleLower == queryLower {
-		score = 100
-	} else if strings.Contains(titleLower, queryLower) {
-		// Title starts with query → very high
-		if strings.HasPrefix(titleLower, queryLower) {
-			score = 90
-		} else {
-			score = 75
-		}
-	} else if strings.Contains(descLower, queryLower) {
-		// Description match → medium
-		score = 50
-	} else {
-		// Word-level matching for partial relevance
-		queryWords := strings.Fields(queryLower)
-		matchedWords := 0
-		for _, word := range queryWords {
-			if len(word) < 2 {
-				continue
-			}
-			if strings.Contains(titleLower, word) {
-				matchedWords++
-			} else if strings.Contains(descLower, word) {
-				matchedWords++
-			}
-		}
-		if len(queryWords) > 0 {
-			score = (matchedWords * 30) / len(queryWords)
-		}
-	}
-
-	// Clamp to 0-100
-	if score < 0 {
-		score = 0
-	}
-	if score > 100 {
-		score = 100
-	}
-	if score == 0 {
-		// Ensure non-zero for display when we have a result
-		score = 10
-	}
-
-	return score
-}
-
-// sortResultsByRelevance sorts results in descending order of relevance
-// using a simple insertion sort (results slice is small, ≤ 50 items).
-func sortResultsByRelevance(results []SearchResultItem) {
-	for i := 1; i < len(results); i++ {
-		for j := i; j > 0 && results[j].Relevance > results[j-1].Relevance; j-- {
-			results[j], results[j-1] = results[j-1], results[j]
-		}
-	}
-}
-
-// Compile-time interface check to ensure the handler signature matches gin.HandlerFunc.
-var _ gin.HandlerFunc = PublicSearch
-
-// Ensure gorm is imported (used indirectly through models and db packages).
-var _ = gorm.ErrRecordNotFound
-
-// SearchHistoryRequest represents a search history tracking request
-type SearchHistoryRequest struct {
-	Query     string                 `json:"query" binding:"required"`
-	Results   int                    `json:"results"`
-	Type      string                 `json:"type"` // course, resource, teacher, video, all
-	Timestamp int64                  `json:"timestamp"`
-	Metadata  map[string]interface{} `json:"metadata,omitempty"`
-}
-
-// TrackSearchHistory tracks user search queries for analytics
-// @Summary Track search history
-// @Description Track user search queries for analytics and personalization
-// @Tags search,analytics
-// @Accept json
-// @Produce json
-// @Param request body SearchHistoryRequest true "Search history data"
-// @Success 200 {object} map[string]bool
-// @Router /api/ai/search/track [post]
-func TrackSearchHistory(c *gin.Context) {
-	var req SearchHistoryRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api_response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	// Get user ID if authenticated (optional)
-	var userID *string
-	if uid, exists := c.Get("userId"); exists && uid != nil {
-		if uidStr, ok := uid.(string); ok {
-			userID = &uidStr
-		}
-	}
-
-	// Build payload
-	payload := models.JSONMap{
-		"query":   req.Query,
-		"results": req.Results,
-		"type":    req.Type,
-	}
-	if req.Metadata != nil {
-		for k, v := range req.Metadata {
-			payload[k] = v
-		}
-	}
-
-	// Capture request metadata for analytics
-	if ip := c.ClientIP(); ip != "" {
-		payload["ipAddress"] = ip
-	}
-	if ua := c.GetHeader("User-Agent"); ua != "" {
-		payload["userAgent"] = ua
-	}
-
-	// Use client timestamp if provided, otherwise server time
-	receivedAt := time.Now()
-	if req.Timestamp > 0 {
-		clientTime := time.UnixMilli(req.Timestamp)
-		if clientTime.Before(receivedAt.Add(time.Hour)) {
-			receivedAt = clientTime
-		}
-	}
-
-	event := models.AnalyticsEvent{
-		EventID:    fmt.Sprintf("search-%s-%d", req.Query, time.Now().UnixNano()),
-		EventType:  "search_query",
-		UserID:     userID,
-		Payload:    payload,
-		Source:     "frontend",
-		ReceivedAt: receivedAt,
-	}
-
-	// Fire-and-forget style: log but don't fail the request on DB error
-	if err := db.RawWriteDB(c.Request.Context()).Create(&event).Error; err != nil {
-		log.Printf("Failed to track search history: %v", err)
-	}
-
-	api_response.Success(c, gin.H{"success": true})
-}
-
-// GetUserSearchHistory returns the authenticated user's search history
-// @Summary Get user search history
-// @Description Get the authenticated user's recent search queries
-// @Tags search,analytics
-// @Produce json
-// @Param limit query int false "Max results (default 20, max 100)"
-// @Success 200 {object} map[string]interface{}
-// @Router /api/ai/search/history [get]
-func GetUserSearchHistory(c *gin.Context) {
-	userID, ok := getAuthenticatedUserID(c)
-	if !ok {
-		return
-	}
-
-	limit := 20
-	if l := c.Query("limit"); l != "" {
-		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
-	if limit > 100 {
-		limit = 100
-	}
-
-	var events []models.AnalyticsEvent
-	query := db.RawReadDB(c.Request.Context()).Where("event_type = ? AND user_id = ?", "search_query", userID).
-		Order("received_at DESC").
-		Limit(limit)
-
-	if err := query.Find(&events).Error; err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch search history")
-		return
-	}
-
-	// Extract relevant data from events
-	history := make([]gin.H, 0, len(events))
-	for _, event := range events {
-		history = append(history, gin.H{
-			"query":     event.Payload["query"],
-			"results":   event.Payload["results"],
-			"type":      event.Payload["type"],
-			"timestamp": event.ReceivedAt,
-		})
-	}
-
-	api_response.Success(c, gin.H{
-		"history": history,
-		"count":   len(history),
-	})
-}
-
-// PromoEventRequest represents a promo event tracking request
-type PromoEventRequest struct {
-	PromoID   string                 `json:"promoId"`
-	ID        string                 `json:"id"`
-	EventType string                 `json:"eventType"`
-	Type      string                 `json:"type"`
-	Component string                 `json:"component"`
-	Timestamp int64                  `json:"timestamp"`
-	Metadata  map[string]interface{} `json:"metadata,omitempty"`
-}
-
-// TrackPromoEvent tracks promo interaction events for analytics
-// @Summary Track promo event
-// @Description Track user interactions with promotional content
-// @Tags analytics,promo
-// @Accept json
-// @Produce json
-// @Param request body PromoEventRequest true "Promo event data"
-// @Success 200 {object} map[string]bool
-// @Router /api/analytics/promo [post]
-func TrackPromoEvent(c *gin.Context) {
-	var req PromoEventRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api_response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	promoID := req.PromoID
-	if promoID == "" {
-		promoID = req.ID
-	}
-	if promoID == "" {
-		promoID = req.Component
-	}
-	if promoID == "" {
-		promoID = "general"
-	}
-
-	eventType := req.EventType
-	if eventType == "" {
-		eventType = req.Type
-	}
-	if eventType == "" {
-		eventType = "view"
-	}
-
-	// Get user ID if authenticated (optional)
-	var userID *string
-	if uid, exists := c.Get("userId"); exists && uid != nil {
-		if uidStr, ok := uid.(string); ok {
-			userID = &uidStr
-		}
-	}
-
-	// Build payload
-	payload := models.JSONMap{
-		"promoId":   promoID,
-		"eventType": eventType,
-	}
-	if req.Metadata != nil {
-		for k, v := range req.Metadata {
-			payload[k] = v
-		}
-	}
-
-	// Capture request metadata for analytics
-	if ip := c.ClientIP(); ip != "" {
-		payload["ipAddress"] = ip
-	}
-	if ua := c.GetHeader("User-Agent"); ua != "" {
-		payload["userAgent"] = ua
-	}
-
-	// Use client timestamp if provided, otherwise server time
-	receivedAt := time.Now()
-	if req.Timestamp > 0 {
-		clientTime := time.UnixMilli(req.Timestamp)
-		if clientTime.Before(receivedAt.Add(time.Hour)) {
-			receivedAt = clientTime
-		}
-	}
-
-	event := models.AnalyticsEvent{
-		EventID:    fmt.Sprintf("promo-%s-%s-%d", promoID, eventType, time.Now().UnixNano()),
-		EventType:  "promo_" + eventType,
-		UserID:     userID,
-		Payload:    payload,
-		Source:     "frontend",
-		ReceivedAt: receivedAt,
-	}
-
-	// Fire-and-forget style: log but don't fail the request on DB error
-	if err := db.RawWriteDB(c.Request.Context()).Create(&event).Error; err != nil {
-		log.Printf("Failed to track promo event: %v", err)
-	}
-
-	api_response.Success(c, gin.H{"success": true})
+// escapeLikePattern escapes the wildcard characters PostgreSQL's LIKE/ILIKE
+// operator treats specially (%, _, and the escape character itself, \) so a
+// user's literal search text is matched literally rather than as a pattern.
+func escapeLikePattern(s string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`)
+	return replacer.Replace(s)
 }

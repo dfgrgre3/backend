@@ -8,6 +8,7 @@ import (
 	authservice "thanawy-backend/internal/domain/auth/service"
 	"thanawy-backend/internal/infrastructure/api/handlers/protected"
 	"thanawy-backend/internal/infrastructure/persistence/repositories"
+	"time"
 
 	"thanawy-backend/internal/infrastructure/api/middleware"
 	"thanawy-backend/internal/infrastructure/config"
@@ -50,7 +51,9 @@ func SetupPublicRoutes(router *gin.Engine) {
 
 	// Public Exam routes (read-only)
 	router.GET("/api/exams", protected.GetExams)
-	router.GET("/api/exams/results", protected.GetExamResults)
+	// GetExamResults returns the caller's own exam history/answers and must
+	// be authenticated — see the SECURITY note in exam_handler.go.
+	router.GET("/api/exams/results", middleware.Auth(), protected.GetExamResults)
 
 	// Activity routes moved to protected group
 
@@ -85,9 +88,11 @@ func SetupPublicRoutes(router *gin.Engine) {
 		ai.GET("/search/history", protected.GetUserSearchHistory)
 	}
 
-	// Analytics routes (public - for tracking)
-	router.POST("/api/analytics/promo", protected.TrackPromoEvent)
-	router.POST("/api/analytics/mega-menu", protected.TrackMegaMenuEvent)
+	// Analytics routes (public - for tracking). Unauthenticated and write to
+	// the DB on every call, so they need a rate limit like every other
+	// public-facing endpoint to avoid unbounded AnalyticsEvent growth / abuse.
+	router.POST("/api/analytics/promo", middleware.GlobalRateLimiter(120, time.Minute), protected.TrackPromoEvent)
+	router.POST("/api/analytics/mega-menu", middleware.GlobalRateLimiter(120, time.Minute), protected.TrackMegaMenuEvent)
 
 	// Local authentication endpoints
 	oauthRedirectBase := os.Getenv("OAUTH_REDIRECT_BASE_URL")
@@ -148,6 +153,7 @@ func SetupPublicRoutes(router *gin.Engine) {
 	router.GET("/api/auth/sessions", middleware.Auth(), sessionHandler.ListSessions)
 	router.DELETE("/api/auth/sessions/:id", middleware.Auth(), sessionHandler.RevokeSession)
 	router.DELETE("/api/auth/sessions", middleware.Auth(), sessionHandler.RevokeAllSessions)
+	router.GET("/api/auth/security-logs", middleware.Auth(), protected.GetSecurityLogs)
 
 	mfaService := authservice.NewMFAService()
 	mfaHandler := protected.NewMFAHandler(mfaService, authservice.NewAuthTokenService(), authService)
@@ -209,6 +215,8 @@ func SetupPublicRoutes(router *gin.Engine) {
 	// AI Recommendations (optional auth — works without login, returns empty recommendations)
 	router.GET("/api/ai/recommendations", middleware.OptionalAuth(), middleware.AIRateLimiter(), protected.GetAIRecommendations)
 
-	// Public Unified Search (courses, resources, teachers, videos)
-	router.GET("/api/search", protected.PublicSearch)
+	// Public Unified Search (courses, resources, teachers, videos).
+	// Unauthenticated and fans out to 4 ILIKE-pattern DB queries per call, so
+	// it needs its own rate limit rather than running unbounded.
+	router.GET("/api/search", middleware.GlobalRateLimiter(60, time.Minute), protected.PublicSearch)
 }

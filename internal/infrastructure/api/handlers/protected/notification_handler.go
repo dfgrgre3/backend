@@ -44,8 +44,12 @@ func GetNotifications(c *gin.Context) {
 		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	userIDStr, ok := userId.(string)
+	if !ok || userIDStr == "" {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
 
-	userIDStr := userId.(string)
 	limit, offset, beforeTime := parseNotificationsPagination(c)
 	var notifications []models.Notification
 
@@ -220,8 +224,12 @@ func MarkNotificationRead(c *gin.Context) {
 		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	userIDStr, ok := userId.(string)
+	if !ok || userIDStr == "" {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
 
-	userIDStr := userId.(string)
 	var req struct {
 		ID string `json:"id"`
 	}

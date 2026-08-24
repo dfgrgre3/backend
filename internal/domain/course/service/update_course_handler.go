@@ -2,6 +2,7 @@ package courseservice
 
 import (
 	"context"
+	"errors"
 	"strings"
 	models "thanawy-backend/internal/domain/common"
 	"time"
@@ -9,6 +10,12 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+// ErrCertificateTemplateNotFound is returned when CertificateTemplate is set
+// to an id that doesn't match any row in LmsCertificateTemplate. The column
+// itself has no DB-level FK constraint (see LmsCertificateTemplate's doc
+// comment), so this is the only place that catches a bad id before it's saved.
+var ErrCertificateTemplateNotFound = errors.New("certificate template not found")
 
 // UpdateCourseHandler handles course update commands
 type UpdateCourseHandler struct {
@@ -64,7 +71,21 @@ func (h *UpdateCourseHandler) Handle(ctx context.Context, cmd UpdateCourseComman
 		course.HasCertificate = *cmd.HasCertificate
 	}
 	if cmd.CertificateTemplate != nil {
+		templateID, err := uuid.Parse(*cmd.CertificateTemplate)
+		if err != nil {
+			return nil, ErrCertificateTemplateNotFound
+		}
+		var exists int64
+		if err := h.db.WithContext(ctx).Model(&models.LmsCertificateTemplate{}).
+			Where("id = ?", templateID).Count(&exists).Error; err != nil {
+			return nil, err
+		}
+		if exists == 0 {
+			return nil, ErrCertificateTemplateNotFound
+		}
 		course.CertificateTemplate = cmd.CertificateTemplate
+	} else if cmd.ClearCertificateTemplate {
+		course.CertificateTemplate = nil
 	}
 	if cmd.MaxStudents != nil {
 		course.MaxStudents = cmd.MaxStudents

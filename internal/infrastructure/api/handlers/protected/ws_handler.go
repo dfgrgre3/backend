@@ -272,7 +272,11 @@ func WSHandler(c *gin.Context) {
 		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	userID := userIdValue.(string)
+	userID, ok := userIdValue.(string)
+	if !ok || userID == "" {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {

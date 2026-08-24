@@ -116,7 +116,7 @@ func AdminAIPost(c *gin.Context) {
 		}
 
 		aiHandler := NewAIHandler()
-		reply, _, err := aiHandler.callAIWithRetryCustom(messages, "google/gemini-2.0-flash-001")
+		reply, _, err := aiHandler.callAIWithRetryCustom(c.Request.Context(), messages, "google/gemini-2.0-flash-001")
 		if err != nil {
 			api_response.Success(c, gin.H{
 				"message": "عذراً، حدث خطأ في الاتصال بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى.",
@@ -134,7 +134,7 @@ func AdminAIPost(c *gin.Context) {
 		}
 
 		aiHandler := NewAIHandler()
-		reply, _, err := aiHandler.callAIWithRetryCustom(messages, "google/gemini-2.0-flash-001")
+		reply, _, err := aiHandler.callAIWithRetryCustom(c.Request.Context(), messages, "google/gemini-2.0-flash-001")
 		if err != nil {
 			api_response.Error(c, http.StatusInternalServerError, "فشل توليد المحتوى، الرجاء المحاولة مرة أخرى.")
 			return

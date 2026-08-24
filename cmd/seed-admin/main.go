@@ -27,8 +27,18 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	email := "ffyoussef12@gmail.com"
-	password := "Khaled@2008"
+	// SECURITY: previously hardcoded a real email + plaintext password here
+	// (granting SUPER_ADMIN with all permissions), committed and pushed to
+	// git history. Now read from env so no credential lives in source. That
+	// old hardcoded password must still be treated as compromised: rotate it
+	// in the live database (this seeder, re-run with a new
+	// SEED_ADMIN_PASSWORD, does that) even though it no longer appears here —
+	// git history retains it until history is scrubbed separately.
+	email := os.Getenv("SEED_ADMIN_EMAIL")
+	password := os.Getenv("SEED_ADMIN_PASSWORD")
+	if email == "" || password == "" {
+		log.Fatal("SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD must both be set")
+	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), 12)
 	if err != nil {

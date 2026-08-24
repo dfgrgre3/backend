@@ -1,8 +1,10 @@
 package protected
 
 import (
+	"errors"
 	"net/http"
 
+	courseservice "thanawy-backend/internal/domain/course/service"
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +23,12 @@ type LinkExamRequest struct {
 // LinkLessonExam links a lesson to an exam (one exam per lesson; linking a
 // new one replaces any existing link).
 func (h *CourseRESTHandler) LinkLessonExam(c *gin.Context) {
+	parsedSectionID, err := uuid.Parse(c.Param("sectionId"))
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid section ID")
+		return
+	}
+
 	lessonID := c.Param("lessonId")
 	parsedLessonID, err := uuid.Parse(lessonID)
 	if err != nil {
@@ -39,8 +47,12 @@ func (h *CourseRESTHandler) LinkLessonExam(c *gin.Context) {
 		return
 	}
 
-	lesson, err := h.courseService.LinkExam(parsedLessonID, req.ExamID)
+	lesson, err := h.courseService.LinkExam(parsedSectionID, parsedLessonID, req.ExamID)
 	if err != nil {
+		if errors.Is(err, courseservice.ErrLessonSectionMismatch) {
+			api_response.Error(c, http.StatusBadRequest, "Lesson does not belong to the given section")
+			return
+		}
 		api_response.Error(c, http.StatusInternalServerError, "Failed to link exam: "+err.Error())
 		return
 	}
@@ -50,6 +62,12 @@ func (h *CourseRESTHandler) LinkLessonExam(c *gin.Context) {
 
 // UnlinkLessonExam removes a lesson's exam link.
 func (h *CourseRESTHandler) UnlinkLessonExam(c *gin.Context) {
+	parsedSectionID, err := uuid.Parse(c.Param("sectionId"))
+	if err != nil {
+		api_response.Error(c, http.StatusBadRequest, "Invalid section ID")
+		return
+	}
+
 	lessonID := c.Param("lessonId")
 	parsedLessonID, err := uuid.Parse(lessonID)
 	if err != nil {
@@ -57,7 +75,11 @@ func (h *CourseRESTHandler) UnlinkLessonExam(c *gin.Context) {
 		return
 	}
 
-	if err := h.courseService.UnlinkExam(parsedLessonID); err != nil {
+	if err := h.courseService.UnlinkExam(parsedSectionID, parsedLessonID); err != nil {
+		if errors.Is(err, courseservice.ErrLessonSectionMismatch) {
+			api_response.Error(c, http.StatusBadRequest, "Lesson does not belong to the given section")
+			return
+		}
 		api_response.Error(c, http.StatusInternalServerError, "Failed to unlink exam: "+err.Error())
 		return
 	}

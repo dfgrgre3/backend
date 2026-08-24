@@ -179,7 +179,7 @@ func metricWriter() {
 	// 500ms SLOW SQL threshold. A batch of 500 metrics can produce a
 	// single INSERT with hundreds of rows (one per unique route/status
 	// bucket), which was observed taking ~4.7s in production.
-	ticker := time.NewTicker(500 * time.Millisecond)
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	batch := make([]HTTPRequestMetric, 0, 200)
 	for {

@@ -71,6 +71,13 @@ func SetupHexagonalRoutes(router *gin.Engine, handlers *application.Handlers) {
 			courseAdmin.POST("/:id/sections/:sectionId/lessons/:lessonId/exam", handlers.CourseRESTHandler.LinkLessonExam)
 			courseAdmin.DELETE("/:id/sections/:sectionId/lessons/:lessonId/exam", handlers.CourseRESTHandler.UnlinkLessonExam)
 
+			// Assignments (course-scoped catalog + lesson linking)
+			courseAdmin.GET("/:id/assignments", handlers.CourseRESTHandler.ListCourseAssignments)
+			courseAdmin.POST("/:id/assignments", handlers.CourseRESTHandler.CreateCourseAssignment)
+			courseAdmin.DELETE("/:id/assignments/:assignmentId", handlers.CourseRESTHandler.DeleteCourseAssignment)
+			courseAdmin.POST("/:id/assignments/:assignmentId/link", handlers.CourseRESTHandler.LinkAssignment)
+			courseAdmin.DELETE("/:id/assignments/:assignmentId/link", handlers.CourseRESTHandler.UnlinkAssignment)
+
 			// Instructors (multi-teacher assignment)
 			courseAdmin.GET("/:id/instructors", handlers.CourseRESTHandler.ListCourseInstructors)
 			courseAdmin.POST("/:id/instructors", handlers.CourseRESTHandler.AddCourseInstructor)
@@ -94,6 +101,32 @@ func SetupHexagonalRoutes(router *gin.Engine, handlers *application.Handlers) {
 			courseAdmin.POST("/:id/versions", handlers.CourseRESTHandler.CreateCourseVersion)
 			courseAdmin.POST("/:id/versions/:versionId/restore", handlers.CourseRESTHandler.RestoreCourseVersion)
 			courseAdmin.GET("/:id/changelog", handlers.CourseRESTHandler.GetCourseChangelog)
+		}
+	}
+
+	// ============================================================================
+	// Certificate Templates Routes (shared, global library)
+	// ============================================================================
+	if handlers.CourseRESTHandler != nil {
+		certAdmin := router.Group("/api/admin/certificates")
+		certAdmin.Use(middleware.Auth())
+		certAdmin.Use(middleware.AdminOrModerator())
+		{
+			certAdmin.GET("/templates", handlers.CourseRESTHandler.ListCertificateTemplates)
+			certAdmin.POST("/templates", handlers.CourseRESTHandler.CreateCertificateTemplate)
+			certAdmin.DELETE("/templates/:templateId", handlers.CourseRESTHandler.DeleteCertificateTemplate)
+		}
+	}
+
+	// ============================================================================
+	// Certificates - self-service (any authenticated user, scoped to self)
+	// ============================================================================
+	if handlers.CourseRESTHandler != nil {
+		certSelf := router.Group("/api/certificates")
+		certSelf.Use(middleware.Auth())
+		{
+			certSelf.GET("", handlers.CourseRESTHandler.ListMyCertificates)
+			certSelf.GET("/:courseId", handlers.CourseRESTHandler.GetMyCertificate)
 		}
 	}
 

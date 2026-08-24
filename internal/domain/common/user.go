@@ -57,6 +57,9 @@ type User struct {
 	EducationType *string `gorm:"column:education_type" json:"educationType"`
 	Section       *string `gorm:"column:section" json:"section"`
 	Bio           *string `gorm:"column:bio" json:"bio"`
+	City          *string `gorm:"column:city" json:"city"`
+	Gender        *string `gorm:"column:gender" json:"gender"`
+	School        *string `gorm:"column:school" json:"school"`
 
 	InstructorStatus      string          `gorm:"column:instructor_status;default:'PENDING';index" json:"instructorStatus"`
 	InstructorSpecialties JSONStringArray `gorm:"type:jsonb;column:instructor_specialties" json:"instructorSpecialties"`

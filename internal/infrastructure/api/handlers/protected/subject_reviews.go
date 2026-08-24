@@ -13,7 +13,16 @@ import (
 )
 
 func CreateCourseReview(c *gin.Context) {
-	userId, _ := c.Get("userId")
+	userIdVal, exists := c.Get("userId")
+	if !exists {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	userId, ok := userIdVal.(string)
+	if !ok || userId == "" {
+		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
 	subjectId := c.Param("id")
 
 	var subject models.Subject
@@ -30,7 +39,7 @@ func CreateCourseReview(c *gin.Context) {
 		return
 	}
 
-	review.UserID = userId.(string)
+	review.UserID = userId
 	review.SubjectID = subject.ID
 
 	if err := SafeCreate(db.DB, &review); err != nil {

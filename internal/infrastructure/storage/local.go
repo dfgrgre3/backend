@@ -26,10 +26,30 @@ func NewLocalStorage(baseDir, publicURL string) (*LocalStorage, error) {
 		return nil, fmt.Errorf("failed to create local storage dir: %w", err)
 	}
 
+	absBaseDir, err := filepath.Abs(cleanBaseDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve local storage base dir: %w", err)
+	}
+
 	return &LocalStorage{
-		baseDir:   cleanBaseDir,
+		baseDir:   absBaseDir,
 		publicURL: strings.TrimSuffix(publicURL, "/"),
 	}, nil
+}
+
+// resolvePath joins filename onto baseDir and rejects any result that would
+// escape baseDir (e.g. via "../" segments in a caller-supplied key), which
+// would otherwise allow arbitrary file read/write/delete outside the upload
+// directory.
+func (s *LocalStorage) resolvePath(filename string) (string, error) {
+	cleanRel := filepath.Clean(strings.TrimPrefix(filename, "/"))
+	targetPath := filepath.Join(s.baseDir, cleanRel)
+
+	rel, err := filepath.Rel(s.baseDir, targetPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid storage path: %q escapes base directory", filename)
+	}
+	return targetPath, nil
 }
 
 func (s *LocalStorage) Upload(ctx context.Context, filename string, content io.Reader, size int64, contentType string) (string, error) {
@@ -41,7 +61,10 @@ func (s *LocalStorage) Upload(ctx context.Context, filename string, content io.R
 		}
 	}
 
-	targetPath := filepath.Join(s.baseDir, filepath.Clean(strings.TrimPrefix(filename, "/")))
+	targetPath, err := s.resolvePath(filename)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return "", fmt.Errorf("failed to create local upload directory: %w", err)
 	}
@@ -75,7 +98,10 @@ func (s *LocalStorage) Delete(ctx context.Context, filename string) error {
 		}
 	}
 
-	targetPath := filepath.Join(s.baseDir, filepath.Clean(strings.TrimPrefix(filename, "/")))
+	targetPath, err := s.resolvePath(filename)
+	if err != nil {
+		return err
+	}
 	if err := os.Remove(targetPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove local file: %w", err)
 	}
@@ -91,9 +117,13 @@ func (s *LocalStorage) List(ctx context.Context, prefix string) ([]string, error
 		}
 	}
 
+	root, err := s.resolvePath(prefix)
+	if err != nil {
+		return nil, err
+	}
+
 	var files []string
-	root := filepath.Join(s.baseDir, filepath.Clean(strings.TrimPrefix(prefix, "/")))
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -122,7 +152,10 @@ func (s *LocalStorage) Download(ctx context.Context, filename string) (io.ReadCl
 		}
 	}
 
-	targetPath := filepath.Join(s.baseDir, filepath.Clean(strings.TrimPrefix(filename, "/")))
+	targetPath, err := s.resolvePath(filename)
+	if err != nil {
+		return nil, err
+	}
 	file, err := os.Open(targetPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open local file: %w", err)

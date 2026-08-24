@@ -68,6 +68,7 @@ func SetupProtectedRoutes(router *gin.Engine) {
 			// Settings
 			userRoutes.GET("/settings/preferences", handlers.GetSettings)
 			userRoutes.PATCH("/settings/preferences", handlers.UpdateSettings)
+			userRoutes.POST("/settings/privacy/actions", handlers.PrivacyActions)
 
 			// Profile
 			userRoutes.GET("/users/billing-summary", handlers.GetBillingSummary)
@@ -93,6 +94,8 @@ func SetupProtectedRoutes(router *gin.Engine) {
 			userRoutes.POST("/subscriptions/initiate-payment", handlers.InitiatePlanPayment)
 			userRoutes.POST("/subscriptions/cancel", handlers.CancelSubscription)
 			userRoutes.POST("/subscriptions/renew", handlers.RenewSubscription)
+			userRoutes.POST("/subscriptions/checkout", handlers.SubscriptionCheckout)
+			userRoutes.GET("/invoice/:id", handlers.GetInvoice)
 			userRoutes.POST("/coupons/validate", handlers.ValidateCoupon)
 
 			// User Subjects & Courses
