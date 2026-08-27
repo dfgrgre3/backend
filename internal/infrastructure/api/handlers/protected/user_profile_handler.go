@@ -1,7 +1,6 @@
 package protected
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -12,8 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetUserProfile returns the authenticated user's profile details
-// including recovery codes if 2FA is configured.
+// GetUserProfile returns the authenticated user's profile details,
+// including whether 2FA is configured (never the backup codes themselves -
+// even hashed, they have no legitimate use on the client and must not be
+// exposed in an API response).
 func GetUserProfile(c *gin.Context) {
 	userId, exists := c.Get("userId")
 	if !exists {
@@ -28,13 +29,9 @@ func GetUserProfile(c *gin.Context) {
 	}
 
 	var settings models.TwoFactorSettings
-	recoveryCodesJSON := ""
+	mfaEnabled := false
 	if err := db.DB.First(&settings, userIDQuery, userId).Error; err == nil {
-		if len(settings.BackupCodes) > 0 {
-			if codesBytes, err := json.Marshal(settings.BackupCodes); err == nil {
-				recoveryCodesJSON = string(codesBytes)
-			}
-		}
+		mfaEnabled = settings.IsEnabled
 	}
 
 	api_response.Success(c, gin.H{
@@ -59,7 +56,7 @@ func GetUserProfile(c *gin.Context) {
 		"studyGoal":        user.StudyGoal,
 		"subjectsTaught":   user.SubjectsTaught,
 		"experienceYears":  user.ExperienceYears,
-		"recoveryCodes":    recoveryCodesJSON,
+		"mfaEnabled":       mfaEnabled,
 	})
 }
 

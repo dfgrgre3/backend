@@ -27,7 +27,23 @@ func GetTeachers(c *gin.Context) {
 		return
 	}
 
-	api_response.Success(c, teachers)
+	// The public shape consumed by the frontend (see Teacher type in
+	// education/teachers/page.tsx) is {id, name, subject, onlineUrl} — a flat
+	// display record, not the raw User row. Returning `teachers` directly used
+	// to leave `subject` (and any field not present on User) undefined for
+	// every teacher, which rendered as an empty "" - name option in the
+	// teacher-picker <select>. Map it explicitly instead.
+	items := make([]gin.H, 0, len(teachers))
+	for _, teacher := range teachers {
+		items = append(items, gin.H{
+			"id":        teacher.ID,
+			"name":      firstNonEmpty(stringOrEmpty(teacher.Name), stringOrEmpty(teacher.Username), teacher.Email),
+			"subject":   strings.Join([]string(teacher.SubjectsTaught), "، "),
+			"onlineUrl": nil,
+		})
+	}
+
+	api_response.Success(c, items)
 }
 
 func GetTeachersForAdmin(c *gin.Context) {

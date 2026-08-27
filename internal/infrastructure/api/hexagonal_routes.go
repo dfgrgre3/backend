@@ -119,18 +119,6 @@ func SetupHexagonalRoutes(router *gin.Engine, handlers *application.Handlers) {
 	}
 
 	// ============================================================================
-	// Certificates - self-service (any authenticated user, scoped to self)
-	// ============================================================================
-	if handlers.CourseRESTHandler != nil {
-		certSelf := router.Group("/api/certificates")
-		certSelf.Use(middleware.Auth())
-		{
-			certSelf.GET("", handlers.CourseRESTHandler.ListMyCertificates)
-			certSelf.GET("/:courseId", handlers.CourseRESTHandler.GetMyCertificate)
-		}
-	}
-
-	// ============================================================================
 	// Course Bundles Routes
 	// ============================================================================
 	if handlers.CourseRESTHandler != nil {

@@ -19,17 +19,34 @@ const (
 	csrfHeaderName  = "X-CSRF-Token"
 	csrfCookieName  = "_csrf"
 	csrfTokenLength = 32
+
+	// csrfCtxKey stores the token generated during this request so that
+	// EnsureCSRFToken is idempotent. Without this, a request that triggers
+	// EnsureCSRFToken twice (e.g. CSRFMiddleware on a safe method plus the
+	// /api/auth/csrf handler) emits two different Set-Cookie headers whose
+	// values disagree with each other and with X-CSRF-Token.
+	csrfCtxKey = "csrf_token_generated"
 )
 
 // EnsureCSRFToken creates a CSRF token if one doesn't exist.
 // Cookie is NOT HttpOnly to allow JavaScript to read it for the header.
 func EnsureCSRFToken(c *gin.Context) {
+	// If we already generated a token during this request, reuse it so only
+	// one Set-Cookie value is emitted and it always matches the header.
+	if existing, ok := c.Get(csrfCtxKey); ok {
+		if token, ok := existing.(string); ok && token != "" {
+			c.Header(csrfHeaderName, token)
+			return
+		}
+	}
+
 	// Check if cookie exists
 	cookie, err := c.Cookie(csrfCookieName)
 	if err == nil && cookie != "" {
 		// Validate existing token
 		if isValidCSRFToken(cookie) {
 			// Set header for client-side access
+			c.Set(csrfCtxKey, cookie)
 			c.Header(csrfHeaderName, cookie)
 			return
 		}
@@ -37,6 +54,7 @@ func EnsureCSRFToken(c *gin.Context) {
 
 	// Generate new token
 	token := generateCSRFToken()
+	c.Set(csrfCtxKey, token)
 
 	// Set cookie (NOT HttpOnly - allows JS to read for Double Submit Cookie pattern)
 	setCSRFCookie(c, token)
@@ -60,21 +78,38 @@ func validateCSRFToken(c *gin.Context) bool {
 		return false
 	}
 
-	// Compare tokens using constant-time comparison
 	if subtle.ConstantTimeCompare([]byte(headerToken), []byte(cookieToken)) == 1 {
 		return true
+	}
+
+	// Legacy-cookie tolerance: Go percent-encodes '=' as %3D in Set-Cookie
+	// but percent-decodes %XX when parsing incoming Cookie headers. The
+	// X-CSRF-Token header echoes whatever document.cookie returned (still
+	// encoded), so compare both sides in decoded form before failing.
+	if decodedHeader, err := url.PathUnescape(headerToken); err == nil {
+		if subtle.ConstantTimeCompare([]byte(decodedHeader), []byte(cookieToken)) == 1 {
+			return true
+		}
+	}
+	if decodedCookie, err := url.PathUnescape(cookieToken); err == nil {
+		if subtle.ConstantTimeCompare([]byte(headerToken), []byte(decodedCookie)) == 1 {
+			return true
+		}
 	}
 
 	return false
 }
 
-// generateCSRFToken creates a new CSRF token
+// generateCSRFToken creates a new CSRF token.
+// base64.RawURLEncoding (no padding) keeps the value free of '=' so Go's
+// Set-Cookie sanitizer never has to percent-encode it — encoded and raw forms
+// stay identical across cookies, headers and JS readers.
 func generateCSRFToken() string {
 	bytes := make([]byte, csrfTokenLength)
 	if _, err := rand.Read(bytes); err != nil {
 		log.Panic("CRITICAL: Failed to generate secure random bytes for CSRF token")
 	}
-	return base64.URLEncoding.EncodeToString(bytes)
+	return base64.RawURLEncoding.EncodeToString(bytes)
 }
 
 // setCSRFCookie sets the CSRF cookie
@@ -119,12 +154,13 @@ func setCSRFCookie(c *gin.Context, token string) {
 
 // isValidCSRFToken checks if a token is valid (not expired, proper format)
 func isValidCSRFToken(token string) bool {
-	// Decode and validate format
-	decoded, err := base64.URLEncoding.DecodeString(token)
-	if err != nil || len(decoded) != csrfTokenLength {
-		return false
+	// Decode and validate format. Accept both the current unpadded form and
+	// the legacy padded form (whose '=' browsers may store as %3D).
+	if decoded, err := base64.RawURLEncoding.DecodeString(token); err == nil && len(decoded) == csrfTokenLength {
+		return true
 	}
-	return true
+	decoded, err := base64.URLEncoding.DecodeString(token)
+	return err == nil && len(decoded) == csrfTokenLength
 }
 
 // csrfSkipPaths are paths that bypass CSRF protection.

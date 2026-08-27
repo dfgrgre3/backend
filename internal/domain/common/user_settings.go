@@ -48,9 +48,16 @@ type UserSettings struct {
 	SoundEnabled         bool   `gorm:"default:true" json:"soundEnabled"`
 	VibrationEnabled     bool   `gorm:"default:true" json:"vibrationEnabled"`
 
-	ProfileVisibility string `gorm:"default:'public'" json:"profileVisibility"`
-	ShowOnlineStatus  bool   `gorm:"default:true" json:"showOnlineStatus"`
-	ShowProgress      bool   `gorm:"default:true" json:"showProgress"`
+	ProfileVisibility   string `gorm:"default:'public'" json:"profileVisibility"`
+	ShowOnlineStatus    bool   `gorm:"default:true" json:"showOnlineStatus"`
+	ShowProgress        bool   `gorm:"default:true" json:"showProgress"`
+	ShowLastSeen        bool   `gorm:"default:true" json:"showLastSeen"`
+	ShowAchievements    bool   `gorm:"default:true" json:"showAchievements"`
+	AllowMessages       string `gorm:"default:'everyone'" json:"allowMessages"`
+	AllowFriendRequests bool   `gorm:"default:true" json:"allowFriendRequests"`
+	DataCollection      bool   `gorm:"default:true" json:"dataCollection"`
+	Personalization     bool   `gorm:"default:true" json:"personalization"`
+	Analytics           bool   `gorm:"default:true" json:"analytics"`
 
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`

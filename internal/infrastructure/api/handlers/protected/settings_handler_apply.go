@@ -75,6 +75,27 @@ func applyPrivacySettings(settings *models.UserSettings, patch map[string]interf
 	if v, ok := patch["showProgress"].(bool); ok {
 		settings.ShowProgress = v
 	}
+	if v, ok := patch["showLastSeen"].(bool); ok {
+		settings.ShowLastSeen = v
+	}
+	if v, ok := patch["showAchievements"].(bool); ok {
+		settings.ShowAchievements = v
+	}
+	if v, ok := patch["allowMessages"].(string); ok {
+		settings.AllowMessages = normalizeEnum(v)
+	}
+	if v, ok := patch["allowFriendRequests"].(bool); ok {
+		settings.AllowFriendRequests = v
+	}
+	if v, ok := patch["dataCollection"].(bool); ok {
+		settings.DataCollection = v
+	}
+	if v, ok := patch["personalization"].(bool); ok {
+		settings.Personalization = v
+	}
+	if v, ok := patch["analytics"].(bool); ok {
+		settings.Analytics = v
+	}
 }
 
 func applyAdvancedSettings(settings *models.UserSettings, patch map[string]interface{}) {

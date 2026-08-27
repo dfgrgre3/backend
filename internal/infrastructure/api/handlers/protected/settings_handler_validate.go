@@ -15,11 +15,14 @@ import (
 func validateSettingsPatch(patch map[string]interface{}) error {
 	// String enum fields.
 	for key, allowed := range map[string][]string{
-		"theme":             {"light", "dark", "system"},
-		"fontSize":          {"small", "medium", "large"},
-		"language":          {"ar", "en"},
-		"numberFormat":      {"english", "arabic"},
-		"profileVisibility": {"public", "private", "contacts"},
+		"theme":        {"light", "dark", "system"},
+		"fontSize":     {"small", "medium", "large"},
+		"language":     {"ar", "en"},
+		"numberFormat": {"english", "arabic"},
+		// "friends", not "contacts": matches the only three options the
+		// privacy settings UI actually offers (settings/privacy/page.tsx).
+		"profileVisibility": {"public", "private", "friends"},
+		"allowMessages":     {"everyone", "friends", "none"},
 	} {
 		if raw, ok := patch[key]; ok {
 			val, isStr := raw.(string)
@@ -37,6 +40,8 @@ func validateSettingsPatch(patch map[string]interface{}) error {
 		"progressReports", "weeklyReport", "achievementAlerts", "commentNotifications", "mentionNotifications",
 		"pushEnabled", "emailEnabled", "smsEnabled", "quietHoursEnabled",
 		"soundEnabled", "vibrationEnabled", "showOnlineStatus", "showProgress",
+		"showLastSeen", "showAchievements", "allowFriendRequests",
+		"dataCollection", "personalization", "analytics",
 	} {
 		if raw, ok := patch[key]; ok {
 			if _, isBool := raw.(bool); !isBool {

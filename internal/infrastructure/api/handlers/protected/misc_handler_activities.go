@@ -74,8 +74,8 @@ func GetRecentActivities(c *gin.Context) {
 		}
 	}
 
-	notifications := fetchRecentActivities(c, userId.(string), params)
-	if notifications == nil {
+	notifications, ok := fetchRecentActivities(c, userId.(string), params)
+	if !ok {
 		return
 	}
 
@@ -112,7 +112,7 @@ func tryActivitiesRedisCache(c *gin.Context, redisKey string, params recentActiv
 	return true
 }
 
-func fetchRecentActivities(c *gin.Context, userId string, params recentActivitiesParams) []models.Notification {
+func fetchRecentActivities(c *gin.Context, userId string, params recentActivitiesParams) ([]models.Notification, bool) {
 	readDB := db.ReadDB()
 	if readDB == nil {
 		readDB = db.DB
@@ -126,14 +126,19 @@ func fetchRecentActivities(c *gin.Context, userId string, params recentActivitie
 		Offset(params.offset).
 		Find(&notifications).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch activities")
-		return nil
+		return nil, false
 	}
-	return notifications
+	return notifications, true
 }
 
 func warmActivitiesCache(redisKey string, params recentActivitiesParams, notifications []models.Notification) {
-	if params.offset > 0 || len(notifications) == 0 {
+	if params.offset > 0 {
 		return
+	}
+	// Empty results are cached too: users with no notifications would otherwise
+	// hit the database on every single request.
+	if notifications == nil {
+		notifications = []models.Notification{}
 	}
 	cachedData, err := json.Marshal(notifications)
 	if err != nil {

@@ -143,17 +143,10 @@ func SetupPublicRoutes(router *gin.Engine) {
 
 	// Advanced & Security-Hardened Authentication Routes
 	router.POST("/api/auth/refresh-session", middleware.RefreshTokenRateLimiter(), authHandler.RefreshSession)
-	router.PATCH("/api/auth/profile", middleware.Auth(), authHandler.UpdateProfile)
 	router.DELETE("/api/auth/account", middleware.Auth(), authHandler.DeleteAccount)
 	router.POST("/api/auth/validate-token", middleware.AuthRateLimiter(), authHandler.ValidateToken)
 	router.POST("/api/auth/recovery/initiate", middleware.AuthRateLimiter(), authHandler.AccountRecovery)
 	router.POST("/api/auth/recovery/finalize", middleware.AuthRateLimiter(), authHandler.RecoverAccount)
-
-	sessionHandler := protected.NewSessionHandler(authService)
-	router.GET("/api/auth/sessions", middleware.Auth(), sessionHandler.ListSessions)
-	router.DELETE("/api/auth/sessions/:id", middleware.Auth(), sessionHandler.RevokeSession)
-	router.DELETE("/api/auth/sessions", middleware.Auth(), sessionHandler.RevokeAllSessions)
-	router.GET("/api/auth/security-logs", middleware.Auth(), protected.GetSecurityLogs)
 
 	mfaService := authservice.NewMFAService()
 	mfaHandler := protected.NewMFAHandler(mfaService, authservice.NewAuthTokenService(), authService)

@@ -88,6 +88,15 @@ func generateStateToken() string {
 }
 
 func (h *OAuthHandler) RedirectToProvider(c *gin.Context) {
+	// SECURITY (not SSRF): providerName is only used as a lookup key into
+	// oauthFactory's allowlisted provider map (google/github/microsoft/apple,
+	// registered in NewOAuthHandler). Unknown values fail the GetProvider
+	// lookup below and return 400 before reaching the redirect. Each
+	// provider's GetAuthURL builds authURL from a hardcoded scheme+host
+	// (e.g. https://accounts.google.com/...) plus server-configured
+	// ClientID/RedirectURL and a server-generated state token — no request
+	// input ever contributes to the target host. c.Redirect also only makes
+	// the browser navigate; the server itself never fetches authURL.
 	providerName := c.Param("provider")
 	provider, err := h.oauthFactory.GetProvider(providerName)
 	if err != nil {

@@ -113,6 +113,13 @@ func fetchOrCreateUserSettings(userID string) (models.UserSettings, error) {
 		ProfileVisibility:    "public",
 		ShowOnlineStatus:     true,
 		ShowProgress:         true,
+		ShowLastSeen:         true,
+		ShowAchievements:     true,
+		AllowMessages:        "everyone",
+		AllowFriendRequests:  true,
+		DataCollection:       true,
+		Personalization:      true,
+		Analytics:            true,
 	}
 
 	// Use RawWriteDB to bypass RLS when creating default settings, matching the

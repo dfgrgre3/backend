@@ -1,7 +1,10 @@
 package api
 
 import (
+	"thanawy-backend/internal/application"
+	authservice "thanawy-backend/internal/domain/auth/service"
 	handlers "thanawy-backend/internal/infrastructure/api/handlers/protected"
+	"thanawy-backend/internal/infrastructure/persistence/repositories"
 
 	"thanawy-backend/internal/infrastructure/api/middleware"
 
@@ -15,11 +18,24 @@ const (
 	pathUploadChunked = pathUpload + "/chunked"
 )
 
-// SetupProtectedRoutes configures protected API endpoints
-func SetupProtectedRoutes(router *gin.Engine) {
+// SetupProtectedRoutes configures protected API endpoints.
+// hexHandlers provides access to hexagonal-architecture handler instances
+// (e.g. the self-service certificate endpoints on CourseRESTHandler) that
+// are constructed once during application.Initialize and shared with
+// SetupHexagonalRoutes.
+func SetupProtectedRoutes(router *gin.Engine, hexHandlers *application.Handlers) {
 	protected := router.Group("/api")
 	protected.Use(middleware.Auth())
 	protected.Use(middleware.Idempotency())
+
+	// Session listing/revocation reuses the token-refresh AuthService - a
+	// second lightweight instance (same pattern as public_routes.go's
+	// authHandler), since SetupProtectedRoutes doesn't share the one built
+	// there. OAuth/mail-queue args are nil/zero-value: this handler only ever
+	// calls GetUserSessions/RevokeSession, neither of which touches them.
+	sessionHandler := handlers.NewSessionHandler(
+		authservice.NewAuthService(repositories.NewAuthRepository(), authservice.NewAuthTokenService(), nil, nil, nil),
+	)
 	{
 		// Sub-group for Admin-only routes.
 		// AdminRequired() runs first, followed by StrictRBAC() to enforce Deny-by-Default.
@@ -37,6 +53,7 @@ func SetupProtectedRoutes(router *gin.Engine) {
 		userRoutes.Use(middleware.StrictRBAC())
 		{
 			userRoutes.GET("/progress/summary", handlers.GetProgressSummary)
+			userRoutes.GET("/users/progress/courses", handlers.GetUserProgressCourses)
 			userRoutes.GET("/analytics/weekly", handlers.GetWeeklyAnalytics)
 			userRoutes.GET("/analytics/time", handlers.GetTimeAnalytics)
 			userRoutes.GET("/analytics/performance", handlers.GetPerformanceMetrics)
@@ -59,29 +76,32 @@ func SetupProtectedRoutes(router *gin.Engine) {
 			userRoutes.POST("/study-sessions", handlers.CreateStudySession)
 			userRoutes.POST("/reminders", handlers.CreateReminder)
 
-			// Notifications
-			userRoutes.GET("/notifications", handlers.GetNotifications)
-			userRoutes.GET("/notifications/unread-count", handlers.GetUnreadNotificationsCount)
-			userRoutes.POST("/notifications/mark-read", handlers.MarkNotificationRead)
-			userRoutes.POST("/notifications/enqueue", handlers.CreateNotificationTask)
-
 			// Settings
 			userRoutes.GET("/settings/preferences", handlers.GetSettings)
 			userRoutes.PATCH("/settings/preferences", handlers.UpdateSettings)
+			// Self-service export-data / clear-history (profile > privacy tab).
 			userRoutes.POST("/settings/privacy/actions", handlers.PrivacyActions)
+
+			// Sessions ("connected devices" in the profile > security tab).
+			userRoutes.GET("/auth/sessions", sessionHandler.ListSessions)
+			userRoutes.DELETE("/auth/sessions/:id", sessionHandler.RevokeSession)
+			userRoutes.POST("/auth/sessions/revoke-others", sessionHandler.RevokeAllSessions)
 
 			// Profile
 			userRoutes.GET("/users/billing-summary", handlers.GetBillingSummary)
 			userRoutes.GET("/users/profile", handlers.GetUserProfile)
 			userRoutes.PATCH("/users/profile", handlers.UpdateProfile)
-			userRoutes.GET("/users/progress/courses", handlers.GetUserCoursesProgress)
-			userRoutes.GET("/users/progress/time", handlers.GetUserTimeProgress)
-			userRoutes.GET("/users/progress/achievements", handlers.GetUserAchievementsProgress)
 
 			// Activities
 			userRoutes.GET("/activities/recent", handlers.GetRecentActivities)
 			userRoutes.POST("/activities/:id/read", handlers.MarkActivityRead)
 			userRoutes.POST("/activities/read-all", handlers.MarkAllActivitiesRead)
+
+			// Notifications (student-facing bell/feed - built with keyset
+			// pagination, L1+Redis caching, and a WebSocket refresh broadcast on
+			// mark-read, but never mounted anywhere until now)
+			userRoutes.GET("/notifications", handlers.GetNotifications)
+			userRoutes.POST("/notifications/mark-read", handlers.MarkNotificationRead)
 
 			// Billing & Subscriptions
 			userRoutes.GET("/billing/wallet", handlers.GetWalletBalance)

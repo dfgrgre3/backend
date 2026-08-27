@@ -142,7 +142,7 @@ func setupRouter(cfg *config.Config, hexHandlers *application.Handlers) *gin.Eng
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	api.SetupPublicRoutes(r)
-	api.SetupProtectedRoutes(r)
+	api.SetupProtectedRoutes(r, hexHandlers)
 	api.SetupAdminRoutes(r)
 
 	// Hexagonal Architecture routes (new)

@@ -1,6 +1,7 @@
 package protected
 
 import (
+	"context"
 	"log"
 	"net/http"
 	models "thanawy-backend/internal/domain/common"
@@ -93,11 +94,17 @@ func TrackMegaMenuEvent(c *gin.Context) {
 		ReceivedAt: receivedAt,
 	}
 
-	// Fire-and-forget style: log but don't fail the request on DB error
-	if err := db.RawWriteDB(c.Request.Context()).Create(&event).Error; err != nil {
-		log.Printf("Failed to track mega menu event: %v", err)
-		// Still return success to avoid breaking frontend UX
-	}
-
+	// Respond immediately; this endpoint is best-effort telemetry and must
+	// never block the caller (navigator.sendBeacon/fetch keepalive) on DB latency.
 	api_response.Success(c, gin.H{"success": true})
+
+	// Perform the actual insert off the request path, on its own bounded
+	// context (the gin request context is canceled the moment we respond).
+	go func(evt models.AnalyticsEvent) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := db.RawWriteDB(ctx).Create(&evt).Error; err != nil {
+			log.Printf("Failed to track mega menu event: %v", err)
+		}
+	}(event)
 }
