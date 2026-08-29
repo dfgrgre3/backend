@@ -61,7 +61,7 @@ func EnrollCourse(c *gin.Context) {
 	}
 
 	if err := executeEnrollmentTransaction(userId, courseId); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to enroll: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to enroll", err)
 		return
 	}
 
@@ -209,6 +209,9 @@ func GetUserSubjects(c *gin.Context) {
 // the SQL and response shape are untouched.
 func getUserSubjectsLegacy(c *gin.Context, userId string) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	if limit <= 0 {
 		limit = 50
@@ -339,6 +342,9 @@ func GetMyCourses(c *gin.Context) {
 // ({courses, data:{courses}}); only the per-user page cache is added.
 func getMyCoursesLegacy(c *gin.Context, userId string) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if limit <= 0 {
 		limit = 10
 	}

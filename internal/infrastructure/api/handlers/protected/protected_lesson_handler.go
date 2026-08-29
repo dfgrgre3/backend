@@ -151,7 +151,7 @@ func GetCourseLessonsWithAccess(c *gin.Context) {
 
 	lessons, err := lessonService.GetAvailableLessons(userID, courseID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to fetch lessons", err)
 		return
 	}
 

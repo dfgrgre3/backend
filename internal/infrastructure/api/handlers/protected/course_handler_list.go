@@ -14,6 +14,9 @@ import (
 func (h *CourseRESTHandler) ListCourses(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if offsetStr := c.Query("offset"); offsetStr != "" {
 		if offsetVal, err := strconv.Atoi(offsetStr); err == nil && limit > 0 {
 			page = (offsetVal / limit) + 1
@@ -57,7 +60,7 @@ func (h *CourseRESTHandler) ListCourses(c *gin.Context) {
 
 	courses, total, err := h.listCoursesHandler.Handle(c.Request.Context(), query)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to list courses: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to list courses", err)
 		return
 	}
 
@@ -81,6 +84,9 @@ func (h *CourseRESTHandler) ListCourses(c *gin.Context) {
 func (h *CourseRESTHandler) SearchCourses(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page < 1 {
 		page = 1
 	}
@@ -149,7 +155,7 @@ func (h *CourseRESTHandler) SearchCourses(c *gin.Context) {
 
 	courses, total, err := h.searchCoursesHandler.Handle(c.Request.Context(), query)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to search courses: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to search courses", err)
 		return
 	}
 

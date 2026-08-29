@@ -53,7 +53,7 @@ func (h *CourseRESTHandler) LinkLessonExam(c *gin.Context) {
 			api_response.Error(c, http.StatusBadRequest, "Lesson does not belong to the given section")
 			return
 		}
-		api_response.Error(c, http.StatusInternalServerError, "Failed to link exam: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to link exam", err)
 		return
 	}
 
@@ -80,7 +80,7 @@ func (h *CourseRESTHandler) UnlinkLessonExam(c *gin.Context) {
 			api_response.Error(c, http.StatusBadRequest, "Lesson does not belong to the given section")
 			return
 		}
-		api_response.Error(c, http.StatusInternalServerError, "Failed to unlink exam: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to unlink exam", err)
 		return
 	}
 

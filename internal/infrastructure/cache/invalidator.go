@@ -20,7 +20,11 @@ func (ci *CacheInvalidator) InvalidateSubject(ctx context.Context, id string) {
 	}
 	key := fmt.Sprintf("subject:id:%s", id)
 	ci.del(ctx, key)
-	ci.invalidatePattern(ctx, "subj:list:*")
+	// Must match the real list-cache key prefix written by subject_list.go
+	// ("subject:list:page=..."), not "subj:list:*" — that typo made this a
+	// permanent no-op, leaving paginated subject lists (enrollment counts,
+	// ratings) stale for up to their TTL after every enroll/unenroll/review.
+	ci.invalidatePattern(ctx, "subject:list:*")
 	log.Printf("[Cache] Invalidated subject cache: %s", id)
 }
 

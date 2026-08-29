@@ -38,7 +38,7 @@ func AdminBulkSendMessage(c *gin.Context) {
 
 	targetUsers, err := fetchBulkMessageTargetUsers(req.UserIDs, req.Role)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to resolve target users", err)
 		return
 	}
 
@@ -53,7 +53,7 @@ func AdminBulkSendMessage(c *gin.Context) {
 	if len(notifications) > 0 {
 		if err := db.DB.CreateInBatches(&notifications, 100).Error; err != nil {
 			log.Printf("ERROR: Failed to create notifications in bulk: %v", err)
-			api_response.Error(c, http.StatusInternalServerError, "Failed to create notifications: "+err.Error())
+			api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to create notifications", err)
 			return
 		}
 	}

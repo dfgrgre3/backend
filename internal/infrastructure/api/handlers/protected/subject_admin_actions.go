@@ -132,7 +132,7 @@ func DuplicateCourse(c *gin.Context) {
 		}
 		return nil
 	}); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to duplicate course: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to duplicate course", err)
 		return
 	}
 
@@ -235,7 +235,7 @@ func BatchCourseAction(c *gin.Context) {
 	}
 
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to execute batch action: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to execute batch action", err)
 		return
 	}
 
@@ -257,6 +257,9 @@ func BatchCourseAction(c *gin.Context) {
 func GetPopularCourses(c *gin.Context) {
 	const SubjectCacheTTL = 2 * time.Hour
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "8"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if limit <= 0 {
 		limit = 8
 	}

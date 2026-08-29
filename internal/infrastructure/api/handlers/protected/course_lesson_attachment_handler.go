@@ -41,7 +41,7 @@ func (h *CourseRESTHandler) AddLessonAttachment(c *gin.Context) {
 
 	attachment, err := h.courseService.AddAttachment(parsedLessonID, req.Title, req.FileURL, req.FileType, req.FileSize)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to add attachment: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to add attachment", err)
 		return
 	}
 
@@ -59,7 +59,7 @@ func (h *CourseRESTHandler) DeleteLessonAttachment(c *gin.Context) {
 	}
 
 	if err := h.courseService.DeleteAttachment(parsedID); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to delete attachment: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to delete attachment", err)
 		return
 	}
 

@@ -78,6 +78,9 @@ func GetExams(c *gin.Context) {
 func parseExamsPagination(c *gin.Context) (int, int) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page <= 0 {
 		page = 1
 	}

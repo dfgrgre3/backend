@@ -19,6 +19,9 @@ func AdminGetAuditLogs(c *gin.Context) {
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page <= 0 {
 		page = 1
 	}
@@ -60,6 +63,9 @@ func AdminGetAuditLogs(c *gin.Context) {
 func GetPublicBlogPosts(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page <= 0 {
 		page = 1
 	}
@@ -98,6 +104,9 @@ func GetPublicBlogPost(c *gin.Context) {
 func GetPublicEvents(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page <= 0 {
 		page = 1
 	}

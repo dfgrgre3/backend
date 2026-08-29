@@ -53,7 +53,7 @@ func ProcessWalletTransaction(c *gin.Context) {
 			api_response.Error(c, http.StatusConflict, err.Error())
 			return
 		}
-		api_response.Error(c, http.StatusInternalServerError, "Failed to process transaction: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to process transaction", err)
 		return
 	}
 
@@ -76,6 +76,9 @@ func GetUserWalletTransactions(c *gin.Context) {
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 
 	if page < 1 {
 		page = 1

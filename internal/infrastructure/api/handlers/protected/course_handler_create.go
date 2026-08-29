@@ -63,7 +63,7 @@ func (h *CourseRESTHandler) CreateCourse(c *gin.Context) {
 
 	courseEntity, err := h.createCourseHandler.Handle(c.Request.Context(), cmd)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to create course: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to create course", err)
 		return
 	}
 

@@ -78,7 +78,7 @@ func DeleteUpload(c *gin.Context) {
 	}
 
 	if err := storage.GlobalStorage.Delete(c.Request.Context(), req.FileKey); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to delete file: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to delete file", err)
 		return
 	}
 

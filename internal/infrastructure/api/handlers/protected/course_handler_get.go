@@ -84,6 +84,9 @@ func (h *CourseRESTHandler) CheckSlug(c *gin.Context) {
 func (h *CourseRESTHandler) GetCoursesPendingReview(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 
 	if page < 1 {
 		page = 1
@@ -100,7 +103,7 @@ func (h *CourseRESTHandler) GetCoursesPendingReview(c *gin.Context) {
 
 	courses, total, err := h.listCoursesHandler.Handle(c.Request.Context(), query)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch courses: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to fetch courses", err)
 		return
 	}
 

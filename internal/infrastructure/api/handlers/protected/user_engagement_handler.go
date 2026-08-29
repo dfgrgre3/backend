@@ -55,7 +55,7 @@ func AdminEnrollUser(c *gin.Context) {
 	}
 
 	if err := executeEnrollmentTransaction(userID, subject.ID); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to enroll: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to enroll", err)
 		return
 	}
 

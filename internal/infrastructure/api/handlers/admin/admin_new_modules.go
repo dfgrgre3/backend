@@ -24,6 +24,9 @@ import (
 func AdminListBadges(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page <= 0 {
 		page = 1
 	}
@@ -60,6 +63,9 @@ func AdminDeleteBadge(c *gin.Context) {
 func AdminListAttendance(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page <= 0 {
 		page = 1
 	}
@@ -92,6 +98,9 @@ func AdminUpdateAttendance(c *gin.Context) {
 func AdminListCMSPages(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page <= 0 {
 		page = 1
 	}
@@ -156,6 +165,9 @@ func AdminTestIntegration(c *gin.Context) {
 func AdminListLearningPaths(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page <= 0 {
 		page = 1
 	}
@@ -191,6 +203,9 @@ func AdminDeleteLearningPath(c *gin.Context) {
 func AdminListBankQuestions(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page <= 0 {
 		page = 1
 	}

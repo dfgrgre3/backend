@@ -31,7 +31,7 @@ func (h *CourseRESTHandler) ListCourseInstructors(c *gin.Context) {
 
 	instructors, err := h.courseService.ListInstructors(parsedCourseID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to list instructors: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to list instructors", err)
 		return
 	}
 
@@ -65,13 +65,13 @@ func (h *CourseRESTHandler) AddCourseInstructor(c *gin.Context) {
 	}
 
 	if err := h.courseService.AddInstructor(parsedCourseID, instructorID, role, nil); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to add instructor: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to add instructor", err)
 		return
 	}
 
 	instructors, err := h.courseService.ListInstructors(parsedCourseID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to list instructors: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to list instructors", err)
 		return
 	}
 
@@ -95,7 +95,7 @@ func (h *CourseRESTHandler) RemoveCourseInstructor(c *gin.Context) {
 	}
 
 	if err := h.courseService.RemoveInstructor(parsedCourseID, parsedInstructorID); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to remove instructor: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to remove instructor", err)
 		return
 	}
 

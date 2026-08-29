@@ -85,7 +85,7 @@ func (h *CourseRESTHandler) CreateLesson(c *gin.Context) {
 
 	createdLesson, err := h.courseService.CreateLesson(sectionUUID, lesson.Title, lesson.Type, lesson.OrderIndex)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to create lesson: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to create lesson", err)
 		return
 	}
 
@@ -148,7 +148,7 @@ func (h *CourseRESTHandler) UpdateLesson(c *gin.Context) {
 
 	updatedLesson, err := h.courseService.UpdateLesson(lesson)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to update lesson: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to update lesson", err)
 		return
 	}
 
@@ -166,7 +166,7 @@ func (h *CourseRESTHandler) DeleteLesson(c *gin.Context) {
 	}
 
 	if err := h.courseService.DeleteLesson(parsedID); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to delete lesson: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to delete lesson", err)
 		return
 	}
 
@@ -185,7 +185,7 @@ func (h *CourseRESTHandler) ListLessons(c *gin.Context) {
 
 	lessons, err := h.courseService.ListLessons(parsedSectionID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to list lessons: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to list lessons", err)
 		return
 	}
 
@@ -221,7 +221,7 @@ func (h *CourseRESTHandler) ReorderLessons(c *gin.Context) {
 	}
 
 	if err := h.courseService.ReorderLessons(parsedSectionID, lessonUUIDs); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to reorder lessons: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to reorder lessons", err)
 		return
 	}
 

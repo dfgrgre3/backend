@@ -18,6 +18,9 @@ func (h *AIHandler) GetConversations(c *gin.Context) {
 		return
 	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
 	convs, total, err := h.conversationRepo.FindByUserID(userID, limit, offset)

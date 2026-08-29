@@ -91,7 +91,7 @@ func GetUserAuditLogs(c *gin.Context) {
 	}
 	limitStr := c.DefaultQuery("limit", "50")
 	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit < 1 {
+	if err != nil || limit < 1 || limit > 100 {
 		limit = 50
 	}
 	pageStr := c.DefaultQuery("page", "1")

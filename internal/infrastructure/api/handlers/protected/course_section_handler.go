@@ -67,7 +67,7 @@ func (h *CourseRESTHandler) CreateSection(c *gin.Context) {
 
 	createdSection, err := h.courseService.CreateSection(courseUUID, section.Title, section.OrderIndex)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to create section: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to create section", err)
 		return
 	}
 
@@ -112,7 +112,7 @@ func (h *CourseRESTHandler) UpdateSection(c *gin.Context) {
 
 	updatedSection, err := h.courseService.UpdateSection(section)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to update section: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to update section", err)
 		return
 	}
 
@@ -130,7 +130,7 @@ func (h *CourseRESTHandler) DeleteSection(c *gin.Context) {
 	}
 
 	if err := h.courseService.DeleteSection(sectionUUID); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to delete section: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to delete section", err)
 		return
 	}
 
@@ -149,7 +149,7 @@ func (h *CourseRESTHandler) ListSections(c *gin.Context) {
 
 	sections, err := h.courseService.ListSections(parsedCourseID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to list sections: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to list sections", err)
 		return
 	}
 
@@ -185,7 +185,7 @@ func (h *CourseRESTHandler) ReorderSections(c *gin.Context) {
 	}
 
 	if err := h.courseService.ReorderSections(parsedCourseID, sectionUUIDs); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to reorder sections: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to reorder sections", err)
 		return
 	}
 

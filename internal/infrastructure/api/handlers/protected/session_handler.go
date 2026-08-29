@@ -49,7 +49,7 @@ func (h *SessionHandler) ListSessions(c *gin.Context) {
 
 	sessions, err := h.authService.GetUserSessions(c.Request.Context(), userID.(string))
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to fetch sessions", err)
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *SessionHandler) RevokeAllSessions(c *gin.Context) {
 
 	sessions, err := h.authService.GetUserSessions(c.Request.Context(), userID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to fetch sessions", err)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *SessionHandler) RevokeAllSessions(c *gin.Context) {
 			continue // never revoke the session making this request
 		}
 		if err := h.authService.RevokeSession(c.Request.Context(), userID, s.ID); err != nil {
-			api_response.Error(c, http.StatusInternalServerError, err.Error())
+			api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to revoke session", err)
 			return
 		}
 		revokedCount++

@@ -34,7 +34,12 @@ var (
 func GetBackupCronWorker() *BackupCronWorker {
 	backupCronOnce.Do(func() {
 		backupCronInstance = &BackupCronWorker{
-			cronInst: cron.New(cron.WithSeconds(), cron.WithLocation(time.UTC)),
+			// WithChain(Recover(...)) is required — robfig/cron does not
+			// recover job panics on its own. Without it, an unexpected
+			// panic anywhere in the daily backup run (pg_dump exec, gzip,
+			// S3 upload) would be an unrecovered panic in this goroutine
+			// and crash the entire backend process, not just the backup.
+			cronInst: cron.New(cron.WithSeconds(), cron.WithLocation(time.UTC), cron.WithChain(cron.Recover(cron.DefaultLogger))),
 		}
 	})
 	return backupCronInstance

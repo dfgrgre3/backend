@@ -34,10 +34,15 @@ func CancelSubscription(c *gin.Context) {
 			return err
 		}
 
-		// Clear user's active subscription
+		// Clear user's active subscription. Map keys must be the real DB
+		// column names, not the struct's JSON tags — see
+		// payment_handler_webhook.go for the identical bug and full
+		// explanation. Before this fix, every cancellation failed with
+		// "no such column" and rolled back, so CancelSubscription never
+		// actually succeeded.
 		if err := tx.Model(&user).Updates(map[string]interface{}{
-			"activeSubscriptionId":  nil,
-			"subscriptionExpiresAt": nil,
+			"active_subscription_id":  nil,
+			"subscription_expires_at": nil,
 		}).Error; err != nil {
 			return err
 		}

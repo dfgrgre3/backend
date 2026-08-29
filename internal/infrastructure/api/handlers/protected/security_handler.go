@@ -41,7 +41,7 @@ func GetSecurityLogs(c *gin.Context) {
 
 	limitStr := c.DefaultQuery("limit", "50")
 	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
+	if err != nil || limit <= 0 || limit > 100 {
 		limit = 50
 	}
 
@@ -66,7 +66,7 @@ func GetSecurityLogsForUser(c *gin.Context) {
 
 	limitStr := c.DefaultQuery("limit", "50")
 	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
+	if err != nil || limit <= 0 || limit > 100 {
 		limit = 50
 	}
 
@@ -91,7 +91,7 @@ func GetUserLoginAttempts(c *gin.Context) {
 
 	limitStr := c.DefaultQuery("limit", "50")
 	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
+	if err != nil || limit <= 0 || limit > 100 {
 		limit = 50
 	}
 
@@ -157,7 +157,7 @@ func LogSecurityEvent(userID string, eventType models.SecurityEventType, ip, use
 func GetAdminSecurityLogs(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "100")
 	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
+	if err != nil || limit <= 0 || limit > 200 {
 		limit = 100
 	}
 

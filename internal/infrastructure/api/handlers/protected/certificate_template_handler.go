@@ -25,7 +25,7 @@ type CreateCertificateTemplateRequest struct {
 func (h *CourseRESTHandler) ListCertificateTemplates(c *gin.Context) {
 	templates, err := h.courseService.ListCertificateTemplates()
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to list certificate templates: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to list certificate templates", err)
 		return
 	}
 
@@ -42,7 +42,7 @@ func (h *CourseRESTHandler) CreateCertificateTemplate(c *gin.Context) {
 
 	template, err := h.courseService.CreateCertificateTemplate(req.Name, req.TemplateHTML, req.IsDefault)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to create certificate template: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to create certificate template", err)
 		return
 	}
 
@@ -59,7 +59,7 @@ func (h *CourseRESTHandler) DeleteCertificateTemplate(c *gin.Context) {
 	}
 
 	if err := h.courseService.DeleteCertificateTemplate(parsedID); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to delete certificate template: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to delete certificate template", err)
 		return
 	}
 

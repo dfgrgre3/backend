@@ -58,7 +58,7 @@ func ManualEnroll(c *gin.Context) {
 	}
 
 	if err := executeEnrollmentTransaction(input.UserID, subject.ID); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to enroll: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to enroll", err)
 		return
 	}
 
@@ -122,7 +122,7 @@ func UnenrollUser(c *gin.Context) {
 	})
 
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to unenroll user: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to unenroll user", err)
 		return
 	}
 
@@ -140,6 +140,9 @@ func UnenrollUser(c *gin.Context) {
 func GetCourseEnrollments(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if limit <= 0 {
 		limit = 20
 	}

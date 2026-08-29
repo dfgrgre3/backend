@@ -82,6 +82,11 @@ func handleChunkedInit(c *gin.Context) {
 
 // PUT /upload/chunked → upload a single chunk (multipart form)
 func handleChunkedPutChunk(c *gin.Context) {
+	// Cap the request body before any multipart parsing happens (the first
+	// c.PostForm call below already triggers Gin's multipart parse) — see
+	// the identical fix/rationale in upload_handler_simple.go's Upload().
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxChunkSize+1<<20)
+
 	uploadID := c.PostForm("uploadId")
 	chunkIndexStr := c.PostForm("chunkIndex")
 
@@ -118,7 +123,7 @@ func handleChunkedPutChunk(c *gin.Context) {
 	chunkPath := fmt.Sprintf("temp/%s/%s", uploadID, chunkIndexStr)
 	_, err = storage.GlobalStorage.Upload(c.Request.Context(), chunkPath, f, file.Size, "application/octet-stream")
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to save chunk: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to save chunk", err)
 		return
 	}
 
@@ -168,7 +173,7 @@ func handleChunkedMerge(c *gin.Context) {
 
 	url, err := assembleChunkedFile(ctx, finalFilename, meta, chunks, category, ext)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to assemble file: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to assemble file", err)
 		return
 	}
 

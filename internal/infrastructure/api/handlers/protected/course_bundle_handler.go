@@ -37,7 +37,7 @@ func (h *CourseRESTHandler) ListBundles(c *gin.Context) {
 
 	bundles, total, err := h.courseService.ListBundles(page, pageSize)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch bundles: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to fetch bundles", err)
 		return
 	}
 
@@ -71,7 +71,7 @@ func (h *CourseRESTHandler) GetBundle(c *gin.Context) {
 			api_response.Error(c, http.StatusNotFound, "Bundle not found")
 			return
 		}
-		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch bundle: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to fetch bundle", err)
 		return
 	}
 
@@ -99,7 +99,7 @@ func (h *CourseRESTHandler) CreateBundle(c *gin.Context) {
 
 	bundle, err := h.courseService.CreateBundle(req.Name, generateBundleSlug(req.Name), req.Price, req.Currency)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to create bundle: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to create bundle", err)
 		return
 	}
 
@@ -131,7 +131,7 @@ func (h *CourseRESTHandler) UpdateBundle(c *gin.Context) {
 			api_response.Error(c, http.StatusNotFound, "Bundle not found")
 			return
 		}
-		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch bundle: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to fetch bundle", err)
 		return
 	}
 
@@ -168,7 +168,7 @@ func (h *CourseRESTHandler) UpdateBundle(c *gin.Context) {
 	}
 
 	if err := h.courseService.UpdateBundle(bundle); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to update bundle: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to update bundle", err)
 		return
 	}
 
@@ -184,7 +184,7 @@ func (h *CourseRESTHandler) DeleteBundle(c *gin.Context) {
 	}
 
 	if err := h.courseService.DeleteBundle(bundleUUID); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to delete bundle: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to delete bundle", err)
 		return
 	}
 
@@ -213,7 +213,7 @@ func (h *CourseRESTHandler) AddCoursesToBundle(c *gin.Context) {
 			api_response.Error(c, http.StatusNotFound, "Bundle not found")
 			return
 		}
-		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch bundle: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to fetch bundle", err)
 		return
 	}
 
@@ -257,7 +257,7 @@ func (h *CourseRESTHandler) RemoveCoursesFromBundle(c *gin.Context) {
 			api_response.Error(c, http.StatusNotFound, "Bundle not found")
 			return
 		}
-		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch bundle: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to fetch bundle", err)
 		return
 	}
 
@@ -293,7 +293,7 @@ func (h *CourseRESTHandler) GetBundleEnrollments(c *gin.Context) {
 		Preload("User").
 		Order("created_at DESC").
 		Find(&enrollments).Error; err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch enrollments: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to fetch enrollments", err)
 		return
 	}
 

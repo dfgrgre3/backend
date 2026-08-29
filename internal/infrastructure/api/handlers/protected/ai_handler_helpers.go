@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	models "thanawy-backend/internal/domain/common"
-	"thanawy-backend/internal/infrastructure/cache"
 	"strings"
+	models "thanawy-backend/internal/domain/common"
+	api_response "thanawy-backend/internal/infrastructure/api/response"
+	"thanawy-backend/internal/infrastructure/cache"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -81,7 +82,7 @@ func (h *AIHandler) handleStreamingChat(c *gin.Context, messages []map[string]in
 	// Simple non-streaming fallback for now
 	reply, usedModel, err := h.callAIWithRetryCustom(c.Request.Context(), messages, model)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to generate AI response", err)
 		return
 	}
 

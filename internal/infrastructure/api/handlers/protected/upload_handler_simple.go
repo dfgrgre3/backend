@@ -17,9 +17,17 @@ import (
 
 // Upload handles simple multipart file upload (up to 50MB)
 func Upload(c *gin.Context) {
+	// Cap the request body BEFORE Gin's multipart parser reads/spools it —
+	// checking file.Size after c.FormFile() only rejects the file after the
+	// entire body has already been read into memory/temp files, so an
+	// oversized request still costs a full read regardless of the check
+	// below. A small margin over the file-size limit covers the other
+	// multipart form fields (context/category) and part boundaries.
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxSimpleUploadSize+1<<20)
+
 	file, err := c.FormFile("file")
 	if err != nil {
-		api_response.Error(c, http.StatusBadRequest, "No file uploaded (field: 'file')")
+		api_response.Error(c, http.StatusBadRequest, "No file uploaded, or it exceeds the maximum allowed size (field: 'file')")
 		return
 	}
 
@@ -65,7 +73,7 @@ func Upload(c *gin.Context) {
 	filename := buildFilename(folder, ext)
 	url, err := storage.GlobalStorage.Upload(c.Request.Context(), filename, f, file.Size, contentType)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to upload file to storage: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to upload file to storage", err)
 		return
 	}
 

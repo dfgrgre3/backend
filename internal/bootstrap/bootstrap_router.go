@@ -12,11 +12,13 @@ import (
 	"thanawy-backend/internal/infrastructure/cache"
 	"thanawy-backend/internal/infrastructure/config"
 	db "thanawy-backend/internal/infrastructure/database"
+	"thanawy-backend/internal/infrastructure/monitoring"
 	"thanawy-backend/pkg/buildinfo"
 	"thanawy-backend/pkg/telemetry"
 
 	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -53,7 +55,17 @@ func setupRouter(cfg *config.Config, hexHandlers *application.Handlers) *gin.Eng
 
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
+	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORS())
+
+	// Prometheus metrics: the collector/middleware/label definitions already
+	// existed (internal/infrastructure/monitoring/profiler.go) but were never
+	// instantiated or wired into the router, so the client_golang dependency
+	// was dead weight and no scrape target existed. This is a separate,
+	// scrape-only endpoint from the existing custom JSON /api/metrics.
+	metricsCollector := monitoring.NewMetricsCollector()
+	r.Use(monitoring.ProfilingMiddleware(metricsCollector))
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	r.Use(middleware.ValidateSecrets(middleware.DefaultSecretsValidatorConfig()))
 	r.Use(middleware.PerformanceMonitor())
 	r.Use(telemetry.TraceMiddleware())

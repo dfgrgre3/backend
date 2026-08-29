@@ -26,7 +26,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	}
 
 	if err := h.authService.ForgotPassword(c.Request.Context(), req.Email); err != nil {
-		response.Error(c, http.StatusInternalServerError, err.Error())
+		response.ErrorDetail(c, http.StatusInternalServerError, "Failed to process password reset request", err)
 		return
 	}
 
@@ -172,7 +172,7 @@ func (h *AuthHandler) AccountRecovery(c *gin.Context) {
 
 	ticket, err := h.authService.InitiateAccountRecovery(c.Request.Context(), req.Email, req.Method)
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, err.Error())
+		response.ErrorDetail(c, http.StatusInternalServerError, "Failed to initiate account recovery", err)
 		return
 	}
 

@@ -281,7 +281,7 @@ func ExecuteScheduledItemNow(c *gin.Context) {
 	// Process synchronously for immediate feedback
 	err := systemservice.GetSchedulerService().ProcessItem(item.ID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to process scheduled item", err)
 		return
 	}
 

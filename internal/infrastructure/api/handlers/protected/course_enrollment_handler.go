@@ -32,7 +32,7 @@ func (h *CourseRESTHandler) EnrollUser(c *gin.Context) {
 
 	enrollment, err := h.enrollUserHandler.Handle(c.Request.Context(), cmd)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to enroll user: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to enroll user", err)
 		return
 	}
 
@@ -50,7 +50,7 @@ func (h *CourseRESTHandler) ListEnrollments(c *gin.Context) {
 
 	enrollments, err := h.courseService.ListCourseEnrollments(parsedCourseID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to list enrollments: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to list enrollments", err)
 		return
 	}
 
@@ -97,7 +97,7 @@ func (h *CourseRESTHandler) UpdateProgress(c *gin.Context) {
 
 	err := h.updateProgressHandler.Handle(c.Request.Context(), cmd)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to update progress: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to update progress", err)
 		return
 	}
 

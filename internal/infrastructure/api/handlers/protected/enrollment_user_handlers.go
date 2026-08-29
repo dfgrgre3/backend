@@ -141,7 +141,7 @@ func UnenrollCourse(c *gin.Context) {
 
 	if err != nil {
 		log.Printf("[Unenroll] Failed to unenroll user %s from course %s: %v", userId, subject.ID, err)
-		api_response.Error(c, http.StatusInternalServerError, "Failed to unenroll: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to unenroll", err)
 		return
 	}
 
@@ -215,7 +215,7 @@ func CompleteCourse(c *gin.Context) {
 		return nil
 	})
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to complete course: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to complete course", err)
 		return
 	}
 

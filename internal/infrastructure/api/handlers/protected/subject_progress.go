@@ -61,7 +61,7 @@ func UpdateLessonProgress(c *gin.Context) {
 			"updated_at":            time.Now(),
 		}),
 	}).Create(&progress).Error; err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to save lesson progress: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to save lesson progress", err)
 		return
 	}
 
@@ -92,7 +92,7 @@ func GetLessonProgress(c *gin.Context) {
 			})
 			return
 		}
-		api_response.Error(c, http.StatusInternalServerError, "Failed to load lesson progress: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to load lesson progress", err)
 		return
 	}
 

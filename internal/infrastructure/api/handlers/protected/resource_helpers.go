@@ -66,6 +66,9 @@ type listResourcesParams struct {
 func parseListResourcesParams(c *gin.Context, admin bool) listResourcesParams {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page <= 0 {
 		page = 1
 	}

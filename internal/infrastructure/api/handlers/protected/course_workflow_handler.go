@@ -156,7 +156,7 @@ func (h *CourseRESTHandler) ListCourseReviewComments(c *gin.Context) {
 
 	comments, err := h.courseService.ListReviewComments(courseUUID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to list review comments: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to list review comments", err)
 		return
 	}
 
@@ -192,7 +192,7 @@ func (h *CourseRESTHandler) AddCourseReviewComment(c *gin.Context) {
 
 	comment, err := h.courseService.AddReviewComment(courseUUID, reviewerUUID, req.Comment, req.Status)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to add review comment: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to add review comment", err)
 		return
 	}
 

@@ -1,7 +1,9 @@
 package response
 
 import (
+	"log"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -43,6 +45,38 @@ func Error(c *gin.Context, status int, message string) {
 		"success": false,
 		"error":   message,
 	})
+}
+
+// isDevelopment mirrors the same env-var check used elsewhere in this repo
+// (secrets_validator.go, csrf_protection.go) to decide dev-only behavior.
+// Defaults to "not development" (the safe side) unless explicitly opted in,
+// so an unset/misconfigured environment never accidentally leaks details.
+func isDevelopment() bool {
+	env := os.Getenv("NODE_ENV")
+	if env == "" {
+		env = os.Getenv("GO_ENV")
+	}
+	return env == "development"
+}
+
+// ErrorDetail responds with publicMessage to the client and always logs the
+// full err server-side. In development, err's text is appended to the
+// response too (matching this repo's long-standing "Failed to X: <err>"
+// convention, useful for local debugging); in every other environment the
+// client only ever sees publicMessage, since err may contain raw database
+// error text (column/constraint names, driver internals) that shouldn't
+// reach an API client in production.
+func ErrorDetail(c *gin.Context, status int, publicMessage string, err error) {
+	if err != nil {
+		log.Printf("[%s %s] %s: %v", c.Request.Method, c.FullPath(), publicMessage, err)
+	}
+
+	message := publicMessage
+	if isDevelopment() && err != nil {
+		message = publicMessage + ": " + err.Error()
+	}
+
+	Error(c, status, message)
 }
 
 func List(c *gin.Context, items interface{}, pagination Pagination, aliases gin.H) {

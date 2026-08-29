@@ -19,6 +19,9 @@ import (
 func AdminListScheduledTasks(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	search := c.Query("search")
 	status := c.Query("status")
 
@@ -117,6 +120,9 @@ func scheduledTaskToGin(t models.ScheduledTask) gin.H {
 func AdminListQueueJobs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	search := c.Query("search")
 	status := c.Query("status")
 
@@ -216,6 +222,9 @@ func queueJobToGin(j models.QueueJob) gin.H {
 func AdminListImportExportJobs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 
 	if page <= 0 {
 		page = 1

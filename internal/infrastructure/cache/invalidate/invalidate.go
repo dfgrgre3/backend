@@ -22,7 +22,7 @@ func (ci *Invalidator) InvalidateSubject(ctx context.Context, id string) {
 	}
 	key := fmt.Sprintf("subject:id:%s", id)
 	ci.del(ctx, key)
-	ci.invalidatePattern(ctx, "subj:list:*")
+	ci.invalidatePattern(ctx, "subject:list:*")
 	log.Printf("[Cache] Invalidated subject cache: %s", id)
 }
 

@@ -132,7 +132,7 @@ func (h *AuthHandler) GetLinkedAccounts(c *gin.Context) {
 
 	accounts, err := h.authService.GetLinkedAccounts(c.Request.Context(), userID.(string))
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, err.Error())
+		response.ErrorDetail(c, http.StatusInternalServerError, "Failed to fetch linked accounts", err)
 		return
 	}
 

@@ -19,6 +19,9 @@ import (
 func ListAdmins(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "25"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page < 1 {
 		page = 1
 	}

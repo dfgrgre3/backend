@@ -83,6 +83,9 @@ func AdminClearCache(c *gin.Context) {
 func AdminListEmailTemplates(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	search := c.Query("search")
 
 	if page <= 0 {
@@ -163,6 +166,9 @@ func AdminDeleteEmailTemplate(c *gin.Context) {
 func AdminListFeatureFlags(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	search := c.Query("search")
 
 	if page <= 0 {

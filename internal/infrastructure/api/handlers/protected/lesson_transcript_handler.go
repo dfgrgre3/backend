@@ -55,7 +55,7 @@ func GetLessonTranscript(c *gin.Context) {
 			apiresponse.Success(c, gin.H{"content": "", "format": "srt", "language": "ar"})
 			return
 		}
-		apiresponse.Error(c, http.StatusInternalServerError, "Failed to load transcript: "+err.Error())
+		apiresponse.ErrorDetail(c, http.StatusInternalServerError, "Failed to load transcript", err)
 		return
 	}
 
@@ -114,7 +114,7 @@ func UpsertLessonTranscript(c *gin.Context) {
 			"updated_at": gorm.Expr("now()"),
 		}),
 	}).Create(&transcript).Error; err != nil {
-		apiresponse.Error(c, http.StatusInternalServerError, "Failed to save transcript: "+err.Error())
+		apiresponse.ErrorDetail(c, http.StatusInternalServerError, "Failed to save transcript", err)
 		return
 	}
 
@@ -133,7 +133,7 @@ func DeleteLessonTranscript(c *gin.Context) {
 	}
 
 	if err := db.WriteDB().Where("lesson_id = ?", lessonID).Delete(&models.LessonTranscript{}).Error; err != nil {
-		apiresponse.Error(c, http.StatusInternalServerError, "Failed to delete transcript: "+err.Error())
+		apiresponse.ErrorDetail(c, http.StatusInternalServerError, "Failed to delete transcript", err)
 		return
 	}
 

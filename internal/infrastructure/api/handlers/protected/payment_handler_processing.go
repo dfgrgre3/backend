@@ -87,9 +87,14 @@ func processSubscriptionPayment(tx *gorm.DB, payment *models.Payment) error {
 		return fmt.Errorf("failed to create subscription: %w", err)
 	}
 
+	// Map keys must be the real DB column names, not the struct's JSON
+	// tags — see payment_handler_webhook.go for the identical bug and full
+	// explanation. Before this fix, every Paymob-driven subscription
+	// payment failed here with "no such column" and rolled back the whole
+	// processPaymentItems transaction.
 	if err := tx.Model(&models.User{}).Where(idQuery, payment.UserID).Updates(map[string]interface{}{
-		"activeSubscriptionId":  sub.ID,
-		"subscriptionExpiresAt": endDate,
+		"active_subscription_id":  sub.ID,
+		"subscription_expires_at": endDate,
 	}).Error; err != nil {
 		return fmt.Errorf("failed to update user subscription: %w", err)
 	}

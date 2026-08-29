@@ -53,7 +53,7 @@ func UpdateSettings(c *gin.Context) {
 	settings, err := fetchOrCreateUserSettings(userID.(string))
 	if err != nil {
 		log.Printf("ERROR: UpdateSettings - fetchOrCreateUserSettings failed for user %v: %v", userID, err)
-		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch or create settings: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to fetch or create settings", err)
 		return
 	}
 

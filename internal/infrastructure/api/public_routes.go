@@ -139,7 +139,7 @@ func SetupPublicRoutes(router *gin.Engine) {
 	router.POST("/api/auth/forgot-password", middleware.AuthRateLimiter(), authHandler.ForgotPassword)
 	router.POST("/api/auth/forgot-password/verify-code", middleware.AuthRateLimiter(), authHandler.VerifyForgotPasswordCode)
 	router.POST("/api/auth/reset-password", middleware.AuthRateLimiter(), authHandler.ResetPassword)
-	router.POST("/api/auth/verify-email", middleware.Auth(), authHandler.VerifyEmail)
+	router.POST("/api/auth/verify-email", middleware.Auth(), middleware.AuthRateLimiter(), authHandler.VerifyEmail)
 	router.POST("/api/auth/resend-verification", middleware.Auth(), middleware.AuthRateLimiter(), authHandler.ResendVerification)
 
 	// Advanced & Security-Hardened Authentication Routes

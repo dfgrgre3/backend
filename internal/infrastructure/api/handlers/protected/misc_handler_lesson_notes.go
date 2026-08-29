@@ -61,7 +61,7 @@ func CreateLessonNote(c *gin.Context) {
 			"updated_at": time.Now(),
 		}),
 	}).Create(&note).Error; err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to save lesson notes: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to save lesson notes", err)
 		return
 	}
 

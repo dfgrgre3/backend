@@ -63,7 +63,7 @@ func SendNotificationBroadcast(c *gin.Context) {
 	}
 
 	if err := SafeCreate(db.DB, &broadcast); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to create broadcast: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to create broadcast", err)
 		return
 	}
 

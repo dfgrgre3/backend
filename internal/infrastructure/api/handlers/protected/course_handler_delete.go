@@ -26,7 +26,7 @@ func (h *CourseRESTHandler) DeleteCourse(c *gin.Context) {
 
 	err := h.db.WithContext(c.Request.Context()).Delete(&models.LmsCourse{}, "id = ?", id).Error
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to delete course: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to delete course", err)
 		return
 	}
 

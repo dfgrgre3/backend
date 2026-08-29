@@ -20,7 +20,7 @@ func (h *CourseRESTHandler) GetReviews(c *gin.Context) {
 
 	reviews, err := h.courseService.ListReviews(courseID, "")
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to get course reviews: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to get course reviews", err)
 		return
 	}
 

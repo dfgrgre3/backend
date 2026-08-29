@@ -137,7 +137,7 @@ func (h *OAuthHandler) OAuthCallback(c *gin.Context) {
 	ctx := c.Request.Context()
 	oauthUser, err := provider.ExchangeCode(ctx, code)
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "Failed to exchange auth code: "+err.Error())
+		response.ErrorDetail(c, http.StatusInternalServerError, "Failed to exchange auth code", err)
 		return
 	}
 

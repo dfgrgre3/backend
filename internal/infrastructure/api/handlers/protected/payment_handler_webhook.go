@@ -166,15 +166,41 @@ func extractPaymobTransactionData(payload map[string]interface{}) paymobTransact
 }
 
 func handleSuccessfulPayment(c *gin.Context, payment *models.Payment, data paymobTransactionData) {
+	// The in-memory status check in PaymobWebhook's loop is only a fast-path
+	// optimization — it reads payment.Status before any lock is taken, so two
+	// concurrent/retried callbacks for the same payment can both pass it and
+	// both reach here. The real idempotency guard is this conditional UPDATE:
+	// it flips status pending->completed atomically, and only the callback
+	// whose UPDATE actually affected a row gets to run processPaymentItems
+	// (wallet credit, enrollment, subscription creation). A second, racing
+	// callback's UPDATE affects 0 rows and is treated as a no-op duplicate.
+	var processed bool
 	err := db.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(payment).Updates(map[string]interface{}{
-			"status":        models.PaymentCompleted,
-			"externalTxnId": fmt.Sprintf("%d", data.TxnID),
-			"completedAt":   time.Now(),
-		}).Error; err != nil {
-			return err
+		// Map keys must be actual DB column names ("external_txn_id",
+		// "completed_at"), not the struct's JSON tags — GORM's map-based
+		// Updates() falls back to treating an unresolved key as a literal
+		// (wrong) column name instead of erroring at compile time. Before
+		// this fix, the previous "externalTxnId"/"completedAt" keys caused
+		// every successful-payment UPDATE to fail with "no such column"
+		// (Postgres: "column ... does not exist"), which aborted the
+		// transaction and made handleSuccessfulPayment return a 500 to
+		// Paymob for every completed payment — no payment was ever actually
+		// being marked completed by this webhook.
+		result := tx.Model(payment).
+			Where("id = ? AND status = ?", payment.ID, models.PaymentPending).
+			Updates(map[string]interface{}{
+				"status":          models.PaymentCompleted,
+				"external_txn_id": fmt.Sprintf("%d", data.TxnID),
+				"completed_at":    time.Now(),
+			})
+		if result.Error != nil {
+			return result.Error
 		}
-
+		if result.RowsAffected == 0 {
+			return nil
+		}
+		payment.Status = models.PaymentCompleted
+		processed = true
 		return processPaymentItems(tx, payment)
 	})
 
@@ -184,10 +210,20 @@ func handleSuccessfulPayment(c *gin.Context, payment *models.Payment, data paymo
 		return
 	}
 
+	if !processed {
+		log.Printf("[PaymobWebhook] skipped duplicate/concurrent success callback for payment id=%s order=%d", payment.ID, data.OrderID)
+		return
+	}
+
 	analyticsservice.GetAuditService().LogAsync(payment.UserID, analyticsservice.AuditEventPaymentSuccess, "payment", payment.ID, map[string]interface{}{"amount": payment.Amount, "orderId": data.OrderID}, c.ClientIP(), c.Request.UserAgent())
 }
 
 func handleFailedPayment(payment *models.Payment, orderID int64) {
-	db.DB.Model(payment).Update("status", models.PaymentFailed)
+	result := db.DB.Model(payment).
+		Where("id = ? AND status = ?", payment.ID, models.PaymentPending).
+		Update("status", models.PaymentFailed)
+	if result.Error != nil || result.RowsAffected == 0 {
+		return
+	}
 	analyticsservice.GetAuditService().LogAsync(payment.UserID, analyticsservice.AuditEventPaymentFailed, "payment", payment.ID, map[string]interface{}{"reason": "provider_failed", "orderId": orderID}, "", "")
 }

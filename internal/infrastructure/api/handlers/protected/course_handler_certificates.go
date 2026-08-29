@@ -88,7 +88,7 @@ func (h *CourseRESTHandler) ListMyCertificates(c *gin.Context) {
 
 	certs, err := h.courseService.ListUserCertificates(userID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to list certificates: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to list certificates", err)
 		return
 	}
 

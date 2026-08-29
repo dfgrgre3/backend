@@ -103,7 +103,7 @@ func (h *CourseRESTHandler) UpdateCourse(c *gin.Context) {
 			api_response.Error(c, http.StatusBadRequest, "Certificate template not found")
 			return
 		}
-		api_response.Error(c, http.StatusInternalServerError, "Failed to update course: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to update course", err)
 		return
 	}
 

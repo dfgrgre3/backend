@@ -86,15 +86,21 @@ func StartWorkerWithContext(ctx context.Context) {
 	summaryHandler := NewLessonSummaryHandler()
 	mux.HandleFunc(TypeLessonSummary, WithTaskIdempotency(summaryHandler.ProcessTask))
 
-	// Drip content release notifications (Phase 3)
-	mux.HandleFunc(TypeDripContentRelease, func(ctx context.Context, task *asynq.Task) error {
+	// Drip content release notifications (Phase 3). Wrapped in
+	// WithTaskIdempotency like every other handler above: this fans out a
+	// notification to every enrolled student, so an asynq redelivery
+	// (worker crash mid-run, or a retry after a transient DB error) would
+	// otherwise re-send notifications to students already notified on the
+	// first attempt.
+	mux.HandleFunc(TypeDripContentRelease, WithTaskIdempotency(func(ctx context.Context, task *asynq.Task) error {
 		return HandleDripContentRelease(task)
-	})
+	}))
 
-	// Course availability scheduling (Phase 3)
-	mux.HandleFunc(TypeCourseAvailability, func(ctx context.Context, task *asynq.Task) error {
+	// Course availability scheduling (Phase 3) — same redelivery-duplication
+	// risk and fix as drip content release above.
+	mux.HandleFunc(TypeCourseAvailability, WithTaskIdempotency(func(ctx context.Context, task *asynq.Task) error {
 		return HandleCourseAvailability(task)
-	})
+	}))
 
 	log.Printf("[Worker] Asynq Server initialized (Concurrency=%d)", concurrency)
 

@@ -34,7 +34,7 @@ func (h *CourseRESTHandler) ListCourseAssignments(c *gin.Context) {
 
 	assignments, err := h.courseService.ListCourseAssignments(parsedCourseID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to list assignments: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to list assignments", err)
 		return
 	}
 
@@ -70,7 +70,7 @@ func (h *CourseRESTHandler) CreateCourseAssignment(c *gin.Context) {
 
 	assignment, err := h.courseService.CreateAssignment(parsedCourseID, req.Title, req.Description, dueDate, maxScore)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to create assignment: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to create assignment", err)
 		return
 	}
 
@@ -87,7 +87,7 @@ func (h *CourseRESTHandler) DeleteCourseAssignment(c *gin.Context) {
 	}
 
 	if err := h.courseService.DeleteAssignment(parsedID); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to delete assignment: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to delete assignment", err)
 		return
 	}
 
@@ -125,7 +125,7 @@ func (h *CourseRESTHandler) LinkAssignment(c *gin.Context) {
 
 	assignment, err := h.courseService.LinkAssignment(parsedAssignmentID, lessonID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to link assignment: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to link assignment", err)
 		return
 	}
 
@@ -144,7 +144,7 @@ func (h *CourseRESTHandler) UnlinkAssignment(c *gin.Context) {
 	}
 
 	if err := h.courseService.UnlinkAssignment(parsedID); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to unlink assignment: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to unlink assignment", err)
 		return
 	}
 

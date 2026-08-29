@@ -196,6 +196,9 @@ func GetTeacherApplications(c *gin.Context) {
 		page = 1
 	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if limit < 1 {
 		limit = 10
 	}

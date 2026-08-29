@@ -25,7 +25,7 @@ func (h *CourseRESTHandler) CreateCourseVersion(c *gin.Context) {
 
 	version, err := h.courseService.CreateVersion(courseUUID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to create version: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to create version", err)
 		return
 	}
 
@@ -39,7 +39,7 @@ func (h *CourseRESTHandler) ListCourseVersions(c *gin.Context) {
 	courseUUID, _ := uuid.Parse(id)
 	versions, err := h.courseService.ListVersions(courseUUID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to list versions: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to list versions", err)
 		return
 	}
 
@@ -68,7 +68,7 @@ func (h *CourseRESTHandler) RestoreCourseVersion(c *gin.Context) {
 
 	course, err := h.courseService.RestoreVersion(courseUUID, req.VersionNumber)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to restore version: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to restore version", err)
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *CourseRESTHandler) GetCourseChangelog(c *gin.Context) {
 	courseUUID, _ := uuid.Parse(id)
 	logs, err := h.courseService.ListChangelogs(courseUUID)
 	if err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to get changelog: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to get changelog", err)
 		return
 	}
 

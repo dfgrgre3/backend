@@ -61,7 +61,7 @@ func resolveGamificationUserID(c *gin.Context) (string, bool) {
 func GetLeaderboard(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "10")
 	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
+	if err != nil || limit <= 0 || limit > 100 {
 		limit = 10
 	}
 

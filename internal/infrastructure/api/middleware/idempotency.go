@@ -106,8 +106,18 @@ func idempotencyLockKey(dedupKey string) string {
 
 func handleIdempotencyLockResult(c *gin.Context, err error) {
 	if err != nil {
-		log.Printf("[Idempotency] Redis error: %v", err)
-		c.Next()
+		// Fail closed, not open: the caller explicitly sent an
+		// Idempotency-Key, opting into duplicate-request protection for
+		// what is typically a payment/enrollment-style write. Letting the
+		// request through here (as before) would silently drop that
+		// protection during a Redis outage/blip, allowing the exact
+		// double-execution (double charge, double enrollment) the header
+		// was meant to prevent. A 503 tells the client to retry — which is
+		// safe, since they're already using idempotency keys.
+		log.Printf("[Idempotency] Redis error, rejecting to avoid unprotected duplicate execution: %v", err)
+		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+			"error": "Unable to verify request idempotency right now. Please retry with the same Idempotency-Key.",
+		})
 		return
 	}
 

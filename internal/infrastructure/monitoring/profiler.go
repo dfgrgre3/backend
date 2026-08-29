@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
@@ -257,7 +258,7 @@ func ProfilingMiddleware(mc *MetricsCollector) gin.HandlerFunc {
 		requestSize := c.Request.ContentLength
 		responseSize := int64(c.Writer.Size())
 
-		mc.RecordHTTPRequest(c.Request.Method, path, string(rune(status)), duration, requestSize, responseSize)
+		mc.RecordHTTPRequest(c.Request.Method, path, strconv.Itoa(status), duration, requestSize, responseSize)
 	}
 }
 

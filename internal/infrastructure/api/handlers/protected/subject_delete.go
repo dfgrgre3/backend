@@ -92,7 +92,7 @@ func DeleteSubject(c *gin.Context) {
 	if err := tx.Delete(&subject).Error; err != nil {
 		tx.Rollback()
 		log.Printf("Error deleting subject %q: %v", id, err)
-		api_response.Error(c, http.StatusInternalServerError, "Failed to delete subject: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to delete subject", err)
 		return
 	}
 

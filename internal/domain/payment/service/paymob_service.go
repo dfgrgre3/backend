@@ -81,33 +81,41 @@ func (s *PaymobService) Authenticate() (string, error) {
 
 // 2. Order Registration
 func (s *PaymobService) RegisterOrder(authToken string, amountCents int64, items []interface{}) (int64, error) {
-	payload := map[string]interface{}{
-		"auth_token":      authToken,
-		"delivery_needed": "false",
-		"amount_cents":    amountCents,
-		"currency":        "EGP",
-		"items":           items,
-	}
-	body, _ := json.Marshal(payload)
+	service := services.GetCircuitBreakerService()
 
-	req, _ := http.NewRequest("POST", s.BaseURL+"/ecommerce/orders", bytes.NewBuffer(body))
-	req.Header.Set(headerContentType, contentTypeJSON)
+	var orderID int64
+	err := service.CallExternalAPI("paymob-api", func() error {
+		payload := map[string]interface{}{
+			"auth_token":      authToken,
+			"delivery_needed": "false",
+			"amount_cents":    amountCents,
+			"currency":        "EGP",
+			"items":           items,
+		}
+		body, _ := json.Marshal(payload)
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
+		req, _ := http.NewRequest("POST", s.BaseURL+"/ecommerce/orders", bytes.NewBuffer(body))
+		req.Header.Set(headerContentType, contentTypeJSON)
 
-	var result struct {
-		ID int64 `json:"id"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return 0, err
-	}
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
 
-	return result.ID, nil
+		var result struct {
+			ID int64 `json:"id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return err
+		}
+
+		orderID = result.ID
+		return nil
+	})
+
+	return orderID, err
 }
 
 // 3. Payment Key Generation
@@ -127,71 +135,88 @@ func (s *PaymobService) GetPaymentKey(authToken string, orderID, amountCents int
 		}
 	}
 
-	payload := map[string]interface{}{
-		"auth_token":           authToken,
-		"amount_cents":         amountCents,
-		"expiration":           3600,
-		"order_id":             orderID,
-		"billing_data":         billingData,
-		"currency":             "EGP",
-		"integration_id":       integrationID,
-		"lock_order_when_paid": "false",
-	}
-	body, _ := json.Marshal(payload)
+	service := services.GetCircuitBreakerService()
 
-	req, _ := http.NewRequest("POST", s.BaseURL+"/acceptance/payment_keys", bytes.NewBuffer(body))
-	req.Header.Set(headerContentType, contentTypeJSON)
+	var token string
+	err := service.CallExternalAPI("paymob-api", func() error {
+		payload := map[string]interface{}{
+			"auth_token":           authToken,
+			"amount_cents":         amountCents,
+			"expiration":           3600,
+			"order_id":             orderID,
+			"billing_data":         billingData,
+			"currency":             "EGP",
+			"integration_id":       integrationID,
+			"lock_order_when_paid": "false",
+		}
+		body, _ := json.Marshal(payload)
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
+		req, _ := http.NewRequest("POST", s.BaseURL+"/acceptance/payment_keys", bytes.NewBuffer(body))
+		req.Header.Set(headerContentType, contentTypeJSON)
 
-	var result struct {
-		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
-	}
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
 
-	return result.Token, nil
+		var result struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return err
+		}
+
+		token = result.Token
+		return nil
+	})
+
+	return token, err
 }
 
 // Wallet Payment Request (for Vodafone Cash, etc.)
 func (s *PaymobService) CreateWalletRequest(paymentKey, phoneNumber string) (string, error) {
-	payload := map[string]interface{}{
-		"source": map[string]string{
-			"identifier": phoneNumber,
-			"subtype":    "WALLET",
-		},
-		"payment_token": paymentKey,
-	}
-	body, _ := json.Marshal(payload)
+	service := services.GetCircuitBreakerService()
 
-	req, _ := http.NewRequest("POST", s.BaseURL+"/acceptance/payments/pay", bytes.NewBuffer(body))
-	req.Header.Set(headerContentType, contentTypeJSON)
+	var redirectURL string
+	err := service.CallExternalAPI("paymob-api", func() error {
+		payload := map[string]interface{}{
+			"source": map[string]string{
+				"identifier": phoneNumber,
+				"subtype":    "WALLET",
+			},
+			"payment_token": paymentKey,
+		}
+		body, _ := json.Marshal(payload)
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
+		req, _ := http.NewRequest("POST", s.BaseURL+"/acceptance/payments/pay", bytes.NewBuffer(body))
+		req.Header.Set(headerContentType, contentTypeJSON)
 
-	var result struct {
-		IframeRedirectionURL string `json:"iframe_redirection_url"`
-		RedirectURL          string `json:"redirect_url"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
-	}
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
 
-	if result.RedirectURL != "" {
-		return result.RedirectURL, nil
-	}
-	return result.IframeRedirectionURL, nil
+		var result struct {
+			IframeRedirectionURL string `json:"iframe_redirection_url"`
+			RedirectURL          string `json:"redirect_url"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return err
+		}
+
+		if result.RedirectURL != "" {
+			redirectURL = result.RedirectURL
+		} else {
+			redirectURL = result.IframeRedirectionURL
+		}
+		return nil
+	})
+
+	return redirectURL, err
 }
 
 // VerifyHMAC verifies the HMAC hash from Paymob webhook

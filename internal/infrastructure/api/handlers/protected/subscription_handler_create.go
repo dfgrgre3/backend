@@ -38,9 +38,15 @@ func createSubscriptionAndPayment(tx *gorm.DB, userID string, plan models.Subscr
 		return "", err
 	}
 
+	// Map keys must be the real DB column names, not the struct's JSON
+	// tags — see payment_handler_webhook.go for the identical bug and full
+	// explanation. Before this fix this Updates() call always failed with
+	// "no such column", rolling back the whole transaction (subscription +
+	// payment + invoice creation all failed together for every purchase
+	// that went through this path).
 	if err := tx.Model(&models.User{}).Where(idQuery, userID).Updates(map[string]interface{}{
-		"activeSubscriptionId":  sub.ID,
-		"subscriptionExpiresAt": endDate,
+		"active_subscription_id":  sub.ID,
+		"subscription_expires_at": endDate,
 	}).Error; err != nil {
 		return "", err
 	}

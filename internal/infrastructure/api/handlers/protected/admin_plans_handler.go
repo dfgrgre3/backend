@@ -19,6 +19,9 @@ import (
 func AdminListPlans(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	if page <= 0 {
 		page = 1
 	}

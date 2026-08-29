@@ -19,6 +19,9 @@ import (
 func AdminListSecurityLogs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	search := c.Query("search")
 	status := c.Query("status")
 
@@ -105,6 +108,9 @@ func securityLogToGin(l models.SecurityLog) gin.H {
 func AdminListActivityLog(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	search := c.Query("search")
 
 	if page <= 0 {
@@ -180,6 +186,9 @@ func activityLogToGin(l models.ActivityLog) gin.H {
 func AdminListUserSessions(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	search := c.Query("search")
 
 	if page <= 0 {
@@ -282,6 +291,9 @@ func userSessionToGin(s models.UserSession) gin.H {
 func AdminListLoginAttempts(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	search := c.Query("search")
 	status := c.Query("status")
 

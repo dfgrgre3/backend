@@ -43,7 +43,7 @@ func UpdateCourseCurriculum(c *gin.Context) {
 		}
 		return nil
 	}); err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to save curriculum: "+err.Error())
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to save curriculum", err)
 		return
 	}
 
