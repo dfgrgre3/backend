@@ -8,7 +8,7 @@ import (
 
 // registerAdminContentRoutes registers Teachers, Instructor management and
 // Category routes.
-func registerAdminContentRoutes(admin, sensitive *gin.RouterGroup) {
+func registerAdminContentRoutes(admin *gin.RouterGroup) {
 	// Teachers
 	admin.GET(adminTeachersRoute, handlers.GetTeachersForAdmin)
 	admin.POST(adminTeachersRoute, handlers.CreateTeacher)

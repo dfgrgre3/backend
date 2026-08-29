@@ -8,7 +8,7 @@ import (
 
 // registerAdminBadgeCMSRoutes registers Badges, Attendance, CMS Pages and
 // Integrations management routes.
-func registerAdminBadgeCMSRoutes(admin, sensitive *gin.RouterGroup) {
+func registerAdminBadgeCMSRoutes(admin *gin.RouterGroup) {
 	// -------------------------------
 	// Badges Management
 	// -------------------------------

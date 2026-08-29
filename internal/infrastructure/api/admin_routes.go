@@ -63,15 +63,15 @@ func SetupAdminRoutes(router *gin.Engine) {
 	sensitive.Use(middleware.AdminRequired()) // additional check: blocks MODERATOR
 
 	registerAdminDashboardRoutes(admin, sensitive)
-	registerAdminContentRoutes(admin, sensitive)
+	registerAdminContentRoutes(admin)
 	registerAdminSupportBackupRoutes(admin, sensitive)
 	registerAdminSecurityRoutes(admin, sensitive)
-	registerAdminGamificationRoutes(admin, sensitive)
+	registerAdminGamificationRoutes(admin)
 	registerAdminUserRoutes(admin, sensitive)
-	registerAdminCourseRoutes(admin, sensitive)
-	registerAdminNotificationReportRoutes(admin, sensitive)
+	registerAdminCourseRoutes(admin)
+	registerAdminNotificationReportRoutes(admin)
 	registerAdminMiscRoutes(admin, sensitive)
-	registerAdminLessonPaymentRoutes(admin, sensitive)
-	registerAdminBadgeCMSRoutes(admin, sensitive)
-	registerAdminRoleRoutes(admin, sensitive)
+	registerAdminLessonPaymentRoutes(admin)
+	registerAdminBadgeCMSRoutes(admin)
+	registerAdminRoleRoutes(admin)
 }

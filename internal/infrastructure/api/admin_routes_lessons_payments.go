@@ -9,7 +9,7 @@ import (
 
 // registerAdminLessonPaymentRoutes registers Lessons, Payments, Dunning,
 // Exams, Refunds and Tax management routes.
-func registerAdminLessonPaymentRoutes(admin, sensitive *gin.RouterGroup) {
+func registerAdminLessonPaymentRoutes(admin *gin.RouterGroup) {
 	// -------------------------------
 	// Lessons Management
 	// -------------------------------

@@ -8,7 +8,7 @@ import (
 
 // registerAdminNotificationReportRoutes registers notification broadcast,
 // custom reports, scheduler and search routes.
-func registerAdminNotificationReportRoutes(admin, sensitive *gin.RouterGroup) {
+func registerAdminNotificationReportRoutes(admin *gin.RouterGroup) {
 	// Notifications Broadcast
 	admin.POST("/notifications/broadcast", handlers.SendNotificationBroadcast)
 	admin.POST("/notifications/schedule", handlers.ScheduleNotificationBroadcast)

@@ -129,7 +129,7 @@ func applyMigration(database *gorm.DB, name string) error {
 	// Check if this migration contains non-transactional statements
 	if needsNonTransactionalExecution(string(contents)) {
 		log.Printf("Migration %s contains non-transactional statements (CONCURRENTLY), executing outside transaction", id)
-		return applyNonTransactionalMigration(database, name, id, string(contents), checksum)
+		return applyNonTransactionalMigration(database, id, string(contents), checksum)
 	}
 
 	// For other migrations, use statement splitting with transaction
@@ -221,7 +221,7 @@ func applyBaselineMigration(database *gorm.DB, contents []byte, checksum, id str
 // which cannot run inside a transaction (e.g., CREATE INDEX CONCURRENTLY).
 // These statements must be executed one by one, outside any transaction.
 // We use the raw *sql.DB connection to bypass GORM's transaction handling.
-func applyNonTransactionalMigration(database *gorm.DB, name, id, contents, checksum string) error {
+func applyNonTransactionalMigration(database *gorm.DB, id, contents, checksum string) error {
 	// Get raw database connection to bypass GORM's transaction handling
 	sqlDB, err := database.DB()
 	if err != nil {

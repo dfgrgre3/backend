@@ -11,7 +11,7 @@ import (
 // resources: Achievements, Rewards, Seasons, Coupons, Challenges, Blog,
 // Events, Automations, Campaigns, AB Testing, Forum, Books, Learning Paths,
 // Bank Questions, Resources, Media, Upload, Landing Page and Affiliates.
-func registerAdminGamificationRoutes(admin, sensitive *gin.RouterGroup) {
+func registerAdminGamificationRoutes(admin *gin.RouterGroup) {
 	// Achievements
 	admin.GET("/achievements", handlers.AdminGetAchievements)
 	admin.POST("/achievements", handlers.AdminCreateAchievement)

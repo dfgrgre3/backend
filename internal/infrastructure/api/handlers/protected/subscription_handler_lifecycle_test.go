@@ -41,6 +41,5 @@ func TestCreateSubscriptionAndPayment_LinksUserToSubscription(t *testing.T) {
 	var after models.User
 	require.NoError(t, testDB.First(&after, "id = ?", user.ID).Error)
 	require.NotNil(t, after.ActiveSubscriptionID, "user must be linked to the newly created subscription")
-	require.NotNil(t, after.SubscriptionExpiresAt)
-	require.WithinDuration(t, time.Now().AddDate(0, 1, 0), *after.SubscriptionExpiresAt, 24*time.Hour)
+	require.WithinDuration(t, time.Now().Add(30*24*time.Hour), *after.SubscriptionExpiresAt, 5*time.Second)
 }

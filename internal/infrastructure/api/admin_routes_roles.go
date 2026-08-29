@@ -8,7 +8,7 @@ import (
 
 // registerAdminRoleRoutes registers Roles, Permissions, Role Permissions and
 // Role Users management routes.
-func registerAdminRoleRoutes(admin, sensitive *gin.RouterGroup) {
+func registerAdminRoleRoutes(admin *gin.RouterGroup) {
 	// -------------------------------
 	// Roles & Permissions Management
 	// -------------------------------

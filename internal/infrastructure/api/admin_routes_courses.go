@@ -8,7 +8,7 @@ import (
 
 // registerAdminCourseRoutes registers Subject, course-alias, curriculum,
 // course-students and manual-enroll routes.
-func registerAdminCourseRoutes(admin, sensitive *gin.RouterGroup) {
+func registerAdminCourseRoutes(admin *gin.RouterGroup) {
 	// Subject
 	admin.GET(adminSubjectsRoute, handlers.GetSubjects)
 	admin.POST(adminSubjectsRoute, handlers.CreateSubject)

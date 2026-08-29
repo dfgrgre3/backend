@@ -130,7 +130,7 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken, userAgent,
 	oldHash := models.ComputeRefreshTokenHash(refreshToken)
 
 	res, err, _ := s.refreshSF.Do(oldHash, func() (interface{}, error) {
-		return s.doRefreshToken(ctx, refreshToken, oldHash, userAgent, ip)
+		return s.doRefreshToken(ctx, oldHash, userAgent, ip)
 	})
 	if err != nil {
 		return nil, err
@@ -138,7 +138,7 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken, userAgent,
 	return res.(*authdto.RefreshTokenResponse), nil
 }
 
-func (s *authService) doRefreshToken(ctx context.Context, refreshToken, oldHash, userAgent, ip string) (*authdto.RefreshTokenResponse, error) {
+func (s *authService) doRefreshToken(ctx context.Context, oldHash, userAgent, ip string) (*authdto.RefreshTokenResponse, error) {
 	session, err := s.authRepo.GetSessionByHashOrdered(ctx, oldHash)
 	if err != nil {
 		return nil, errors.New("invalid or expired refresh token")
