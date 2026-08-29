@@ -2,6 +2,7 @@ package api
 
 import (
 	"thanawy-backend/internal/application"
+	"thanawy-backend/internal/infrastructure/api/handlers/protected"
 	"thanawy-backend/internal/infrastructure/api/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -30,7 +31,13 @@ func SetupHexagonalRoutes(router *gin.Engine, handlers *application.Handlers) {
 			courseAdmin.GET("/check-slug", handlers.CourseRESTHandler.CheckSlug)
 			courseAdmin.GET("/meta", handlers.CourseRESTHandler.GetCourseMeta)
 			courseAdmin.GET("/:id", handlers.CourseRESTHandler.GetCourse)
-			courseAdmin.GET("/:id/reviews", handlers.CourseRESTHandler.GetReviews)
+			// AdminListCourseReviews reads the legacy CourseReview table (the one
+			// real students actually write to via CreateCourseReview /
+			// GetCourseReviews), not the hexagonal LmsReview table the removed
+			// CourseRESTHandler.GetReviews bound here — see project bug notes.
+			courseAdmin.GET("/:id/reviews", protected.AdminListCourseReviews)
+			courseAdmin.PATCH("/:id/reviews", protected.AdminSetReviewVisibility)
+			courseAdmin.DELETE("/:id/reviews", protected.AdminDeleteReview)
 			courseAdmin.PATCH("/:id", handlers.CourseRESTHandler.UpdateCourse)
 			courseAdmin.DELETE("/:id", handlers.CourseRESTHandler.DeleteCourse)
 

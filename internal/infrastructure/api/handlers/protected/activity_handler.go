@@ -337,7 +337,10 @@ func UpdateSchedule(c *gin.Context) {
 			UserID:   uid,
 			PlanJson: input.PlanJson,
 		}
-		SafeCreate(db.DB, &schedule)
+		if createErr := SafeCreate(db.DB, &schedule); createErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": createErr.Error()})
+			return
+		}
 	} else {
 		// Update existing
 		db.DB.Model(&schedule).Update("planJson", input.PlanJson)

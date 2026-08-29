@@ -37,6 +37,12 @@ type Payment struct {
 	ExternalTxnID string    `gorm:"index;column:external_txn_id" json:"externalTxnId"`
 	CompletedAt   time.Time `gorm:"column:completed_at" json:"completedAt"`
 
+	// OrderID links this payment back to the cart Order it was part of
+	// (nil for a direct single-course checkout via subject_checkout.go).
+	// Lets the Paymob webhook update Order.Status once every item's payment
+	// has been resolved — see payment_handler_webhook.go.
+	OrderID *string `gorm:"index;type:uuid;column:order_id;constraint:OnDelete:SET NULL" json:"orderId,omitempty"`
+
 	CreatedAt time.Time      `gorm:"index;column:created_at" json:"createdAt"`
 	UpdatedAt time.Time      `gorm:"column:updated_at" json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`

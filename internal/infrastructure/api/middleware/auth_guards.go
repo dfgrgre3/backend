@@ -78,6 +78,7 @@ func adminAPIPermission(path, method string) string {
 		{"/api/admin/seasons", models.PermSeasonsView, models.PermSeasonsManage},
 		{"/api/admin/marketing", models.PermMarketingView, models.PermMarketingManage},
 		{"/api/admin/coupons", models.PermMarketingView, models.PermMarketingManage},
+		{"/api/admin/orders", models.PermMarketingView, models.PermMarketingManage},
 		{"/api/admin/announcements", models.PermAnnouncementsView, models.PermAnnouncementsManage},
 		{"/api/admin/notifications", models.PermNotificationsManage, models.PermNotificationsManage},
 		{"/api/admin/forum", models.PermForumView, models.PermForumManage},

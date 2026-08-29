@@ -36,6 +36,11 @@ func registerAdminGamificationRoutes(admin, sensitive *gin.RouterGroup) {
 	admin.PATCH("/coupons/:id", handlers.AdminUpdateCoupon)
 	admin.DELETE("/coupons/:id", handlers.AdminDeleteCoupon)
 
+	// Orders (Cart checkout history) — the admin panel's Orders page
+	// predates this route; see cart.go / admin_orders.go.
+	admin.GET("/orders", handlers.AdminListOrders)
+	admin.PATCH("/orders", handlers.AdminUpdateOrderStatus)
+
 	// Challenges
 	admin.GET("/challenges", handlers.AdminGetChallenges)
 	admin.POST("/challenges", handlers.AdminCreateChallenge)

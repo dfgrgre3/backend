@@ -272,3 +272,59 @@ func (cr *CourseReview) BeforeCreate(tx *gorm.DB) (err error) {
 	cr.IsVisible = true
 	return
 }
+
+// CourseQuestion is a student-asked question on a course, optionally scoped
+// to one lesson (SubTopic). Mirrors CourseReview's shape/conventions.
+type CourseQuestion struct {
+	ID         string         `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	SubjectID  string         `gorm:"not null;index;type:uuid;column:subject_id;constraint:OnDelete:CASCADE" json:"subjectId"`
+	SubTopicID *string        `gorm:"index;type:uuid;column:sub_topic_id;constraint:OnDelete:CASCADE" json:"subTopicId,omitempty"`
+	UserID     string         `gorm:"not null;index;type:uuid;column:user_id;constraint:OnDelete:CASCADE" json:"userId"`
+	Title      string         `gorm:"not null;column:title" json:"title"`
+	Body       string         `gorm:"type:text;column:body" json:"body"`
+	CreatedAt  time.Time      `gorm:"index;column:created_at" json:"createdAt"`
+	UpdatedAt  time.Time      `gorm:"column:updated_at" json:"updatedAt"`
+	DeletedAt  gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
+
+	// Relations
+	User    User           `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Answers []CourseAnswer `gorm:"foreignKey:QuestionID" json:"answers,omitempty"`
+}
+
+// CourseAnswer is a reply to a CourseQuestion, from either a fellow student
+// or the course instructor (flagged via IsInstructorAnswer).
+type CourseAnswer struct {
+	ID                 string         `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	QuestionID         string         `gorm:"not null;index;type:uuid;column:question_id;constraint:OnDelete:CASCADE" json:"questionId"`
+	UserID             string         `gorm:"not null;index;type:uuid;column:user_id;constraint:OnDelete:CASCADE" json:"userId"`
+	Body               string         `gorm:"type:text;column:body" json:"body"`
+	IsInstructorAnswer bool           `gorm:"default:false;column:is_instructor_answer" json:"isInstructorAnswer"`
+	CreatedAt          time.Time      `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt          time.Time      `gorm:"column:updated_at" json:"updatedAt"`
+	DeletedAt          gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
+
+	// Relations
+	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
+}
+
+func (CourseQuestion) TableName() string {
+	return "CourseQuestion"
+}
+
+func (cq *CourseQuestion) BeforeCreate(tx *gorm.DB) (err error) {
+	if cq.ID == "" {
+		cq.ID = uuid.New().String()
+	}
+	return
+}
+
+func (CourseAnswer) TableName() string {
+	return "CourseAnswer"
+}
+
+func (ca *CourseAnswer) BeforeCreate(tx *gorm.DB) (err error) {
+	if ca.ID == "" {
+		ca.ID = uuid.New().String()
+	}
+	return
+}

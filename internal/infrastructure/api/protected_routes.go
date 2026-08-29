@@ -148,6 +148,25 @@ func SetupProtectedRoutes(router *gin.Engine, hexHandlers *application.Handlers)
 			userRoutes.GET("/courses/lessons/:id/transcript", handlers.GetLessonTranscript)
 			userRoutes.POST("/courses/:id/reviews", handlers.CreateCourseReview)
 
+			// Q&A (student questions on a course, optionally scoped to a lesson;
+			// instructor replies are flagged automatically, no separate route)
+			userRoutes.POST("/courses/:id/questions", handlers.CreateCourseQuestion)
+			userRoutes.POST("/questions/:id/answers", handlers.CreateCourseAnswer)
+			userRoutes.DELETE("/questions/:id", handlers.DeleteCourseQuestion)
+			userRoutes.DELETE("/answers/:id", handlers.DeleteCourseAnswer)
+
+			// Wishlist
+			userRoutes.GET("/wishlist", handlers.GetWishlist)
+			userRoutes.POST("/courses/:id/wishlist", handlers.AddToWishlist)
+			userRoutes.DELETE("/courses/:id/wishlist", handlers.RemoveFromWishlist)
+
+			// Cart (multi-course checkout, separate from the single-course
+			// /courses/:id/checkout path which stays as-is)
+			userRoutes.GET("/cart", handlers.GetCart)
+			userRoutes.POST("/cart/items", handlers.AddToCart)
+			userRoutes.DELETE("/cart/items/:subjectId", handlers.RemoveFromCart)
+			userRoutes.POST("/cart/checkout", handlers.CheckoutCart)
+
 			// Upload
 			userRoutes.POST("/upload/presign", handlers.PresignUpload)
 			userRoutes.POST(pathUpload, handlers.Upload)
