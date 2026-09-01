@@ -92,6 +92,58 @@ func setRolePermsCache(userID, role string, permissions []string) {
 	})
 }
 
+// mergeCustomRolePermissions adds permissions granted via the custom
+// Roles/Permissions management feature (Role + RolePermission + UserRoleMapping,
+// tables "Role"/"role_permissions"/"user_roles") on top of the caller's
+// enum-role-derived permission set. This is additive only — it can never
+// remove a permission the user's enum Role already grants, and an
+// unassigned/no-op custom role has no effect. Best-effort: DB errors here
+// must not block auth, since custom-role assignment is optional.
+func mergeCustomRolePermissions(userID string, base []string) []string {
+	if db.DB == nil {
+		return base
+	}
+
+	var roleIDs []string
+	if err := db.DB.Model(&models.UserRoleMapping{}).
+		Where("user_id = ?", userID).
+		Pluck("role_id", &roleIDs).Error; err != nil || len(roleIDs) == 0 {
+		return base
+	}
+
+	var permissionIDs []string
+	if err := db.DB.Model(&models.RolePermission{}).
+		Where("role_id IN ?", roleIDs).
+		Distinct("permission_id").
+		Pluck("permission_id", &permissionIDs).Error; err != nil || len(permissionIDs) == 0 {
+		return base
+	}
+
+	var names []string
+	if err := db.DB.Model(&models.Permission{}).
+		Where("id IN ?", permissionIDs).
+		Pluck("name", &names).Error; err != nil || len(names) == 0 {
+		return base
+	}
+
+	seen := make(map[string]struct{}, len(base))
+	for _, p := range base {
+		seen[p] = struct{}{}
+	}
+	merged := slices.Clone(base)
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		merged = append(merged, name)
+	}
+	return merged
+}
+
 // InvalidateRolePermsCache removes a user's cached role/permissions.
 // Call this after any role or permission update.
 func InvalidateRolePermsCache(userID string) {
@@ -183,6 +235,7 @@ func resolveUserFromDB(userID string) (string, []string, error) {
 
 	role := string(user.Role)
 	perms := user.GetEffectivePermissions()
+	perms = mergeCustomRolePermissions(userID, perms)
 
 	setRolePermsCache(userID, role, perms)
 

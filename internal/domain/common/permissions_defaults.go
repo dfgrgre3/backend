@@ -31,8 +31,12 @@ func getSuperAdminPermissions() []string {
 }
 
 func getAdminPermissions() []string {
+	// NOTE: PermAdminBypass is intentionally NOT granted here. It is a wildcard
+	// that satisfies every permission check (see PermissionGrantMatches), so it
+	// must remain exclusive to RoleSuperAdmin. Granting it to the plain ADMIN
+	// role made every admin a de-facto super-admin regardless of their actual
+	// permission list — restricted/moderator-style admins were impossible.
 	return append([]string{
-		PermAdminBypass,
 		PermDashboardView, PermAnalyticsView, PermReportsView, PermReportsManage, PermAuditLogsView,
 		PermUsersView, PermUsersCreate, PermUsersUpdate, PermUsersDelete, PermUsersManage, PermUsersImpersonate, PermUsersExport, PermUsersImport,
 		PermStudentsView, PermStudentsManage,

@@ -252,7 +252,18 @@ func (u *User) BeforeUpdate(tx *gorm.DB) (err error) {
 	// Validate the role only when the update actually changes it. Map-based
 	// updates use an empty model value, so validating unconditionally rejects
 	// unrelated profile updates.
-	if tx.Statement.Changed("Role") && !IsValidUserRole(u.Role) {
+	//
+	// The u.Role != "" guard is critical: when callers update via
+	// Model(&models.User{}) with a separate dest struct/map (e.g. the admin
+	// UpdateUser handler's userUpdates struct), the hook receiver `u` is the
+	// EMPTY model, so u.Role is "". Statement.Changed also resolves fields by
+	// the User schema's field INDEX against the dest struct, which on a
+	// differently-ordered struct can misfire for "Role" (it reads dest[5],
+	// i.e. the Bio field of the admin's userUpdates struct). Validating the
+	// empty model role there would reject every unrelated profile update with
+	// "invalid user role:" -> HTTP 500. Handlers that genuinely change roles
+	// validate the incoming role explicitly (IsValidUserRole) before saving.
+	if u.Role != "" && tx.Statement.Changed("Role") && !IsValidUserRole(u.Role) {
 		return fmt.Errorf("invalid user role: %s", u.Role)
 	}
 	return

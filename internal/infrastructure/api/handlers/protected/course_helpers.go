@@ -55,8 +55,8 @@ func (h *CourseRESTHandler) logAudit(c *gin.Context, action, resourceType, resou
 	// Get user agent
 	userAgent := c.GetHeader("User-Agent")
 
-	// Convert details to JSON
-	changesJSON := ""
+	// Convert details to JSON (jsonb columns reject empty strings)
+	changesJSON := "{}"
 	if len(details) > 0 {
 		if bytes, err := json.Marshal(details); err == nil {
 			changesJSON = string(bytes)
@@ -69,9 +69,9 @@ func (h *CourseRESTHandler) logAudit(c *gin.Context, action, resourceType, resou
 		Action:     action,
 		Resource:   resourceType,
 		ResourceID: resourceID,
-		Changes:    changesJSON,
-		Metadata:   changesJSON,
-		IP:         ip,
+		Changes:    models.JSONText(changesJSON),
+		Metadata:   models.JSONText(changesJSON),
+		IP:         models.InetText(ip),
 		UserAgent:  userAgent,
 	}
 

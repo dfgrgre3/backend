@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/errgroup"
+	"gorm.io/gorm"
 )
 
 // buildAdminDashboardPayload aggregates every widget section of the admin
@@ -43,21 +44,29 @@ func buildAdminDashboardPayload(cacheKey string, timeFilter string) (map[string]
 		operations dashboardOperationsStats
 	)
 	group, _ := errgroup.WithContext(context.Background())
+	// Each goroutine gets its own *gorm.DB session: the base readDB is shared
+	// across all of them, and starting concurrent query chains directly off
+	// a shared *gorm.DB races on its internal Statement/clause maps (observed
+	// as "fatal error: concurrent map writes" under load). NewDB:true resets
+	// the Statement instead of cloning it — a plain Session{} clone carries
+	// over whatever .Model()/.Table() the base statement last had, which leaks
+	// across goroutines (observed as queries against a "dashboardCoreStats"
+	// table that doesn't exist).
 	group.Go(func() (err error) {
-		audience, err = loadDashboardAudienceStats(readDB, todayStart, weekAgo, monthAgo)
+		audience, err = loadDashboardAudienceStats(readDB.Session(&gorm.Session{NewDB: true}), todayStart, weekAgo, monthAgo)
 		return err
 	})
 	group.Go(func() (err error) {
-		catalog, err = loadDashboardCatalogStats(readDB)
+		catalog, err = loadDashboardCatalogStats(readDB.Session(&gorm.Session{NewDB: true}))
 		return err
 	})
 	group.Go(func() (err error) {
 		// monthlyRevenue and yearlyRevenue now use real month and year windows.
-		revenue, err = loadDashboardRevenueStats(readDB, todayStart, monthAgo, yearAgo)
+		revenue, err = loadDashboardRevenueStats(readDB.Session(&gorm.Session{NewDB: true}), todayStart, monthAgo, yearAgo)
 		return err
 	})
 	group.Go(func() (err error) {
-		operations, err = loadDashboardOperationsStats(readDB, periodStart)
+		operations, err = loadDashboardOperationsStats(readDB.Session(&gorm.Session{NewDB: true}), periodStart)
 		return err
 	})
 	if err := group.Wait(); err != nil {

@@ -27,7 +27,7 @@ func AdminBookReviews(c *gin.Context) {
 	switch c.Request.Method {
 	case http.MethodGet:
 		// Check which endpoint was called
-		isViewsEndpoint := c.FullPath() == "/api/admin/books/views"
+		isViewsEndpoint := c.FullPath() == "/api/v1/admin/books/views"
 
 		if isViewsEndpoint {
 			// Return book view statistics from the Book model

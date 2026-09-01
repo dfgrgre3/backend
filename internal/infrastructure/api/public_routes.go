@@ -23,43 +23,43 @@ func SetupPublicRoutes(router *gin.Engine) {
 	router.GET("/health/ready", protected.ReadinessCheck)
 
 	// Public Course routes
-	router.GET("/api/courses", protected.GetSubjects)
-	router.GET("/api/courses/popular", protected.GetPopularCourses)
-	router.GET("/api/courses/:id", protected.GetSubject)
-	router.GET("/api/homepage", protected.GetHomepageData)
-	router.GET("/api/courses/:id/lessons", protected.GetCourseLessons)
-	router.GET("/api/lessons/:lessonId/subtitles", protected.GetLessonSubtitles) // Public subtitles
-	router.GET("/api/lessons/:lessonId/chapters", protected.GetVideoChapters)    // Public chapters
-	router.GET("/api/courses/:id/reviews", protected.GetCourseReviews)
-	router.GET("/api/courses/:id/questions", protected.GetCourseQuestions)
-	router.GET("/api/categories", protected.GetCategories)
-	router.GET("/api/courses/categories", protected.GetCategories)
-	router.GET("/api/teachers", protected.GetTeachers)
+	router.GET("/api/v1/courses", protected.GetSubjects)
+	router.GET("/api/v1/courses/popular", protected.GetPopularCourses)
+	router.GET("/api/v1/courses/:id", protected.GetSubject)
+	router.GET("/api/v1/homepage", protected.GetHomepageData)
+	router.GET("/api/v1/courses/:id/lessons", protected.GetCourseLessons)
+	router.GET("/api/v1/lessons/:lessonId/subtitles", protected.GetLessonSubtitles) // Public subtitles
+	router.GET("/api/v1/lessons/:lessonId/chapters", protected.GetVideoChapters)    // Public chapters
+	router.GET("/api/v1/courses/:id/reviews", protected.GetCourseReviews)
+	router.GET("/api/v1/courses/:id/questions", protected.GetCourseQuestions)
+	router.GET("/api/v1/categories", protected.GetCategories)
+	router.GET("/api/v1/courses/categories", protected.GetCategories)
+	router.GET("/api/v1/teachers", protected.GetTeachers)
 
 	// Public settings route
-	router.GET("/api/settings", protected.GetSystemSettings)
+	router.GET("/api/v1/settings", protected.GetSystemSettings)
 
 	// Public blog route (published posts only)
-	router.GET("/api/blog", protected.GetPublicBlogPosts)
-	router.GET("/api/blog/:slug", protected.GetPublicBlogPost)
-	router.GET("/api/blog/categories", protected.GetBlogCategories)
+	router.GET("/api/v1/blog", protected.GetPublicBlogPosts)
+	router.GET("/api/v1/blog/:slug", protected.GetPublicBlogPost)
+	router.GET("/api/v1/blog/categories", protected.GetBlogCategories)
 
 	// Public events route
-	router.GET("/api/events", protected.GetPublicEvents)
+	router.GET("/api/v1/events", protected.GetPublicEvents)
 
 	// Public Resources route
-	router.GET("/api/resources", protected.GetResources)
+	router.GET("/api/v1/resources", protected.GetResources)
 
 	// Public Exam routes (read-only)
-	router.GET("/api/exams", protected.GetExams)
+	router.GET("/api/v1/exams", protected.GetExams)
 	// GetExamResults returns the caller's own exam history/answers and must
 	// be authenticated — see the SECURITY note in exam_handler.go.
-	router.GET("/api/exams/results", middleware.Auth(), protected.GetExamResults)
+	router.GET("/api/v1/exams/results", middleware.Auth(), protected.GetExamResults)
 
 	// Activity routes moved to protected group
 
 	// AI routes (require auth & rate limiting)
-	ai := router.Group("/api/ai")
+	ai := router.Group("/api/v1/ai")
 	ai.Use(middleware.Auth(), middleware.AIRateLimiter())
 	{
 		ai.POST("/exam", protected.AIExamProxy)
@@ -92,8 +92,8 @@ func SetupPublicRoutes(router *gin.Engine) {
 	// Analytics routes (public - for tracking). Unauthenticated and write to
 	// the DB on every call, so they need a rate limit like every other
 	// public-facing endpoint to avoid unbounded AnalyticsEvent growth / abuse.
-	router.POST("/api/analytics/promo", middleware.GlobalRateLimiter(120, time.Minute), protected.TrackPromoEvent)
-	router.POST("/api/analytics/mega-menu", middleware.GlobalRateLimiter(120, time.Minute), protected.TrackMegaMenuEvent)
+	router.POST("/api/v1/analytics/promo", middleware.GlobalRateLimiter(120, time.Minute), protected.TrackPromoEvent)
+	router.POST("/api/v1/analytics/mega-menu", middleware.GlobalRateLimiter(120, time.Minute), protected.TrackMegaMenuEvent)
 
 	// Local authentication endpoints
 	oauthRedirectBase := os.Getenv("OAUTH_REDIRECT_BASE_URL")
@@ -125,92 +125,97 @@ func SetupPublicRoutes(router *gin.Engine) {
 
 	// CSRF bootstrap endpoint used by the admin client before state-changing requests.
 	// It ensures the browser receives a _csrf cookie even before the first write request.
-	router.GET("/api/auth/csrf", func(c *gin.Context) {
+	router.GET("/api/v1/auth/csrf", func(c *gin.Context) {
 		middleware.EnsureCSRFToken(c)
 		c.Status(http.StatusOK)
 	})
 
-	router.POST("/api/auth/register", middleware.GuestOnly(), middleware.AuthRateLimiter(), authHandler.Register)
-	router.POST("/api/auth/login", middleware.GuestOnly(), middleware.LoginRateLimiter(), authHandler.Login)
-	router.POST("/api/auth/refresh", middleware.RefreshTokenRateLimiter(), authHandler.RefreshToken)
-	router.POST("/api/auth/logout", middleware.OptionalAuth(), authHandler.Logout)
-	router.GET("/api/auth/me", middleware.Auth(), authHandler.Me)
-	router.POST("/api/auth/change-password", middleware.Auth(), authHandler.ChangePassword)
-	router.POST("/api/auth/forgot-password", middleware.AuthRateLimiter(), authHandler.ForgotPassword)
-	router.POST("/api/auth/forgot-password/verify-code", middleware.AuthRateLimiter(), authHandler.VerifyForgotPasswordCode)
-	router.POST("/api/auth/reset-password", middleware.AuthRateLimiter(), authHandler.ResetPassword)
-	router.POST("/api/auth/verify-email", middleware.Auth(), middleware.AuthRateLimiter(), authHandler.VerifyEmail)
-	router.POST("/api/auth/resend-verification", middleware.Auth(), middleware.AuthRateLimiter(), authHandler.ResendVerification)
+	router.POST("/api/v1/auth/register", middleware.GuestOnly(), middleware.AuthRateLimiter(), authHandler.Register)
+	router.POST("/api/v1/auth/login", middleware.GuestOnly(), middleware.LoginRateLimiter(), authHandler.Login)
+	router.POST("/api/v1/auth/refresh", middleware.RefreshTokenRateLimiter(), authHandler.RefreshToken)
+	router.POST("/api/v1/auth/logout", middleware.OptionalAuth(), authHandler.Logout)
+	router.GET("/api/v1/auth/me", middleware.Auth(), authHandler.Me)
+	router.POST("/api/v1/auth/change-password", middleware.Auth(), authHandler.ChangePassword)
+	router.POST("/api/v1/auth/forgot-password", middleware.AuthRateLimiter(), authHandler.ForgotPassword)
+	router.POST("/api/v1/auth/forgot-password/verify-code", middleware.AuthRateLimiter(), authHandler.VerifyForgotPasswordCode)
+	router.POST("/api/v1/auth/reset-password", middleware.AuthRateLimiter(), authHandler.ResetPassword)
+	router.POST("/api/v1/auth/verify-email", middleware.Auth(), middleware.AuthRateLimiter(), authHandler.VerifyEmail)
+	router.POST("/api/v1/auth/resend-verification", middleware.Auth(), middleware.AuthRateLimiter(), authHandler.ResendVerification)
 
 	// Advanced & Security-Hardened Authentication Routes
-	router.POST("/api/auth/refresh-session", middleware.RefreshTokenRateLimiter(), authHandler.RefreshSession)
-	router.DELETE("/api/auth/account", middleware.Auth(), authHandler.DeleteAccount)
-	router.POST("/api/auth/validate-token", middleware.AuthRateLimiter(), authHandler.ValidateToken)
-	router.POST("/api/auth/recovery/initiate", middleware.AuthRateLimiter(), authHandler.AccountRecovery)
-	router.POST("/api/auth/recovery/finalize", middleware.AuthRateLimiter(), authHandler.RecoverAccount)
+	router.POST("/api/v1/auth/refresh-session", middleware.RefreshTokenRateLimiter(), authHandler.RefreshSession)
+	router.DELETE("/api/v1/auth/account", middleware.Auth(), authHandler.DeleteAccount)
+	router.POST("/api/v1/auth/validate-token", middleware.AuthRateLimiter(), authHandler.ValidateToken)
+	router.POST("/api/v1/auth/recovery/initiate", middleware.AuthRateLimiter(), authHandler.AccountRecovery)
+	router.POST("/api/v1/auth/recovery/finalize", middleware.AuthRateLimiter(), authHandler.RecoverAccount)
 
 	mfaService := authservice.NewMFAService()
 	mfaHandler := protected.NewMFAHandler(mfaService, authservice.NewAuthTokenService(), authService)
-	router.POST("/api/auth/mfa/setup", middleware.Auth(), mfaHandler.SetupMFA)
-	router.POST("/api/auth/mfa/enable", middleware.Auth(), mfaHandler.EnableMFA)
-	router.POST("/api/auth/mfa/disable", middleware.Auth(), mfaHandler.DisableMFA)
-	router.POST("/api/auth/mfa/verify", middleware.LoginRateLimiter(), mfaHandler.VerifyMFA)
+	router.POST("/api/v1/auth/mfa/setup", middleware.Auth(), mfaHandler.SetupMFA)
+	router.POST("/api/v1/auth/mfa/enable", middleware.Auth(), mfaHandler.EnableMFA)
+	router.POST("/api/v1/auth/mfa/disable", middleware.Auth(), mfaHandler.DisableMFA)
+	router.POST("/api/v1/auth/mfa/verify", middleware.LoginRateLimiter(), mfaHandler.VerifyMFA)
 
 	// Social Authentication (OAuth redirect & callback)
-	router.GET("/api/auth/social/:provider", authHandler.SocialLogin)
-	router.GET("/api/auth/callback/:provider", authHandler.OAuthCallback)
+	router.GET("/api/v1/auth/social/:provider", authHandler.SocialLogin)
+	router.GET("/api/v1/auth/callback/:provider", authHandler.OAuthCallback)
 
 	// OAuth Provider Management
-	router.POST("/api/auth/social/link", middleware.Auth(), authHandler.LinkProvider)
-	router.POST("/api/auth/social/unlink", middleware.Auth(), authHandler.UnlinkProvider)
-	router.GET("/api/auth/social/accounts", middleware.Auth(), authHandler.GetLinkedAccounts)
+	router.POST("/api/v1/auth/social/link", middleware.Auth(), authHandler.LinkProvider)
+	router.POST("/api/v1/auth/social/unlink", middleware.Auth(), authHandler.UnlinkProvider)
+	router.GET("/api/v1/auth/social/accounts", middleware.Auth(), authHandler.GetLinkedAccounts)
 
 	// Guest User
-	router.GET("/api/users/guest", protected.GetGuestUser)
+	router.GET("/api/v1/users/guest", protected.GetGuestUser)
 
 	// Paymob Webhook (POST only — GET is a CSRF vector)
-	router.POST("/api/payments/paymob/callback", protected.PaymobWebhook)
+	router.POST("/api/v1/payments/paymob/callback", protected.PaymobWebhook)
 
 	// WebSocket (require auth & rate limiting)
-	router.GET("/api/ws", middleware.Auth(), middleware.WebSocketRateLimiter(), protected.WSHandler)
+	router.GET("/api/v1/ws", middleware.Auth(), middleware.WebSocketRateLimiter(), protected.WSHandler)
 
 	// Public Forum routes
-	router.GET("/api/forum/categories", protected.GetForumCategories)
-	router.GET("/api/forum/posts", protected.GetForumPosts)
-	router.POST("/api/forum/posts", middleware.Auth(), protected.CreateForumPost)
-	router.GET("/api/forum/posts/:id", protected.GetForumPost)
-	router.POST("/api/forum/posts/:id/view", protected.IncrementForumPostView)
-	router.GET("/api/forum/posts/:id/replies", protected.GetForumPostReplies)
-	router.POST("/api/forum/posts/:id/replies", middleware.Auth(), protected.CreateForumPostReply)
+	router.GET("/api/v1/forum/categories", protected.GetForumCategories)
+	router.GET("/api/v1/forum/posts", protected.GetForumPosts)
+	router.POST("/api/v1/forum/posts", middleware.Auth(), protected.CreateForumPost)
+	router.GET("/api/v1/forum/posts/:id", protected.GetForumPost)
+	router.POST("/api/v1/forum/posts/:id/view", protected.IncrementForumPostView)
+	router.GET("/api/v1/forum/posts/:id/replies", protected.GetForumPostReplies)
+	router.POST("/api/v1/forum/posts/:id/replies", middleware.Auth(), protected.CreateForumPostReply)
 
 	// Public community routes
-	router.GET("/api/announcements", protected.GetPublicAnnouncements)
-	router.POST("/api/announcements", middleware.Auth(), protected.CreatePublicAnnouncement)
+	router.GET("/api/v1/announcements", protected.GetPublicAnnouncements)
+	router.POST("/api/v1/announcements", middleware.Auth(), protected.CreatePublicAnnouncement)
 
 	// Lightweight community chat compatibility routes
-	router.GET("/api/chat/conversations/:userId", middleware.Auth(), protected.GetChatConversations)
-	router.GET("/api/chat/messages/:userId/:chatUserId", middleware.Auth(), protected.GetChatMessages)
-	router.POST("/api/chat/messages", middleware.Auth(), protected.SendChatMessage)
+	router.GET("/api/v1/chat/conversations/:userId", middleware.Auth(), protected.GetChatConversations)
+	router.GET("/api/v1/chat/messages/:userId/:chatUserId", middleware.Auth(), protected.GetChatMessages)
+	router.POST("/api/v1/chat/messages", middleware.Auth(), protected.SendChatMessage)
 
 	// Metrics endpoints (admin auth required for detailed metrics)
 	// Auth() must run first so that AdminRequired() has a user_id to inspect.
-	router.GET("/api/metrics", middleware.Auth(), middleware.AdminRequired(), protected.GetMetricsEndpoint)
+	router.GET("/api/v1/metrics", middleware.Auth(), middleware.AdminRequired(), protected.GetMetricsEndpoint)
 
 	// Public Library routes
-	router.GET("/api/library/categories", protected.GetLibraryCategories)
+	router.GET("/api/v1/library/categories", protected.GetLibraryCategories)
 
 	// Public Gamification routes
-	router.GET("/api/gamification/leaderboard", protected.GetLeaderboard)
+	router.GET("/api/v1/gamification/leaderboard", protected.GetLeaderboard)
 
 	// Navigation / Mega Menu routes
-	router.GET("/api/navigation/menu", protected.GetNavigationMenu)
-	router.GET("/api/navigation/main", protected.GetMainNavItems)
+	router.GET("/api/v1/navigation/menu", protected.GetNavigationMenu)
+	router.GET("/api/v1/navigation/main", protected.GetMainNavItems)
 
 	// AI Recommendations (optional auth — works without login, returns empty recommendations)
-	router.GET("/api/ai/recommendations", middleware.OptionalAuth(), middleware.AIRateLimiter(), protected.GetAIRecommendations)
+	router.GET("/api/v1/ai/recommendations", middleware.OptionalAuth(), middleware.AIRateLimiter(), protected.GetAIRecommendations)
 
 	// Public Unified Search (courses, resources, teachers, videos).
 	// Unauthenticated and fans out to 4 ILIKE-pattern DB queries per call, so
 	// it needs its own rate limit rather than running unbounded.
-	router.GET("/api/search", middleware.GlobalRateLimiter(60, time.Minute), protected.PublicSearch)
+	router.GET("/api/v1/search", middleware.GlobalRateLimiter(60, time.Minute), protected.PublicSearch)
+
+	// Public affiliate redirect — resolves /r/:code/:slug → destination URL,
+	// records a click, and returns cookie metadata so the Next.js edge page
+	// can set the tracking cookie and 302 the user.
+	router.GET("/api/v1/affiliates/redirect/:code/:slug", middleware.GlobalRateLimiter(600, time.Minute), protected.PublicAffiliateRedirect)
 }

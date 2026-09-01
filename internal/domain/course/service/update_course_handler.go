@@ -29,6 +29,10 @@ func NewUpdateCourseHandler(db *gorm.DB) *UpdateCourseHandler {
 
 // Handle handles the update course command
 func (h *UpdateCourseHandler) Handle(ctx context.Context, cmd UpdateCourseCommand) (interface{}, error) {
+	if cmd.ID == uuid.Nil && cmd.CourseID == "" {
+		return nil, errors.New("course ID is required")
+	}
+
 	var course models.LmsCourse
 	q := h.db.WithContext(ctx)
 	if cmd.ID != uuid.Nil {
@@ -59,7 +63,11 @@ func (h *UpdateCourseHandler) Handle(ctx context.Context, cmd UpdateCourseComman
 		course.PromoVideoURL = cmd.PromoVideoURL
 	}
 	if cmd.Level != nil && *cmd.Level != "" {
-		course.Level = models.CourseLevel(strings.ToUpper(*cmd.Level))
+		levelStr := strings.ToUpper(*cmd.Level)
+		if levelStr != "BEGINNER" && levelStr != "INTERMEDIATE" && levelStr != "ADVANCED" {
+			return nil, errors.New("invalid course level")
+		}
+		course.Level = models.CourseLevel(levelStr)
 	}
 	if cmd.Language != nil && *cmd.Language != "" {
 		course.Language = *cmd.Language
@@ -119,7 +127,16 @@ func (h *UpdateCourseHandler) Handle(ctx context.Context, cmd UpdateCourseComman
 	}
 	if cmd.PrimaryInstructorID != nil && strings.TrimSpace(*cmd.PrimaryInstructorID) != "" {
 		if parsed, err := uuid.Parse(strings.TrimSpace(*cmd.PrimaryInstructorID)); err == nil {
+			var count int64
+			if err := h.db.WithContext(ctx).Model(&models.User{}).Where("id = ?", parsed).Count(&count).Error; err != nil {
+				return nil, err
+			}
+			if count == 0 {
+				return nil, errors.New("instructor not found")
+			}
 			course.PrimaryInstructorID = parsed
+		} else {
+			return nil, errors.New("invalid instructor ID format")
 		}
 	}
 

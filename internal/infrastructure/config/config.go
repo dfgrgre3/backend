@@ -143,6 +143,20 @@ func Load() *Config {
 	c.SentryDSN = getEnv("SENTRY_DSN", "")
 	c.AppVersion = getEnv("APP_VERSION", "1.0.0")
 
+	// SECURITY: refuse to boot in production with a missing or weak JWT
+	// signing secret. A short/predictable secret makes access tokens
+	// forgeable via brute force; the Next.js Edge middleware already
+	// enforces >= 32 chars on its copy of the secret (see middleware.ts),
+	// so the Go backend must not accept anything weaker.
+	if environment == "production" {
+		if len(c.JWTSecretKey) < 32 {
+			log.Fatal("FATAL: JWT_SECRET_KEY (or JWT_SECRET) must be set and at least 32 characters in production.")
+		}
+		if c.CookieDomain == "" {
+			log.Println("[WARN] COOKIE_DOMAIN is not set in production — auth cookies will be scoped to the exact request host only. Set COOKIE_DOMAIN explicitly if the admin panel and API are on different subdomains.")
+		}
+	}
+
 	// IP Whitelist Config
 	// Standard RFC 1918 and loopback ranges used as defaults
 	defaultRanges := []string{
@@ -242,6 +256,17 @@ func LoadSafe() (*Config, error) {
 
 	c.SentryDSN = getEnv("SENTRY_DSN", "")
 	c.AppVersion = getEnv("APP_VERSION", "1.0.0")
+
+	// SECURITY: same JWT secret strength requirement as Load() above, but
+	// returned as an error since LoadSafe() must not call log.Fatal.
+	if environment == "production" {
+		if len(c.JWTSecretKey) < 32 {
+			return nil, fmt.Errorf("JWT_SECRET_KEY (or JWT_SECRET) must be set and at least 32 characters in production")
+		}
+		if c.CookieDomain == "" {
+			log.Println("[WARN] COOKIE_DOMAIN is not set in production — auth cookies will be scoped to the exact request host only. Set COOKIE_DOMAIN explicitly if the admin panel and API are on different subdomains.")
+		}
+	}
 
 	defaultRanges := []string{
 		"127.0.0.1/8",

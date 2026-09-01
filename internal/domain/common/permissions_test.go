@@ -80,7 +80,21 @@ func TestGetEffectivePermissions_Admin(t *testing.T) {
 
 	perms := user.GetEffectivePermissions()
 	assert.Contains(t, perms, "users:view")
-	// Admin role defaults now include admin:bypass
+	// Admin gets a broad but explicit default set.
+	assert.Contains(t, perms, PermUsersManage)
+	assert.Contains(t, perms, PermSystemManage)
+	// admin:bypass is the wildcard and stays exclusive to SUPER_ADMIN, so a
+	// plain ADMIN must NOT inherit it from the role defaults.
+	assert.NotContains(t, perms, PermAdminBypass)
+}
+
+func TestGetEffectivePermissions_SuperAdminHasBypass(t *testing.T) {
+	user := &User{
+		Role:        RoleSuperAdmin,
+		Permissions: JSONStringArray{},
+	}
+
+	perms := user.GetEffectivePermissions()
 	assert.Contains(t, perms, PermAdminBypass)
 }
 
@@ -91,8 +105,8 @@ func TestGetEffectivePermissions_AdminWithBypass(t *testing.T) {
 	}
 
 	perms := user.GetEffectivePermissions()
+	// An explicit per-user grant still works and must not be duplicated.
 	assert.Contains(t, perms, PermAdminBypass)
-	// admin:bypass is already in role defaults, so dedup keeps it once.
 	count := 0
 	for _, p := range perms {
 		if p == PermAdminBypass {
@@ -128,6 +142,14 @@ func TestGetEffectivePermissions_Student(t *testing.T) {
 
 func TestGetDefaultPermissions_Admin(t *testing.T) {
 	perms := GetDefaultPermissions(RoleAdmin)
+	// The plain ADMIN role gets an explicit broad set but NOT the wildcard.
+	assert.Contains(t, perms, PermUsersManage)
+	assert.Contains(t, perms, PermSystemManage)
+	assert.NotContains(t, perms, PermAdminBypass)
+}
+
+func TestGetDefaultPermissions_SuperAdmin(t *testing.T) {
+	perms := GetDefaultPermissions(RoleSuperAdmin)
 	assert.Contains(t, perms, PermAdminBypass)
 }
 
@@ -330,16 +352,30 @@ func TestPermissionGrantMatches_AdminBypassExact(t *testing.T) {
 	assert.True(t, permissionGrantMatches(PermAdminBypass, "system:manage"))
 }
 
-func TestHasPermission_AdminGetsBypassFromRoleDefaults(t *testing.T) {
+func TestHasPermission_AdminHasBroadButNotWildcardDefaults(t *testing.T) {
 	user := &User{
 		Role:        RoleAdmin,
 		Permissions: JSONStringArray{},
 	}
 
-	// Admin role defaults now include admin:bypass, so an admin with no
-	// explicit permissions still has full access via role defaults.
+	// The plain ADMIN role defaults cover the real admin surface but exclude
+	// the admin:bypass wildcard, so unknown permissions are still denied.
 	perms := user.GetEffectivePermissions()
-	assert.Contains(t, perms, PermAdminBypass)
+	assert.NotContains(t, perms, PermAdminBypass)
+	assert.True(t, user.HasPermission("users:manage"))
+	assert.True(t, user.HasPermission("system:manage"))
+	assert.False(t, user.HasPermission("any:permission"))
+}
+
+func TestHasPermission_SuperAdminBypassesEverything(t *testing.T) {
+	user := &User{
+		Role:        RoleSuperAdmin,
+		Permissions: JSONStringArray{},
+	}
+
+	// SUPER_ADMIN inherits admin:bypass from the role defaults, which the
+	// matcher treats as a wildcard over every permission.
+	assert.Contains(t, user.GetEffectivePermissions(), PermAdminBypass)
 	assert.True(t, user.HasPermission("any:permission"))
 	assert.True(t, user.HasPermission("users:manage"))
 }

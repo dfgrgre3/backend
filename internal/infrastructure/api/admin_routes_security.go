@@ -24,6 +24,8 @@ func registerAdminSecurityRoutes(admin, sensitive *gin.RouterGroup) {
 	admin.POST("/security/fingerprints/block", handlers.BlockDeviceFingerprint)
 	admin.POST("/security/fingerprints/:id/unblock", handlers.UnblockDeviceFingerprint)
 	admin.GET("/security/roles", handlers.GetRolePermissions)
+	admin.GET("/activity-log", handlers.AdminListActivityLog)
+	admin.GET("/activity-log/options", handlers.AdminListActivityLogOptions)
 
 	// IP Whitelist (admin-only)
 	sensitive.GET("/security/ip-whitelist", handlers.GetIPWhitelist)

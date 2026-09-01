@@ -34,6 +34,15 @@ func UpdateCourseCurriculum(c *gin.Context) {
 		return
 	}
 
+	// Verify the subject exists before mutating any topics.
+	// Without this check, an invalid/mismatched subject ID causes a PostgreSQL
+	// FK violation (SQLSTATE 23503) instead of a meaningful 404 response.
+	var subject models.Subject
+	if err := db.DB.Select("id").First(&subject, idQuery, id).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Course not found")
+		return
+	}
+
 	if err := db.DB.Transaction(func(tx *gorm.DB) error {
 		clearSubjectCurriculum(tx, id)
 		for i, chapter := range chapters {
@@ -50,7 +59,6 @@ func UpdateCourseCurriculum(c *gin.Context) {
 	getSubjectRepo().InvalidateSubjectCache(id)
 	cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), id)
 
-	var subject models.Subject
 	if err := db.DB.Preload(preloadTopicsSubTopics).First(&subject, idQuery, id).Error; err != nil {
 		api_response.Success(c, gin.H{"success": true, "message": "Curriculum updated"})
 		return

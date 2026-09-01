@@ -53,6 +53,13 @@ func GetInteractiveQuestions(c *gin.Context) {
 		return
 	}
 
+	// Temp IDs (new-xxx) are created client-side for unsaved lessons.
+	// They are never stored in the DB, so skip the query and return empty.
+	if strings.HasPrefix(lessonID, "new-") {
+		apiresponse.Success(c, gin.H{"questions": []interactiveQuestion{}})
+		return
+	}
+
 	var questions []interactiveQuestion
 	if err := db.DB.Where("lesson_id = ?", lessonID).Order("created_at DESC").Find(&questions).Error; err != nil {
 		apiresponse.Error(c, http.StatusInternalServerError, "Failed to fetch interactive questions")

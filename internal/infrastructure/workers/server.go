@@ -102,6 +102,14 @@ func StartWorkerWithContext(ctx context.Context) {
 		return HandleCourseAvailability(task)
 	}))
 
+	// Periodic service-health probe (database, cache, storage, search, queue,
+	// scheduler, api) — persists one row per service per run so admin health
+	// detail pages can show real history. Not wrapped in WithTaskIdempotency:
+	// it has no side effect beyond an insert keyed by (checked_at, service_key),
+	// so a redelivered run just re-probes and inserts a fresh timestamp.
+	healthCheckHandler := &HealthCheckHandler{}
+	mux.HandleFunc(TypeServiceHealthCheck, healthCheckHandler.ProcessTask)
+
 	log.Printf("[Worker] Asynq Server initialized (Concurrency=%d)", concurrency)
 
 	// Run the server in a separate goroutine so we can listen for ctx.Done

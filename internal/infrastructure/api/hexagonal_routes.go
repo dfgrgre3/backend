@@ -21,7 +21,7 @@ func SetupHexagonalRoutes(router *gin.Engine, handlers *application.Handlers) {
 	// ============================================================================
 
 	if handlers.CourseRESTHandler != nil {
-		courseAdmin := router.Group("/api/admin/courses")
+		courseAdmin := router.Group("/api/v1/admin/courses")
 		courseAdmin.Use(middleware.Auth())
 		courseAdmin.Use(middleware.AdminOrModerator())
 		{
@@ -115,7 +115,7 @@ func SetupHexagonalRoutes(router *gin.Engine, handlers *application.Handlers) {
 	// Certificate Templates Routes (shared, global library)
 	// ============================================================================
 	if handlers.CourseRESTHandler != nil {
-		certAdmin := router.Group("/api/admin/certificates")
+		certAdmin := router.Group("/api/v1/admin/certificates")
 		certAdmin.Use(middleware.Auth())
 		certAdmin.Use(middleware.AdminOrModerator())
 		{
@@ -129,7 +129,7 @@ func SetupHexagonalRoutes(router *gin.Engine, handlers *application.Handlers) {
 	// Course Bundles Routes
 	// ============================================================================
 	if handlers.CourseRESTHandler != nil {
-		bundleAdmin := router.Group("/api/admin/bundles")
+		bundleAdmin := router.Group("/api/v1/admin/bundles")
 		bundleAdmin.Use(middleware.Auth())
 		bundleAdmin.Use(middleware.AdminOrModerator())
 		{

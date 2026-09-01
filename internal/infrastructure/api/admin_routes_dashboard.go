@@ -23,6 +23,7 @@ func registerAdminDashboardRoutes(admin, sensitive *gin.RouterGroup) {
 	admin.GET("/dashboard/recent-activities", admindelivery.GetDashboardRecentActivities)
 	admin.GET("/dashboard/top-courses", admindelivery.GetDashboardTopCourses)
 	admin.GET("/dashboard/system-health", admindelivery.GetDashboardSystemHealth)
+	admin.GET("/dashboard/system-health/:service/history", admindelivery.GetDashboardServiceHealthHistory)
 	admin.POST("/dashboard/refresh", admindelivery.RefreshDashboardData)
 	admin.POST("/dashboard/export", admindelivery.ExportDashboardReport)
 	admin.GET("/dashboard/export/:exportJobId", admindelivery.GetDashboardExportStatus)
@@ -38,6 +39,10 @@ func registerAdminDashboardRoutes(admin, sensitive *gin.RouterGroup) {
 	admin.GET("/analytics/revenue", handlers.GetAdminRevenue)
 	admin.GET("/analytics/journeys", handlers.GetUserJourneys)
 	admin.GET("/analytics/metrics", handlers.GetActivityMetrics)
+	// Journey/conversion tracking writes (used by the admin analytics
+	// integration hook when a journey session ends or a goal converts).
+	admin.POST("/analytics/journey", handlers.TrackUserJourney)
+	admin.POST("/analytics/conversion", handlers.TrackConversionEvent)
 	admin.GET("/infrastructure/stats", handlers.GetAdminInfrastructureStats)
 	admin.GET(adminAnnouncementsRoute, handlers.GetAdminAnnouncements)
 	admin.POST(adminAnnouncementsRoute, handlers.CreateAdminAnnouncement)

@@ -3,6 +3,7 @@ package protected
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	models "thanawy-backend/internal/domain/common"
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 	db "thanawy-backend/internal/infrastructure/database"
@@ -39,6 +40,77 @@ func GetUserSessions(c *gin.Context) {
 		})
 	}
 	api_response.Success(c, items)
+}
+
+// ListUserSessions returns a paginated, server-filtered view of sessions
+// across ALL users for the admin workspace ("user-sessions" page). It accepts
+// the same page/limit query parameters as the other admin list endpoints and
+// supports optional narrowing by userId, activity state and status. Ordering
+// and pagination are executed by PostgreSQL so the endpoint stays safe for
+// large session tables.
+func ListUserSessions(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 10
+	}
+
+	query := db.DB.Model(&models.UserSession{})
+	if userID := strings.TrimSpace(c.Query("userId")); userID != "" {
+		query = query.Where("user_id = ?", userID)
+	}
+	switch active := c.Query("active"); active {
+	case "true":
+		query = query.Where("is_active = ?", true)
+	case "false":
+		query = query.Where("is_active = ?", false)
+	}
+	if status := strings.TrimSpace(c.Query("status")); status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to count sessions")
+		return
+	}
+
+	var sessions []models.UserSession
+	if err := query.
+		Order("last_accessed DESC, created_at DESC").
+		Offset((page - 1) * limit).
+		Limit(limit).
+		Find(&sessions).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch sessions")
+		return
+	}
+
+	items := make([]gin.H, 0, len(sessions))
+	for _, s := range sessions {
+		items = append(items, gin.H{
+			"id":           s.ID,
+			"userId":       s.UserID,
+			"device":       s.Device,
+			"deviceType":   s.DeviceType,
+			"browser":      s.Browser,
+			"os":           s.OS,
+			"ip":           s.IP,
+			"country":      s.Country,
+			"location":     s.Location,
+			"status":       s.Status,
+			"isActive":     s.IsActive,
+			"lastActivity": s.LastAccessed,
+			"loginTime":    s.CreatedAt,
+			"logoutTime":   s.RevokedAt,
+			"expiresAt":    s.ExpiresAt,
+		})
+	}
+	api_response.List(c, items, api_response.Pagination{
+		Page: page, Limit: limit, Total: total, TotalPages: calculateTotalPages(total, limit),
+	}, gin.H{"items": items})
 }
 
 // TerminateSession terminates a specific session.

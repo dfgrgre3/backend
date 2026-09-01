@@ -42,39 +42,64 @@ func AdminCreateAchievement(c *gin.Context) {
 	api_response.Created(c, achievement)
 }
 
+// achievementUpdateRequest uses pointers so partial updates can distinguish
+// between "field omitted" and "field set to its zero value".
+type achievementUpdateRequest struct {
+	Key         *string `json:"key"`
+	Title       *string `json:"title"`
+	Description *string `json:"description"`
+	Icon        *string `json:"icon"`
+	Rarity      *string `json:"rarity"`
+	XpReward    *int    `json:"xpReward"`
+	IsSecret    *bool   `json:"isSecret"`
+	Category    *string `json:"category"`
+	Difficulty  *string `json:"difficulty"`
+	Criteria    *string `json:"criteria"`
+}
+
 func AdminUpdateAchievement(c *gin.Context) {
 	id := c.Param("id")
-	var achievement models.Achievement
-	if err := c.ShouldBindJSON(&achievement); err != nil {
+	var req achievementUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	updates := map[string]interface{}{}
-	if achievement.Key != "" {
-		updates["key"] = achievement.Key
+	if req.Key != nil {
+		updates["key"] = *req.Key
 	}
-	if achievement.Title != "" {
-		updates["title"] = achievement.Title
+	if req.Title != nil {
+		updates["title"] = *req.Title
 	}
-	if achievement.Description != "" {
-		updates["description"] = achievement.Description
+	if req.Description != nil {
+		updates["description"] = *req.Description
 	}
-	if achievement.Icon != "" {
-		updates["icon"] = achievement.Icon
+	if req.Icon != nil {
+		updates["icon"] = *req.Icon
 	}
-	if achievement.Rarity != "" {
-		updates["rarity"] = achievement.Rarity
+	if req.Rarity != nil {
+		updates["rarity"] = *req.Rarity
 	}
-	if achievement.XpReward > 0 {
-		updates["xp_reward"] = achievement.XpReward
+	if req.XpReward != nil {
+		updates["xp_reward"] = *req.XpReward
 	}
-	updates["is_secret"] = achievement.IsSecret
-	if achievement.Category != "" {
-		updates["category"] = achievement.Category
+	if req.IsSecret != nil {
+		updates["is_secret"] = *req.IsSecret
 	}
-	if achievement.Difficulty != "" {
-		updates["difficulty"] = achievement.Difficulty
+	if req.Category != nil {
+		updates["category"] = *req.Category
+	}
+	if req.Difficulty != nil {
+		updates["difficulty"] = *req.Difficulty
+	}
+	if req.Criteria != nil {
+		updates["criteria"] = *req.Criteria
+	}
+
+	if len(updates) == 0 {
+		api_response.Error(c, http.StatusBadRequest, "No valid fields to update")
+		return
 	}
 
 	updatedAchievement, err := achievementService.UpdateAchievement(c.Request.Context(), id, updates)

@@ -51,7 +51,11 @@ func checkAccountLockout(ctx context.Context, userID string) error {
 	}
 
 	minutesRemaining := int(ttl.Minutes()) + 1
-	return fmt.Errorf("account locked due to too many failed attempts. Try again in %d minute(s)", minutesRemaining)
+	// ACCOUNT_LOCKED:<minutes> is a machine-parseable prefix (mirrors the
+	// MFA_REQUIRED:<ticket> convention in auth_service_login.go) so the
+	// handler/frontend can show a dedicated lockout countdown UI instead of a
+	// generic error string.
+	return fmt.Errorf("ACCOUNT_LOCKED:%d", minutesRemaining)
 }
 
 // recordFailedAttempt increments the failed attempt counter.

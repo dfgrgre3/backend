@@ -97,6 +97,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			})
 			return
 		}
+		if strings.HasPrefix(err.Error(), "ACCOUNT_LOCKED:") {
+			// Keep the same "error" string field the frontend already reads
+			// (see auth-api-service.ts login()), just with a parseable
+			// ACCOUNT_LOCKED:<minutes> prefix so the UI can render a
+			// dedicated lockout countdown instead of a generic message.
+			response.Error(c, http.StatusTooManyRequests, err.Error())
+			return
+		}
 		response.Error(c, http.StatusUnauthorized, err.Error())
 		return
 	}
@@ -104,10 +112,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Set unified auth cookies
 	h.setAuthTokenCookies(c, res.AccessToken, res.RefreshToken, req.RememberMe)
 
+	// SECURITY: the refresh token is intentionally NOT included in the JSON
+	// body — it is already delivered as an HttpOnly cookie above, and it is
+	// the long-lived, high-value credential (30-90 days) that must never be
+	// readable by page JS. The short-lived (15 min) access token is still
+	// returned here because the frontend has no other way to authenticate a
+	// WebSocket handshake (browsers can't attach cookies/headers to it), but
+	// it is now kept only in an in-memory mirror, not localStorage — see
+	// token-mirror.ts on the frontend.
 	response.Success(c, gin.H{
-		"accessToken":  res.AccessToken,
-		"refreshToken": res.RefreshToken,
-		"user":         res.User,
+		"accessToken": res.AccessToken,
+		"user":        res.User,
 	})
 }
 
@@ -181,9 +196,9 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	// Set unified cookies
 	h.setAuthTokenCookies(c, res.AccessToken, res.RefreshToken, false)
 
+	// See the SECURITY note in Login above — refresh token stays cookie-only.
 	response.Success(c, gin.H{
-		"accessToken":  res.AccessToken,
-		"refreshToken": res.RefreshToken,
+		"accessToken": res.AccessToken,
 	})
 }
 
@@ -222,10 +237,10 @@ func (h *AuthHandler) RefreshSession(c *gin.Context) {
 		user, _ = h.authService.GetCurrentUser(c.Request.Context(), userID)
 	}
 
+	// See the SECURITY note in Login above — refresh token stays cookie-only.
 	response.Success(c, gin.H{
-		"accessToken":  res.AccessToken,
-		"refreshToken": res.RefreshToken,
-		"user":         user,
+		"accessToken": res.AccessToken,
+		"user":        user,
 	})
 }
 

@@ -24,10 +24,22 @@ type userListParams struct {
 	createdFrom        string
 	createdTo          string
 	subscriptionStatus string
+	includeDeleted     bool
+	isNew              bool
 }
 
 func buildUserListQuery(p userListParams) *gorm.DB {
-	query := db.DB.Model(&models.User{}).Where("deleted_at IS NULL")
+	query := db.DB.Model(&models.User{})
+
+	if !p.includeDeleted {
+		query = query.Where("deleted_at IS NULL")
+	}
+
+	if p.isNew {
+		// New users are those created in the last 7 days
+		sevenDaysAgo := time.Now().AddDate(0, 0, -7)
+		query = query.Where("created_at >= ?", sevenDaysAgo)
+	}
 
 	if p.role != "" {
 		query = query.Where("role = ?", p.role)

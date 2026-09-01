@@ -58,7 +58,14 @@ func StartSchedulerWithContext(ctx context.Context) {
 		log.Printf("Failed to register Drip content check task: %v", err)
 	}
 
-	log.Printf("[Scheduler] Periodic tasks scheduled (timezone: %s): CQRS refresh (5m), Session cleanup (1h), Drip check (5m)", loc)
+	// Probe every core service (database, cache, storage, search, queue,
+	// scheduler, api) every minute and persist the result, so admin health
+	// detail pages have real history instead of only a live-request probe.
+	if _, err := scheduler.Register("@every 1m", asynq.NewTask(TypeServiceHealthCheck, []byte("{}"))); err != nil {
+		log.Printf("Failed to register Service health check task: %v", err)
+	}
+
+	log.Printf("[Scheduler] Periodic tasks scheduled (timezone: %s): CQRS refresh (5m), Session cleanup (1h), Drip check (5m), Service health check (1m)", loc)
 	if err := scheduler.Start(); err != nil {
 		log.Printf("Failed to start scheduler: %v", err)
 		return

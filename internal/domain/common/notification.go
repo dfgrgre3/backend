@@ -32,6 +32,7 @@ type Notification struct {
 	BroadcastID string           `gorm:"type:uuid;index;column:broadcast_id" json:"broadcastId,omitempty"`
 	Actions     JSONStringArray  `gorm:"type:jsonb;column:actions" json:"actions"`
 	IsRead      bool             `gorm:"default:false;index;column:is_read" json:"isRead"`
+	IsActive    *bool            `gorm:"column:is_active;index" json:"isActive"`
 	CreatedAt   time.Time        `gorm:"index:idx_notifications_user_created,priority:2;column:created_at" json:"createdAt"`
 	UpdatedAt   time.Time        `gorm:"column:updated_at" json:"updatedAt"`
 	DeletedAt   gorm.DeletedAt   `gorm:"index;column:deleted_at" json:"-"`

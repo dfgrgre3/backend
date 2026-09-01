@@ -44,7 +44,9 @@ func (s *AuditService) LogEvent(userID, eventType, resource, resourceID string, 
 		nullableUserID = &userID
 	}
 
-	metadataJSON := ""
+	// jsonb columns reject empty strings, so always fall back to an empty
+	// JSON object (see models.JSONText for the full story).
+	metadataJSON := "{}"
 	if metadata != nil {
 		bytes, err := json.Marshal(metadata)
 		if err == nil {
@@ -58,8 +60,9 @@ func (s *AuditService) LogEvent(userID, eventType, resource, resourceID string, 
 		Action:     eventType,
 		Resource:   resource,
 		ResourceID: resourceID,
-		Metadata:   metadataJSON,
-		IP:         ip,
+		Changes:    models.JSONText("{}"),
+		Metadata:   models.JSONText(metadataJSON),
+		IP:         models.InetText(ip),
 		UserAgent:  userAgent,
 	}
 

@@ -39,34 +39,34 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-
         -X thanawy-backend/pkg/buildinfo.Version=${VERSION} \
         -X thanawy-backend/pkg/buildinfo.Commit=${COMMIT} \
         -X thanawy-backend/pkg/buildinfo.BuildTime=${BUILD_TIME}" \
-    -o /build/bin/api ./cmd/api/main.go && \
+    -o /build/bin/api ./cmd/api && \
     \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/migrate ./cmd/migrate/main.go && \
+    -o /build/bin/migrate ./cmd/migrate && \
     \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/seed-admin ./cmd/seed-admin/main.go && \
+    -o /build/bin/seed-admin ./cmd/seed-admin && \
     \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/targeted-migrate ./cmd/targeted_migrate/main.go && \
+    -o /build/bin/targeted-migrate ./cmd/targeted_migrate && \
     \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/fix-migration-checksum ./cmd/fix-migration-checksum/main.go && \
+    -o /build/bin/fix-migration-checksum ./cmd/fix-migration-checksum && \
     \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/cleanup-failed-migration ./cmd/cleanup-failed-migration/main.go && \
+    -o /build/bin/cleanup-failed-migration ./cmd/cleanup-failed-migration && \
     \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/drop-all-tables ./cmd/drop-all-tables/main.go && \
+    -o /build/bin/drop-all-tables ./cmd/drop-all-tables && \
     \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/drop-migrations-table ./cmd/drop-migrations-table/main.go && \
+    -o /build/bin/drop-migrations-table ./cmd/drop-migrations-table && \
     \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/check-migration-status ./cmd/check-migration-status/main.go && \
+    -o /build/bin/check-migration-status ./cmd/check-migration-status && \
     \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/test-db-connection ./cmd/test-db-connection/main.go
+    -o /build/bin/test-db-connection ./cmd/test-db-connection
 
 # ------------------------------------------
 # Stage 2: API Runtime - Main server (Hardened)

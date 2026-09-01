@@ -75,7 +75,14 @@ func (r *LmsRepository) UpdateCourseStatus(id uuid.UUID, status models.CourseSta
 
 // DeleteCourse soft-deletes a course.
 func (r *LmsRepository) DeleteCourse(id uuid.UUID) error {
-	return r.db.Delete(&models.LmsCourse{}, "id = ?", id).Error
+	result := r.db.Delete(&models.LmsCourse{}, "id = ?", id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // ListCourses returns paginated courses with optional filters.

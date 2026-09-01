@@ -37,7 +37,7 @@ func NewOAuthHandler(tokenSvc authservice.AuthTokenService) *OAuthHandler {
 		factory.Register("google", authservice.NewGoogleProvider(
 			googleClientID,
 			googleClientSecret,
-			redirectBase+"/api/auth/callback/google",
+			redirectBase+"/api/v1/auth/callback/google",
 		))
 	}
 
@@ -47,7 +47,7 @@ func NewOAuthHandler(tokenSvc authservice.AuthTokenService) *OAuthHandler {
 		factory.Register("github", authservice.NewGitHubProvider(
 			githubClientID,
 			githubClientSecret,
-			redirectBase+"/api/auth/callback/github",
+			redirectBase+"/api/v1/auth/callback/github",
 		))
 	}
 
@@ -57,7 +57,7 @@ func NewOAuthHandler(tokenSvc authservice.AuthTokenService) *OAuthHandler {
 		factory.Register("microsoft", authservice.NewMicrosoftProvider(
 			msClientID,
 			msClientSecret,
-			redirectBase+"/api/auth/callback/microsoft",
+			redirectBase+"/api/v1/auth/callback/microsoft",
 		))
 	}
 
@@ -71,7 +71,7 @@ func NewOAuthHandler(tokenSvc authservice.AuthTokenService) *OAuthHandler {
 			appleTeamID,
 			appleKeyID,
 			appleSecret,
-			redirectBase+"/api/auth/callback/apple",
+			redirectBase+"/api/v1/auth/callback/apple",
 		))
 	}
 
@@ -107,7 +107,7 @@ func (h *OAuthHandler) RedirectToProvider(c *gin.Context) {
 	state := generateStateToken()
 
 	// Store state token in temporary short-lived cookie for CSRF protection
-	c.SetCookie("oauth_state", state, 300, "/api/auth", "", secureCookie(c), true)
+	c.SetCookie("oauth_state", state, 300, "/api/v1/auth", "", secureCookie(c), true)
 
 	authURL := provider.GetAuthURL(state)
 	c.Redirect(http.StatusTemporaryRedirect, authURL)
@@ -126,7 +126,7 @@ func (h *OAuthHandler) OAuthCallback(c *gin.Context) {
 	}
 
 	// Delete state cookie
-	c.SetCookie("oauth_state", "", -1, "/api/auth", "", secureCookie(c), true)
+	c.SetCookie("oauth_state", "", -1, "/api/v1/auth", "", secureCookie(c), true)
 
 	provider, err := h.oauthFactory.GetProvider(providerName)
 	if err != nil {

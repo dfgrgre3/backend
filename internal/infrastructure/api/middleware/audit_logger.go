@@ -95,6 +95,7 @@ func (al *AdminAuditLogger) LogAdminOperations() gin.HandlerFunc {
 
 // shouldSkipLogging checks if this path should be skipped
 func shouldSkipLogging(path string) bool {
+	path = normalizeAPIPath(path)
 	skippedPaths := []string{
 		"/healthz",
 		"/readyz",
@@ -238,7 +239,7 @@ func (al *AdminAuditLogger) logOperation(
 // parseResourceInfo extracts resource type and ID from path
 func parseResourceInfo(path string) (resource, resourceID string) {
 	// Path format: /api/admin/{resource}/{id}
-	parts := strings.Split(strings.Trim(path, "/"), "/")
+	parts := strings.Split(strings.Trim(normalizeAPIPath(path), "/"), "/")
 
 	if len(parts) >= 3 && parts[0] == "api" && parts[1] == "admin" {
 		resource = parts[2]

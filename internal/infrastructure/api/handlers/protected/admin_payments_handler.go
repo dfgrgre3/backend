@@ -4,6 +4,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	models "thanawy-backend/internal/domain/common"
 	"time"
 
@@ -15,7 +16,8 @@ import (
 
 const revenueSumQuery = "COALESCE(SUM(amount), 0)"
 
-// GetAdminPayments returns paginated payments with summary stats
+// GetAdminPayments returns paginated payments with summary stats and analytics.
+// Supports advanced filters: status, method, subjectId, date range, amount range, search.
 func GetAdminPayments(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
@@ -24,6 +26,12 @@ func GetAdminPayments(c *gin.Context) {
 	}
 	search := c.Query("search")
 	status := c.Query("status")
+	method := c.Query("method")
+	subjectID := c.Query("subjectId")
+	minAmountStr := c.Query("minAmount")
+	maxAmountStr := c.Query("maxAmount")
+	from := c.Query("from")
+	to := c.Query("to")
 
 	if page <= 0 {
 		page = 1
@@ -37,7 +45,35 @@ func GetAdminPayments(c *gin.Context) {
 	query := db.DB.Model(&models.Payment{})
 
 	if status != "" {
-		query = query.Where(statusQuery, status)
+		// Normalize to lowercase — the DB stores statuses as lowercase
+		// (e.g. "completed") while admin clients may send uppercase.
+		query = query.Where(statusQuery, strings.ToLower(status))
+	}
+	if method != "" {
+		query = query.Where("method = ?", method)
+	}
+	if subjectID != "" {
+		query = query.Where("subject_id = ?", subjectID)
+	}
+	if minAmountStr != "" {
+		if minAmount, err := strconv.ParseFloat(minAmountStr, 64); err == nil {
+			query = query.Where("amount >= ?", minAmount)
+		}
+	}
+	if maxAmountStr != "" {
+		if maxAmount, err := strconv.ParseFloat(maxAmountStr, 64); err == nil {
+			query = query.Where("amount <= ?", maxAmount)
+		}
+	}
+	if from != "" {
+		if fromTime, err := time.Parse("2006-01-02", from); err == nil {
+			query = query.Where("created_at >= ?", fromTime)
+		}
+	}
+	if to != "" {
+		if toTime, err := time.Parse("2006-01-02", to); err == nil {
+			query = query.Where("created_at < ?", toTime.AddDate(0, 0, 1))
+		}
 	}
 
 	if search != "" {
@@ -87,17 +123,26 @@ func GetAdminPayments(c *gin.Context) {
 			userAvatar = *user.Avatar
 		}
 
+		completedAt := ""
+		if !p.CompletedAt.IsZero() {
+			completedAt = p.CompletedAt.Format(time.RFC3339)
+		}
+
 		items = append(items, gin.H{
 			"id":            p.ID,
 			"userId":        p.UserID,
+			"planId":        p.PlanID,
 			"amount":        p.Amount,
 			"currency":      p.Currency,
 			"status":        p.Status,
 			"method":        p.Method,
 			"transactionId": p.Reference,
+			"externalTxnId": p.ExternalTxnID,
+			"paymobOrderId": p.PaymobOrderID,
 			"subjectId":     p.SubjectID,
 			"createdAt":     p.CreatedAt,
 			"updatedAt":     p.UpdatedAt,
+			"completedAt":   completedAt,
 			"user": gin.H{
 				"id":     user.ID,
 				"name":   userName,
@@ -108,25 +153,12 @@ func GetAdminPayments(c *gin.Context) {
 		})
 	}
 
-	// Summary stats
-	var totalRevenue float64
-	db.DB.Model(&models.Payment{}).Where(statusQuery, models.PaymentCompleted).
-		Select(revenueSumQuery).Scan(&totalRevenue)
-
-	var completedCount, pendingCount, failedCount int64
-	db.DB.Model(&models.Payment{}).Where(statusQuery, models.PaymentCompleted).Count(&completedCount)
-	db.DB.Model(&models.Payment{}).Where(statusQuery, models.PaymentPending).Count(&pendingCount)
-	db.DB.Model(&models.Payment{}).Where(statusQuery, models.PaymentFailed).Count(&failedCount)
-
 	api_response.Success(c, gin.H{
-		"payments": items,
-		"summary": gin.H{
-			"totalPayments":  total,
-			"totalRevenue":   totalRevenue,
-			"completedCount": completedCount,
-			"pendingCount":   pendingCount,
-			"failedCount":    failedCount,
-		},
+		"payments":     items,
+		"summary":      buildPaymentSummary(),
+		"methods":      getPaymentMethodsDistribution(),
+		"dailyRevenue": getDailyRevenue(30),
+		"topSubjects":  getTopPaymentSubjects(),
 		"pagination": gin.H{
 			"page":       page,
 			"limit":      limit,
@@ -134,6 +166,158 @@ func GetAdminPayments(c *gin.Context) {
 			"totalPages": int(math.Ceil(float64(total) / float64(limit))),
 		},
 	})
+}
+
+// buildPaymentSummary returns global payment summary stats (unfiltered KPIs).
+func buildPaymentSummary() gin.H {
+	var totalRevenue float64
+	db.DB.Model(&models.Payment{}).Where(statusQuery, models.PaymentCompleted).
+		Select(revenueSumQuery).Scan(&totalRevenue)
+
+	var totalCount, completedCount, pendingCount, failedCount, refundedCount int64
+	db.DB.Model(&models.Payment{}).Count(&totalCount)
+	db.DB.Model(&models.Payment{}).Where(statusQuery, models.PaymentCompleted).Count(&completedCount)
+	db.DB.Model(&models.Payment{}).Where(statusQuery, models.PaymentPending).Count(&pendingCount)
+	db.DB.Model(&models.Payment{}).Where(statusQuery, models.PaymentFailed).Count(&failedCount)
+	db.DB.Model(&models.Payment{}).Where(statusQuery, models.PaymentRefunded).Count(&refundedCount)
+
+	var todayRevenue, thisMonthRevenue float64
+	now := time.Now()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+
+	db.DB.Model(&models.Payment{}).
+		Where("status = ? AND created_at >= ?", models.PaymentCompleted, startOfDay).
+		Select(revenueSumQuery).Scan(&todayRevenue)
+	db.DB.Model(&models.Payment{}).
+		Where("status = ? AND created_at >= ?", models.PaymentCompleted, startOfMonth).
+		Select(revenueSumQuery).Scan(&thisMonthRevenue)
+
+	avgOrderValue := 0.0
+	if completedCount > 0 {
+		avgOrderValue = totalRevenue / float64(completedCount)
+	}
+	refundRate := 0.0
+	if totalCount > 0 {
+		refundRate = float64(refundedCount) / float64(totalCount) * 100
+	}
+	successRate := 0.0
+	if totalCount > 0 {
+		successRate = float64(completedCount) / float64(totalCount) * 100
+	}
+
+	return gin.H{
+		"totalPayments":    totalCount,
+		"totalRevenue":     totalRevenue,
+		"completedCount":   completedCount,
+		"pendingCount":     pendingCount,
+		"failedCount":      failedCount,
+		"refundedCount":    refundedCount,
+		"todayRevenue":     todayRevenue,
+		"thisMonthRevenue": thisMonthRevenue,
+		"avgOrderValue":    avgOrderValue,
+		"refundRate":       refundRate,
+		"successRate":      successRate,
+	}
+}
+
+// getPaymentMethodsDistribution returns completed-payment totals grouped by method.
+func getPaymentMethodsDistribution() []gin.H {
+	type methodRow struct {
+		Method string
+		Count  int64
+		Total  float64
+	}
+	var rows []methodRow
+	if err := db.DB.Model(&models.Payment{}).
+		Select("method, COUNT(*) as count, COALESCE(SUM(amount), 0) as total").
+		Where(statusQuery, models.PaymentCompleted).
+		Group("method").
+		Order("count DESC").
+		Scan(&rows).Error; err != nil {
+		return []gin.H{}
+	}
+
+	result := make([]gin.H, 0, len(rows))
+	for _, r := range rows {
+		result = append(result, gin.H{
+			"method": r.Method,
+			"count":  r.Count,
+			"total":  r.Total,
+		})
+	}
+	return result
+}
+
+// getDailyRevenue returns the last `days` days of completed-payment revenue/count.
+func getDailyRevenue(days int) []gin.H {
+	if days <= 0 {
+		days = 30
+	}
+	now := time.Now()
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -(days - 1))
+
+	type dailyRow struct {
+		Day     string
+		Revenue float64
+		Count   int64
+	}
+	var rows []dailyRow
+	if err := db.DB.Model(&models.Payment{}).
+		Select("TO_CHAR(created_at, 'YYYY-MM-DD') as day, COALESCE(SUM(amount), 0) as revenue, COUNT(*) as count").
+		Where("status = ? AND created_at >= ?", models.PaymentCompleted, start).
+		Group("TO_CHAR(created_at, 'YYYY-MM-DD')").
+		Order("day").
+		Scan(&rows).Error; err != nil {
+		return []gin.H{}
+	}
+
+	byDay := make(map[string]dailyRow, len(rows))
+	for _, r := range rows {
+		byDay[r.Day] = r
+	}
+
+	result := make([]gin.H, 0, days)
+	for i := 0; i < days; i++ {
+		d := start.AddDate(0, 0, i)
+		key := d.Format("2006-01-02")
+		if r, ok := byDay[key]; ok {
+			result = append(result, gin.H{"date": key, "revenue": r.Revenue, "count": r.Count})
+		} else {
+			result = append(result, gin.H{"date": key, "revenue": 0.0, "count": 0})
+		}
+	}
+	return result
+}
+
+// getTopPaymentSubjects returns top subjects by completed-payment count.
+func getTopPaymentSubjects() []gin.H {
+	type subjectRow struct {
+		SubjectID string
+		Count     int64
+		Revenue   float64
+	}
+	var rows []subjectRow
+	if err := db.DB.Model(&models.Payment{}).
+		Select("subject_id as subject_id, COUNT(*) as count, COALESCE(SUM(amount), 0) as revenue").
+		Where("status = ? AND subject_id IS NOT NULL", models.PaymentCompleted).
+		Group("subject_id").
+		Order("count DESC").
+		Limit(6).
+		Scan(&rows).Error; err != nil {
+		return []gin.H{}
+	}
+
+	result := make([]gin.H, 0, len(rows))
+	for _, r := range rows {
+		result = append(result, gin.H{
+			"id":      r.SubjectID,
+			"name":    getSubjectNameForAdmin(r.SubjectID),
+			"count":   r.Count,
+			"revenue": r.Revenue,
+		})
+	}
+	return result
 }
 
 // AdminRefundPayment marks a completed payment as refunded.
@@ -185,6 +369,71 @@ func AdminRefundPayment(c *gin.Context) {
 		"paymentId": payment.ID,
 		"amount":    input.Amount,
 		"reason":    input.Reason,
+	})
+}
+
+// AdminBulkRefundPayments refunds multiple completed payments in one request.
+// Registered at POST /api/admin/payments/refund/bulk (admin panel bulk refunds action).
+func AdminBulkRefundPayments(c *gin.Context) {
+	var input struct {
+		PaymentIDs []string `json:"paymentIds" binding:"required,min=1,max=500"`
+		Reason     string   `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Deduplicate IDs
+	seen := make(map[string]struct{}, len(input.PaymentIDs))
+	ids := make([]string, 0, len(input.PaymentIDs))
+	for _, id := range input.PaymentIDs {
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		api_response.Error(c, http.StatusBadRequest, "No valid payment ids provided")
+		return
+	}
+
+	var payments []models.Payment
+	if err := db.DB.Where("id IN ? AND status = ?", ids, models.PaymentCompleted).
+		Find(&payments).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch payments")
+		return
+	}
+
+	if len(payments) == 0 {
+		api_response.Error(c, http.StatusNotFound, "No completed payments found for the provided ids")
+		return
+	}
+
+	refundableIDs := make([]string, 0, len(payments))
+	for _, p := range payments {
+		refundableIDs = append(refundableIDs, p.ID)
+	}
+
+	if err := db.DB.Model(&models.Payment{}).
+		Where("id IN ?", refundableIDs).
+		Updates(map[string]interface{}{
+			"status":     models.PaymentRefunded,
+			"updated_at": time.Now(),
+		}).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to process bulk refund")
+		return
+	}
+
+	api_response.Success(c, gin.H{
+		"message":    "Payments refunded successfully",
+		"refunded":   len(refundableIDs),
+		"totalCount": len(ids),
+		"reason":     input.Reason,
 	})
 }
 

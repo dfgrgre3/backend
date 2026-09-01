@@ -15,9 +15,9 @@ type AuditLog struct {
 	Action     string    `gorm:"column:action" json:"action"`                       // legacy support
 	Resource   string    `gorm:"column:resource" json:"resource"`
 	ResourceID string    `gorm:"column:resource_id" json:"resourceId"`
-	Changes    string    `gorm:"type:text;column:changes" json:"changes"`
-	Metadata   string    `gorm:"type:text;column:metadata" json:"metadata"` // JSON string
-	IP         string    `gorm:"column:ip_address" json:"ip"`
+	Changes    JSONText  `gorm:"type:jsonb;column:changes" json:"changes"`
+	Metadata   JSONText  `gorm:"type:jsonb;column:metadata" json:"metadata"` // JSON string
+	IP         InetText  `gorm:"type:inet;column:ip_address" json:"ip"`
 	UserAgent  string    `gorm:"column:user_agent" json:"userAgent"`
 	DeviceInfo string    `gorm:"column:device_info" json:"deviceInfo"`
 	Location   string    `gorm:"column:location" json:"location"`

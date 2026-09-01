@@ -172,6 +172,8 @@ SMTP_PASS=your_password
 
 See `.env.example` for complete configuration options.
 
+Only two env files are actually read by anything: `.env` (local dev, `go run`/`cmd/*`) and `.env.docker` (Docker Compose, via `--env-file` and `docker-compose.yml`'s `env_file:`). `.env.example` and `.env.docker.example` are their committed templates. Any other `.env.*` file you see in this repo (`.env.local`, `.env.check`, `.env.*.pulled`, `.env.vercel*`, `.env.backend.prod`) is a local snapshot or a one-off pull that nothing in the codebase loads automatically — gitignored, safe to ignore or delete, not a second source of config.
+
 > **Security note — `REDIS_URL` is required in production, not optional.**
 > Login brute-force protection (account lockout after repeated failed
 > attempts) is implemented entirely via Redis

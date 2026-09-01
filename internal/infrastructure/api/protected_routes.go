@@ -24,7 +24,7 @@ const (
 // are constructed once during application.Initialize and shared with
 // SetupHexagonalRoutes.
 func SetupProtectedRoutes(router *gin.Engine, hexHandlers *application.Handlers) {
-	protected := router.Group("/api")
+	protected := router.Group("/api/v1")
 	protected.Use(middleware.Auth())
 	protected.Use(middleware.Idempotency())
 

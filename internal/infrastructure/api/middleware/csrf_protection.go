@@ -193,6 +193,7 @@ func isSafeMethod(method string) bool {
 
 // shouldSkipPath checks if the request path is in the skip list
 func shouldSkipPath(path string) bool {
+	path = normalizeAPIPath(path)
 	for _, skip := range csrfSkipPaths {
 		if strings.HasPrefix(path, skip) {
 			return true

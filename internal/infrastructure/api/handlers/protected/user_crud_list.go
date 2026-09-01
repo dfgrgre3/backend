@@ -44,6 +44,8 @@ func GetUsers(c *gin.Context) {
 		createdFrom:        c.Query("createdFrom"),
 		createdTo:          c.Query("createdTo"),
 		subscriptionStatus: c.Query("subscriptionStatus"),
+		includeDeleted:     c.Query("includeDeleted") == "true",
+		isNew:              c.Query("isNew") == "true",
 	}
 
 	query := buildUserListQuery(params)

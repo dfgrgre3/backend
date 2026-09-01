@@ -37,8 +37,9 @@ func GetExams(c *gin.Context) {
 
 	page, limit := parseExamsPagination(c)
 	search := c.Query("search")
+	subjectID := c.Query("subjectId")
 	useCache := cache.Redis != nil && search == ""
-	cacheKey := fmt.Sprintf("exams:list:page:%d:limit:%d", page, limit)
+	cacheKey := fmt.Sprintf("exams:list:page:%d:limit:%d:subject:%s", page, limit, subjectID)
 
 	if useCache {
 		if tryL1ExamsCache(c, cacheKey) {
@@ -49,25 +50,19 @@ func GetExams(c *gin.Context) {
 		}
 	}
 
-	query := buildExamsQuery(search)
+	query := buildExamsQuery(search, subjectID)
 	total, err := countExams(query)
 	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to count exams")
 		return
 	}
 
+	// Fetch exams
 	items, err := fetchExams(query, page, limit)
 	if err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch exams")
 		return
 	}
-
-	// NOTE: previously this fired a live admin WebSocket notification on
-	// every single call to this read-only, cacheable listing endpoint
-	// ("a user browsed the exams list") — meaning every admin's dashboard
-	// got a notification for every page load by any student. Removed:
-	// browsing a list is not an admin-actionable event, unlike SubmitExam's
-	// "a student completed an exam" notification below, which is kept.
 
 	responseData := buildExamsResponse(items, page, limit, total)
 	updateExamsCache(useCache, cacheKey, responseData)
@@ -119,10 +114,13 @@ func tryRedisExamsCache(c *gin.Context, cacheKey string) bool {
 	return true
 }
 
-func buildExamsQuery(search string) *gorm.DB {
+func buildExamsQuery(search string, subjectID string) *gorm.DB {
 	query := db.ReadDB().Model(&models.Exam{})
 	if search != "" {
 		query = query.Where("title ILIKE ?", "%"+search+"%")
+	}
+	if subjectID != "" {
+		query = query.Where("subject_id = ?", subjectID)
 	}
 	return query
 }

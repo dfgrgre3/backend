@@ -56,13 +56,29 @@ func (a *app) initInfrastructure() (*application.Handlers, func()) {
 	// to avoid race conditions in distributed environments.
 
 	// Initialize Redis
+	//
+	// SECURITY: Redis backs login brute-force lockout, login rate limiting,
+	// and JWT JTI blacklisting (see auth_service_lockout.go). Without it,
+	// those protections silently fail OPEN — accounts can never be locked
+	// and revoked tokens are only blacklisted in this process's memory. In
+	// production this must be a hard startup dependency, not an optional cache.
 	redisURL := os.Getenv("REDIS_URL")
-	if redisURL != "" {
+	isProduction := os.Getenv("NODE_ENV") == "production" || os.Getenv("APP_ENV") == "production"
+	if redisURL == "" {
+		if isProduction {
+			log.Fatal("FATAL: REDIS_URL is required in production (backs login lockout, rate limiting, and token revocation).")
+		}
+		log.Println("[WARN] REDIS_URL not set; Redis-backed auth protections (lockout, rate limiting, token blacklist) are disabled.")
+	} else {
 		redisCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-		if err := cache.ConnectRedis(redisCtx, redisURL); err != nil {
+		err := cache.ConnectRedis(redisCtx, redisURL)
+		cancel()
+		if err != nil {
+			if isProduction {
+				log.Fatalf("FATAL: Redis connection required in production but failed: %v", err)
+			}
 			log.Printf("Redis unavailable; Redis-backed capabilities will remain disabled: %v", err)
 		}
-		cancel()
 	}
 
 	// Initialize Hexagonal Architecture (Dependency Injection)

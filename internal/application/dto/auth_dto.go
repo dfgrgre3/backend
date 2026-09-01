@@ -21,6 +21,8 @@ type RegisterRequest struct {
 	Password  string `json:"password" binding:"required,min=8"`
 	FirstName string `json:"firstName" binding:"required"`
 	LastName  string `json:"lastName" binding:"required"`
+	Username  string `json:"username,omitempty" binding:"omitempty,min=3,max=30"`
+	Phone     string `json:"phone,omitempty"`
 	Role      string `json:"role,omitempty" binding:"omitempty,oneof=STUDENT PARENT TEACHER"`
 	Referral  string `json:"referralCode,omitempty"`
 }

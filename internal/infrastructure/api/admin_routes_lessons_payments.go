@@ -24,6 +24,7 @@ func registerAdminLessonPaymentRoutes(admin *gin.RouterGroup) {
 	// -------------------------------
 	admin.GET("/payments", handlers.GetAdminPayments)
 	admin.POST("/payments/refund", handlers.AdminRefundPayment)
+	admin.POST("/payments/refund/bulk", handlers.AdminBulkRefundPayments)
 
 	// Invoices — subscription & billing invoices
 	admin.GET("/invoices", handlers.GetAdminInvoices)

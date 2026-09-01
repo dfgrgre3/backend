@@ -191,7 +191,11 @@ func UpdateUser(c *gin.Context) {
 
 	if err := db.DB.Model(&models.User{}).Where(idQuery, user.ID).
 		Updates(&updates).Error; err != nil {
-		api_response.Error(c, http.StatusInternalServerError, "Failed to update user")
+		// Log the underlying error — a bare 500 here previously hid the actual
+		// cause (e.g. the User.BeforeUpdate hook rejecting empty-model role
+		// updates), making this endpoint impossible to debug from logs alone.
+		log.Printf("[ERROR] UpdateUser: failed to persist user %s: %v", user.ID, err)
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to update user", err)
 		return
 	}
 

@@ -76,7 +76,10 @@ func TestAdminUpdateAchievement_Success(t *testing.T) {
 	router.PATCH("/achievements/:id", protected.AdminUpdateAchievement)
 
 	body := map[string]interface{}{
-		"name": "New Name",
+		"title":       "New Name",
+		"criteria":    "COMPLETE_TASKS_10",
+		"xpReward":    0,
+		"isSecret":    false,
 	}
 	bodyBytes, _ := json.Marshal(body)
 

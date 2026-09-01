@@ -38,7 +38,7 @@ const (
 // here, called in the same order the routes were originally registered in
 // so route-matching behavior is unchanged.
 func SetupAdminRoutes(router *gin.Engine) {
-	admin := router.Group("/api/admin")
+	admin := router.Group("/api/v1/admin")
 	admin.Use(middleware.Auth())
 	admin.Use(middleware.AdminOrModerator())
 	admin.Use(middleware.StrictRBAC())
@@ -74,4 +74,5 @@ func SetupAdminRoutes(router *gin.Engine) {
 	registerAdminLessonPaymentRoutes(admin)
 	registerAdminBadgeCMSRoutes(admin)
 	registerAdminRoleRoutes(admin)
+	registerAdminAntiCheatRoutes(admin)
 }

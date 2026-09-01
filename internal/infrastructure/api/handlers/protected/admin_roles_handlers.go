@@ -6,11 +6,29 @@ import (
 	models "thanawy-backend/internal/domain/common"
 	"time"
 
+	"thanawy-backend/internal/infrastructure/api/middleware"
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/gin-gonic/gin"
 )
+
+// invalidateRoleMembersCache invalidates the cached role/permissions for every
+// user currently assigned to roleID, so permission changes on a custom role
+// (via AdminAssignPermissionsToRole/AdminRemovePermissionsFromRole/
+// AdminReplaceRolePermissions) take effect immediately instead of waiting
+// out the cache TTL.
+func invalidateRoleMembersCache(roleID string) {
+	var userIDs []string
+	if err := db.DB.Model(&models.UserRoleMapping{}).
+		Where("role_id = ?", roleID).
+		Pluck("user_id", &userIDs).Error; err != nil {
+		return
+	}
+	for _, uid := range userIDs {
+		middleware.InvalidateRolePermsCache(uid)
+	}
+}
 
 // ─────────────────────────────────────────────
 //  Roles Management
@@ -106,10 +124,14 @@ func AdminUpdateRole(c *gin.Context) {
 
 func AdminDeleteRole(c *gin.Context) {
 	id := c.Param("id")
+	invalidateRoleMembersCache(id)
 	if err := db.DB.Delete(&models.Role{}, "id = ?", id).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to delete role")
 		return
 	}
+	// Clean up dangling assignments/grants now that the role no longer exists.
+	db.DB.Where("role_id = ?", id).Delete(&models.UserRoleMapping{})
+	db.DB.Where("role_id = ?", id).Delete(&models.RolePermission{})
 	api_response.Success(c, gin.H{"message": "Role deleted"})
 }
 
@@ -227,6 +249,7 @@ func AdminAssignPermissionsToRole(c *gin.Context) {
 		db.DB.Where("role_id = ? AND permission_id = ?", roleID, permID).
 			FirstOrCreate(&rp)
 	}
+	invalidateRoleMembersCache(roleID)
 
 	api_response.Success(c, gin.H{"message": "Permissions assigned to role"})
 }
@@ -246,6 +269,7 @@ func AdminRemovePermissionsFromRole(c *gin.Context) {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to remove permissions")
 		return
 	}
+	invalidateRoleMembersCache(roleID)
 
 	api_response.Success(c, gin.H{"message": "Permissions removed from role"})
 }
@@ -271,6 +295,7 @@ func AdminReplaceRolePermissions(c *gin.Context) {
 		}
 		db.DB.Create(&rp)
 	}
+	invalidateRoleMembersCache(roleID)
 
 	api_response.Success(c, gin.H{"message": "Role permissions replaced"})
 }
@@ -360,6 +385,7 @@ func AdminAssignUsersToRole(c *gin.Context) {
 		// Use OnConflict to ignore duplicates
 		db.DB.Where("user_id = ? AND role_id = ?", userID, roleID).
 			FirstOrCreate(&ur)
+		middleware.InvalidateRolePermsCache(userID)
 	}
 
 	api_response.Success(c, gin.H{"message": "Users assigned to role"})
@@ -379,6 +405,9 @@ func AdminRemoveUsersFromRole(c *gin.Context) {
 		Delete(&models.UserRoleMapping{}).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to remove users from role")
 		return
+	}
+	for _, userID := range req.UserIDs {
+		middleware.InvalidateRolePermsCache(userID)
 	}
 
 	api_response.Success(c, gin.H{"message": "Users removed from role"})

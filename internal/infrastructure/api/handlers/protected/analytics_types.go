@@ -11,7 +11,7 @@ type UserJourneyRequest struct {
 	SessionID      string            `json:"sessionId" binding:"required"`
 	StartedAt      time.Time         `json:"startedAt" binding:"required"`
 	EndedAt        *time.Time        `json:"endedAt,omitempty"`
-	Steps          []UserJourneyStep `json:"steps" binding:"required"`
+	Steps          []UserJourneyStep `json:"steps"`
 	TotalDuration  int64             `json:"totalDuration"`
 	ConversionGoal string            `json:"conversionGoal,omitempty"`
 	Completed      bool              `json:"completed"`

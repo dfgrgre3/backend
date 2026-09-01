@@ -25,6 +25,7 @@ func registerAdminUserRoutes(admin, sensitive *gin.RouterGroup) {
 	admin.GET("/users/filter-options", handlers.AdminUsersFilterOptions)
 	admin.GET("/users/:id/enrollments", handlers.GetUserEnrollments)
 	admin.POST("/users/:id/enrollments", handlers.AdminEnrollUser)
+	admin.GET("/users/:id/certificates", handlers.GetUserCertificates)
 	admin.GET("/users/:id/orders", handlers.GetUserOrders)
 	admin.GET("/users/:id/notifications", admindelivery.GetUserNotifications)
 	admin.POST("/users/:id/notifications", admindelivery.SendUserNotification)
@@ -56,11 +57,18 @@ func registerAdminUserRoutes(admin, sensitive *gin.RouterGroup) {
 	admin.POST("/users/:id/permissions/add", handlers.AddPermission)
 	admin.POST("/users/:id/permissions/remove", handlers.RemovePermission)
 	admin.GET("/users/:id/permissions", handlers.GetUserPermissions)
+	// Paginated cross-user session list for the admin "user-sessions" page.
+	// Supports ?page=&limit=&userId=&active=&status= filters.
+	admin.GET("/user-sessions", handlers.ListUserSessions)
 	admin.GET("/users/:id/sessions", handlers.GetUserSessions)
 	admin.POST("/users/:id/sessions/:sessionId/terminate", handlers.TerminateSession)
 	admin.POST("/users/:id/sessions/terminate-all", handlers.TerminateAllSessions)
 	admin.GET("/users/:id/audit-logs", handlers.GetUserAuditLogs)
 	admin.POST("/users/:id/send-activation-link", handlers.SendActivationLink)
+	admin.GET("/users/:id/notes", handlers.GetUserAdminNotes)
+	admin.POST("/users/:id/notes", handlers.CreateUserAdminNote)
+	admin.PATCH("/users/:id/notes/:noteId", handlers.UpdateUserAdminNote)
+	admin.DELETE("/users/:id/notes/:noteId", handlers.DeleteUserAdminNote)
 
 	// Administrators are a first-class, server-filtered resource.  Keeping
 	// this separate from the broad users endpoint prevents clients from

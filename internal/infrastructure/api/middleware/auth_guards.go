@@ -47,7 +47,27 @@ func AdminAPIPermissionRequired() gin.HandlerFunc {
 	}
 }
 
+// normalizeAPIPath strips a leading API version segment (e.g. "/api/v1/..."
+// -> "/api/...") so path-matching tables across this package can stay
+// written against the version-agnostic form instead of duplicating it in
+// every entry. Shared by adminAPIPermission, isPublicEndpoint,
+// getWhitelistType, shouldSkipPath, and shouldSkipLogging/parseResourceInfo.
+func normalizeAPIPath(path string) string {
+	if rest, ok := strings.CutPrefix(path, "/api/v1/"); ok {
+		return "/api/" + rest
+	}
+	if path == "/api/v1" {
+		return "/api"
+	}
+	return path
+}
+
 func adminAPIPermission(path, method string) string {
+	// Routes are registered under /api/v1/..., but this table (and every
+	// other literal "/api/..." matcher in this package) is written against
+	// the unversioned form for readability — normalize once here rather
+	// than rewriting every entry.
+	path = normalizeAPIPath(path)
 	write := method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions
 	if strings.HasPrefix(path, "/api/admin/users/") && strings.Contains(path, "/notifications") {
 		if write {
@@ -71,6 +91,7 @@ func adminAPIPermission(path, method string) string {
 		{"/api/admin/books", models.PermBooksView, models.PermBooksManage},
 		{"/api/admin/resources", models.PermResourcesView, models.PermResourcesManage},
 		{"/api/admin/exams", models.PermExamsView, models.PermExamsManage},
+		{"/api/admin/anti-cheat", models.PermLiveMonitorView, models.PermLiveMonitorView},
 		{"/api/admin/bank-questions", models.PermExamsView, models.PermExamsManage},
 		{"/api/admin/challenges", models.PermChallengesView, models.PermChallengesManage},
 		{"/api/admin/achievements", models.PermAchievementsView, models.PermAchievementsManage},
@@ -96,6 +117,7 @@ func adminAPIPermission(path, method string) string {
 		{"/api/admin/dunning", models.PermAnalyticsView, models.PermAnalyticsView},
 		{"/api/admin/security", models.PermSettingsView, models.PermSettingsView},
 		{"/api/admin/audit-logs", models.PermAuditLogsView, ""},
+		{"/api/admin/activity-log", models.PermAuditLogsView, ""},
 		{"/api/admin/ai", models.PermAiManage, models.PermAiManage},
 		{"/api/admin/automations", models.PermAdminBypass, models.PermAdminBypass},
 		{"/api/admin/backups", models.PermSettingsView, models.PermSettingsView},

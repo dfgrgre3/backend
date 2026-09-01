@@ -54,6 +54,12 @@ func (s *authService) Register(ctx context.Context, req *authdto.RegisterRequest
 		Role:   role,
 		Status: models.StatusActive,
 	}
+	if req.Username != "" {
+		user.Username = &req.Username
+	}
+	if req.Phone != "" {
+		user.Phone = &req.Phone
+	}
 	credential := models.UserCredential{
 		PasswordHash: string(hashedPassword),
 	}

@@ -276,6 +276,201 @@ func AdminPayAffiliate(c *gin.Context) {
 	})
 }
 
+// AdminApproveAffiliate approves a pending affiliate (sets status=ACTIVE, approvedAt, approvedBy).
+func AdminApproveAffiliate(c *gin.Context) {
+	database, abort := safeDB(c)
+	if abort {
+		return
+	}
+
+	id := c.Param("id")
+	var affiliate models.Affiliate
+	if err := database.Where(queryID, id).First(&affiliate).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Affiliate not found")
+		return
+	}
+
+	actorID, _ := getAuthenticatedUserID(c)
+	now := time.Now()
+	updates := map[string]interface{}{
+		"status":      "ACTIVE",
+		"approved_at": now,
+	}
+	if actorID != "" {
+		updates["approved_by"] = actorID
+	}
+	if err := database.Model(&models.Affiliate{}).Where(queryID, id).Updates(updates).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to approve affiliate")
+		return
+	}
+
+	database.Preload("User").Where(queryID, id).First(&affiliate)
+	LogAudit(c, "APPROVE", "affiliate", id, updates)
+	api_response.Success(c, affiliate)
+}
+
+// AdminSuspendAffiliate flips an affiliate to SUSPENDED.
+func AdminSuspendAffiliate(c *gin.Context) {
+	database, abort := safeDB(c)
+	if abort {
+		return
+	}
+
+	id := c.Param("id")
+	if err := database.Model(&models.Affiliate{}).Where(queryID, id).
+		Update("status", "SUSPENDED").Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to suspend affiliate")
+		return
+	}
+	var affiliate models.Affiliate
+	database.Preload("User").Where(queryID, id).First(&affiliate)
+	LogAudit(c, "SUSPEND", "affiliate", id, nil)
+	api_response.Success(c, affiliate)
+}
+
+// AdminReactivateAffiliate flips a SUSPENDED affiliate back to ACTIVE.
+func AdminReactivateAffiliate(c *gin.Context) {
+	database, abort := safeDB(c)
+	if abort {
+		return
+	}
+
+	id := c.Param("id")
+	if err := database.Model(&models.Affiliate{}).Where(queryID, id).
+		Update("status", "ACTIVE").Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to reactivate affiliate")
+		return
+	}
+	var affiliate models.Affiliate
+	database.Preload("User").Where(queryID, id).First(&affiliate)
+	LogAudit(c, "REACTIVATE", "affiliate", id, nil)
+	api_response.Success(c, affiliate)
+}
+
+// AdminUpdateAffiliatePayoutConfig updates payoutMethod/MinimumPayout/HoldDays/PayoutDetails/Notes.
+func AdminUpdateAffiliatePayoutConfig(c *gin.Context) {
+	database, abort := safeDB(c)
+	if abort {
+		return
+	}
+
+	id := c.Param("id")
+	var affiliate models.Affiliate
+	if err := database.Where(queryID, id).First(&affiliate).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Affiliate not found")
+		return
+	}
+
+	var input struct {
+		PayoutMethod  *string             `json:"payoutMethod"`
+		PayoutDetails *models.JSONMap     `json:"payoutDetails"`
+		MinimumPayout *float64            `json:"minimumPayout"`
+		HoldDays      *int                `json:"holdDays"`
+		Notes         *string             `json:"notes"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	updates := map[string]interface{}{}
+	if input.PayoutMethod != nil {
+		if *input.PayoutMethod == "" {
+			updates["payout_method"] = nil
+		} else {
+			updates["payout_method"] = *input.PayoutMethod
+		}
+	}
+	if input.PayoutDetails != nil {
+		updates["payout_details"] = *input.PayoutDetails
+	}
+	if input.MinimumPayout != nil {
+		updates["minimum_payout"] = *input.MinimumPayout
+	}
+	if input.HoldDays != nil {
+		updates["hold_days"] = *input.HoldDays
+	}
+	if input.Notes != nil {
+		updates["notes"] = *input.Notes
+	}
+
+	if len(updates) > 0 {
+		if err := database.Model(&models.Affiliate{}).Where(queryID, id).Updates(updates).Error; err != nil {
+			api_response.Error(c, http.StatusInternalServerError, "Failed to update payout config")
+			return
+		}
+	}
+
+	database.Preload("User").Where(queryID, id).First(&affiliate)
+	LogAudit(c, "UPDATE_PAYOUT_CONFIG", "affiliate", id, updates)
+	api_response.Success(c, affiliate)
+}
+
+// AdminCreateReferral manually creates a referral record (admin override).
+func AdminCreateReferral(c *gin.Context) {
+	database, abort := safeDB(c)
+	if abort {
+		return
+	}
+
+	id := c.Param("id")
+	var affiliate models.Affiliate
+	if err := database.Where(queryID, id).First(&affiliate).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Affiliate not found")
+		return
+	}
+
+	var input struct {
+		UserID     string  `json:"userId" binding:"required"`
+		Amount     float64 `json:"amount" binding:"required"`
+		Commission float64 `json:"commission"`
+		Status     string  `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	commission := input.Commission
+	if commission == 0 && affiliate.CommissionRate > 0 {
+		commission = input.Amount * affiliate.CommissionRate / 100
+	}
+	status := firstNonEmpty(strings.ToUpper(input.Status), "APPROVED")
+
+	referral := models.AffiliateReferral{
+		AffiliateID: id,
+		UserID:      input.UserID,
+		Amount:      input.Amount,
+		Commission:  commission,
+		Status:      status,
+	}
+	if err := SafeCreate(database, &referral); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create referral")
+		return
+	}
+
+	// Bump totals on the affiliate
+	if status == "PAID" {
+		database.Model(&models.Affiliate{}).Where(queryID, id).
+			Updates(map[string]interface{}{
+				"total_paid":   gormExprInc("total_paid", commission),
+				"total_earned": gormExprInc("total_earned", commission),
+			})
+	} else {
+		database.Model(&models.Affiliate{}).Where(queryID, id).
+			Update("total_earned", gorm.Expr("total_earned + ?", commission))
+	}
+
+	database.Preload("User").Where(queryID, referral.ID).First(&referral)
+	LogAudit(c, "CREATE_REFERRAL", "affiliate_referral", referral.ID, referral)
+	api_response.Created(c, referral)
+}
+
+// gormExprInc returns a gorm expression that adds delta to a numeric column.
+func gormExprInc(column string, delta float64) interface{} {
+	return gorm.Expr(column + " + ?", delta)
+}
+
 // generateAffiliateCode creates a unique referral code from a user's email/username.
 func generateAffiliateCode(seed string) string {
 	// Strip non-alphanumeric and uppercase

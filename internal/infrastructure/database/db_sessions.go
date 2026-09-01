@@ -39,11 +39,22 @@ func RawReadDB(ctxs ...context.Context) *gorm.DB {
 
 // ReadDB returns a GORM session explicitly routed to a read replica.
 // Use this in all query (read) handlers to enforce CQRS read path.
+//
+// The trailing .Session(&gorm.Session{}) re-arms GORM's "clone on next call"
+// flag. .Clauses() forces an internal getInstance() clone that consumes
+// Session(NewDB:true)'s clone flag, leaving the *gorm.DB it returns pointing
+// at a single live Statement that every subsequent chained call (.Model(),
+// .Where(), .Raw(), ...) would mutate in place instead of cloning — callers
+// that stash the returned DB in a variable and issue more than one query off
+// it (the common pattern here) would silently corrupt each other's Model/
+// Table/clauses, or race under concurrent goroutines ("concurrent map
+// writes"). The extra .Session() forces a fresh Statement clone on the next
+// chained call, making the returned DB safe to reuse across queries.
 func ReadDB(ctxs ...context.Context) *gorm.DB {
 	if DB == nil {
 		return nil
 	}
-	db := DB.Session(&gorm.Session{NewDB: true}).Clauses(dbresolver.Read)
+	db := DB.Session(&gorm.Session{NewDB: true}).Clauses(dbresolver.Read).Session(&gorm.Session{})
 	if len(ctxs) > 0 && ctxs[0] != nil {
 		db = db.WithContext(ctxs[0])
 	}
@@ -52,11 +63,13 @@ func ReadDB(ctxs ...context.Context) *gorm.DB {
 
 // WriteDB returns a GORM session explicitly routed to the write source.
 // Use this in all command (write) handlers to enforce CQRS write path.
+// See the ReadDB doc comment for why the trailing .Session(&gorm.Session{})
+// is required to keep the returned DB safe to reuse across multiple queries.
 func WriteDB(ctxs ...context.Context) *gorm.DB {
 	if DB == nil {
 		return nil
 	}
-	db := DB.Session(&gorm.Session{NewDB: true}).Clauses(dbresolver.Write)
+	db := DB.Session(&gorm.Session{NewDB: true}).Clauses(dbresolver.Write).Session(&gorm.Session{})
 	if len(ctxs) > 0 && ctxs[0] != nil {
 		db = db.WithContext(ctxs[0])
 	}

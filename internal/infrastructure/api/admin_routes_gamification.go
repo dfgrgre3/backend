@@ -132,7 +132,46 @@ func registerAdminGamificationRoutes(admin *gin.RouterGroup) {
 	admin.PATCH("/affiliates/:id", handlers.AdminUpdateAffiliate)
 	admin.DELETE("/affiliates/:id", handlers.AdminDeleteAffiliate)
 	admin.GET("/affiliates/:id/referrals", handlers.AdminGetAffiliateReferrals)
+	admin.POST("/affiliates/:id/referrals", handlers.AdminCreateReferral)
 	admin.POST("/affiliates/:id/pay", handlers.AdminPayAffiliate)
+	admin.POST("/affiliates/:id/approve", handlers.AdminApproveAffiliate)
+	admin.POST("/affiliates/:id/suspend", handlers.AdminSuspendAffiliate)
+	admin.POST("/affiliates/:id/reactivate", handlers.AdminReactivateAffiliate)
+	admin.PATCH("/affiliates/:id/payout-config", handlers.AdminUpdateAffiliatePayoutConfig)
+
+	// Affiliate Analytics
+	admin.GET("/affiliates-analytics", handlers.AdminGetAffiliateAnalytics)
+	admin.GET("/affiliate-audits", handlers.AdminListAffiliateAudits)
+
+	// Affiliate Campaigns
+	admin.GET("/affiliate-campaigns", handlers.AdminListAffiliateCampaigns)
+	admin.POST("/affiliate-campaigns", handlers.AdminCreateAffiliateCampaign)
+	admin.GET("/affiliate-campaigns/:id", handlers.AdminGetAffiliateCampaign)
+	admin.PATCH("/affiliate-campaigns/:id", handlers.AdminUpdateAffiliateCampaign)
+	admin.DELETE("/affiliate-campaigns/:id", handlers.AdminDeleteAffiliateCampaign)
+
+	// Affiliate Links
+	admin.GET("/affiliate-links", handlers.AdminListAffiliateLinks)
+	admin.POST("/affiliate-links", handlers.AdminCreateAffiliateLink)
+	admin.GET("/affiliate-links/:id", handlers.AdminGetAffiliateLink)
+	admin.PATCH("/affiliate-links/:id", handlers.AdminUpdateAffiliateLink)
+	admin.DELETE("/affiliate-links/:id", handlers.AdminDeleteAffiliateLink)
+	admin.POST("/affiliate-links/:id/track", handlers.AdminTrackAffiliateClick)
+
+	// Affiliate Payouts
+	admin.GET("/affiliate-payouts", handlers.AdminListAffiliatePayouts)
+	admin.POST("/affiliate-payouts", handlers.AdminCreateAffiliatePayout)
+	admin.POST("/affiliate-payouts/:id/status", handlers.AdminMarkAffiliatePayoutPaid)
+	admin.POST("/affiliate-payouts/:id/process", handlers.AdminProcessAffiliatePayouts)
+
+	// Affiliate Settings
+	admin.GET("/affiliate-settings", handlers.AdminGetAffiliateSettings)
+	admin.PUT("/affiliate-settings", handlers.AdminUpdateAffiliateSettings)
+
+	// Affiliate Tier Rules
+	admin.GET("/affiliate-tiers", handlers.AdminListAffiliateTiers)
+	admin.PUT("/affiliate-tiers", handlers.AdminUpsertAffiliateTier)
+	admin.DELETE("/affiliate-tiers/:id", handlers.AdminDeleteAffiliateTier)
 	admin.POST("/books", handlers.AdminCreateBook)
 	admin.PATCH("/books/:id", handlers.AdminUpdateBook)
 	admin.DELETE("/books/:id", handlers.AdminDeleteBook)

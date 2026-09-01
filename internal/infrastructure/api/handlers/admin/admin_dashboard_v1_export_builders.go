@@ -139,7 +139,7 @@ func buildActivitiesExportRows(conn *gorm.DB, from, to time.Time, includeSensiti
 			action, log.Resource, log.ResourceID, dashboardRiskLevel(action),
 		}
 		if includeSensitive {
-			row = append(row, log.IP, log.UserAgent)
+			row = append(row, string(log.IP), log.UserAgent)
 		}
 		rows = append(rows, row)
 	}

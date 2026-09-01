@@ -81,6 +81,7 @@ func isIPWhitelisted(entries []models.IPWhitelistEntry, clientIP string) bool {
 
 // isPublicEndpoint checks if the endpoint is public
 func isPublicEndpoint(path string) bool {
+	path = normalizeAPIPath(path)
 	publicPaths := []string{
 		"/healthz",
 		"/readyz",
@@ -98,6 +99,7 @@ func isPublicEndpoint(path string) bool {
 
 // getWhitelistType determines which whitelist to check
 func getWhitelistType(path string, isAdmin bool) string {
+	path = normalizeAPIPath(path)
 	if strings.HasPrefix(path, "/api/admin") && isAdmin {
 		return "admin"
 	}

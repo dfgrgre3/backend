@@ -1,6 +1,7 @@
 package protected
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	models "thanawy-backend/internal/domain/common"
@@ -10,6 +11,7 @@ import (
 	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // ─────────────────────────────────────────────
@@ -105,33 +107,56 @@ func securityLogToGin(l models.SecurityLog) gin.H {
 //  Activity Log
 // ─────────────────────────────────────────────
 
+// buildActivityLogQuery applies the shared activity-log filters (action,
+// resource, userId, search, from/to date range) to a fresh query so it can be
+// reused for both the page result and the summary counts.
+func buildActivityLogQuery(c *gin.Context) *gorm.DB {
+	query := db.DB.Model(&models.ActivityLog{})
+	if action := c.Query("action"); action != "" && action != "all" {
+		query = query.Where("action = ?", action)
+	}
+	if resource := c.Query("resource"); resource != "" && resource != "all" {
+		query = query.Where("resource = ?", resource)
+	}
+	if userID := c.Query("userId"); userID != "" {
+		query = query.Where("\"ActivityLog\".user_id = ?", userID)
+	}
+	if search := c.Query("search"); search != "" {
+		query = query.Joins("JOIN \"User\" ON \"ActivityLog\".user_id = \"User\".id").
+			Where("\"User\".name ILIKE ? OR \"User\".email ILIKE ? OR \"ActivityLog\".action ILIKE ? OR \"ActivityLog\".resource ILIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%", "%"+search+"%")
+	}
+	if from := c.Query("from"); from != "" {
+		if t, err := time.Parse("2006-01-02", from); err == nil {
+			query = query.Where("\"ActivityLog\".created_at >= ?", t)
+		}
+	}
+	if to := c.Query("to"); to != "" {
+		if t, err := time.Parse("2006-01-02", to); err == nil {
+			// Include the whole end day.
+			query = query.Where("\"ActivityLog\".created_at < ?", t.AddDate(0, 0, 1))
+		}
+	}
+	return query
+}
+
 func AdminListActivityLog(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	search := c.Query("search")
-
 	if page <= 0 {
 		page = 1
 	}
-	if limit <= 0 {
-		limit = 10
-	}
 	offset := (page - 1) * limit
 
-	query := db.DB.Model(&models.ActivityLog{})
-	if search != "" {
-		query = query.Joins("JOIN \"User\" ON \"ActivityLog\".user_id = \"User\".id").
-			Where("\"User\".name ILIKE ? OR \"User\".email ILIKE ? OR \"ActivityLog\".action ILIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%")
-	}
+	base := buildActivityLogQuery(c)
 
 	var total int64
-	query.Count(&total)
+	base.Count(&total)
 
 	var logs []models.ActivityLog
-	if err := query.Order("created_at DESC").Offset(offset).Limit(limit).Find(&logs).Error; err != nil {
+	if err := base.Order("created_at DESC").Offset(offset).Limit(limit).Find(&logs).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch activity log")
 		return
 	}
@@ -141,17 +166,36 @@ func AdminListActivityLog(c *gin.Context) {
 		items = append(items, activityLogToGin(l))
 	}
 
-	today := time.Now().Truncate(24 * time.Hour)
+	now := time.Now()
+	today := now.Truncate(24 * time.Hour)
 	weekAgo := today.AddDate(0, 0, -7)
-	var todayCount, weekCount int64
-	db.DB.Model(&models.ActivityLog{}).Where("created_at >= ?", today).Count(&todayCount)
-	db.DB.Model(&models.ActivityLog{}).Where("created_at >= ?", weekAgo).Count(&weekCount)
+
+	var todayCount, weekCount, uniqueUsers int64
+	buildActivityLogQuery(c).Where("created_at >= ?", today).Count(&todayCount)
+	buildActivityLogQuery(c).Where("created_at >= ?", weekAgo).Count(&weekCount)
+	buildActivityLogQuery(c).Distinct("user_id").Count(&uniqueUsers)
 
 	api_response.Success(c, gin.H{
 		"logs":       items,
 		"pagination": gin.H{"page": page, "limit": limit, "total": total, "totalPages": (total + int64(limit) - 1) / int64(limit)},
-		"summary":    gin.H{"totalLogs": total, "todayCount": todayCount, "weekCount": weekCount},
+		"summary":    gin.H{"totalLogs": total, "todayCount": todayCount, "weekCount": weekCount, "uniqueUsers": uniqueUsers},
 	})
+}
+
+// AdminListActivityLogOptions returns the distinct actions and resources so the
+// frontend can build filter dropdowns without hard-coding values.
+func AdminListActivityLogOptions(c *gin.Context) {
+	var actions []string
+	var resources []string
+	db.DB.Model(&models.ActivityLog{}).Distinct().Order("action").Pluck("action", &actions)
+	db.DB.Model(&models.ActivityLog{}).Distinct().Order("resource").Pluck("resource", &resources)
+	if actions == nil {
+		actions = []string{}
+	}
+	if resources == nil {
+		resources = []string{}
+	}
+	api_response.Success(c, gin.H{"actions": actions, "resources": resources})
 }
 
 func activityLogToGin(l models.ActivityLog) gin.H {
@@ -164,6 +208,12 @@ func activityLogToGin(l models.ActivityLog) gin.H {
 		}
 		userEmail = user.Email
 	}
+	// Metadata is stored as JSONB; hand it through as raw JSON instead of the
+	// default []byte base64 encoding so clients receive a real object.
+	metadata := json.RawMessage("{}")
+	if len(l.Metadata) > 0 {
+		metadata = json.RawMessage(l.Metadata)
+	}
 	return gin.H{
 		"id":         l.ID,
 		"userId":     l.UserID,
@@ -174,7 +224,7 @@ func activityLogToGin(l models.ActivityLog) gin.H {
 		"resourceId": l.ResourceID,
 		"ipAddress":  l.IPAddress,
 		"userAgent":  l.UserAgent,
-		"metadata":   l.Metadata,
+		"metadata":   metadata,
 		"createdAt":  l.CreatedAt,
 	}
 }

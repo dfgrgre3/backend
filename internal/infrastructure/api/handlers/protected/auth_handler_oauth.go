@@ -62,10 +62,11 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 	c.SetCookie("access_token", res.AccessToken, 15*60, "/", cfg.CookieDomain, secureCookie(c), true)
 	c.SetCookie("refresh_token", res.RefreshToken, 30*24*60*60, "/", cfg.CookieDomain, secureCookie(c), true)
 
+	// SECURITY: refresh token stays cookie-only (HttpOnly) — not echoed in
+	// the body. See the SECURITY note in auth_handler.go Login for why.
 	response.Success(c, gin.H{
-		"accessToken":  res.AccessToken,
-		"refreshToken": res.RefreshToken,
-		"user":         res.User,
+		"accessToken": res.AccessToken,
+		"user":        res.User,
 	})
 }
 

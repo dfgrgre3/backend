@@ -310,9 +310,10 @@ func (h *MFAHandler) VerifyMFA(c *gin.Context) {
 	c.SetCookie("access_token", tokenPair.AccessToken, 15*60, "/", cfg.CookieDomain, secureCookie(c), true)
 	c.SetCookie("refresh_token", tokenPair.RefreshToken, 30*24*60*60, "/", cfg.CookieDomain, secureCookie(c), true)
 
+	// SECURITY: refresh token stays cookie-only (HttpOnly) — not echoed in
+	// the body. See the SECURITY note in auth_handler.go Login for why.
 	response.Success(c, gin.H{
-		"accessToken":  tokenPair.AccessToken,
-		"refreshToken": tokenPair.RefreshToken,
+		"accessToken": tokenPair.AccessToken,
 		"user": gin.H{
 			"id":    user.ID,
 			"email": user.Email,

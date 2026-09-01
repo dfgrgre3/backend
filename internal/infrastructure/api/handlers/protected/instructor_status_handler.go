@@ -149,8 +149,8 @@ func ReviewInstructorDocument(c *gin.Context) {
 		Action:     "review",
 		Resource:   "instructor_document",
 		ResourceID: documentID,
-		Changes:    input.Notes,
-		Metadata:   `{"status":"` + status + `"}`,
+		Changes:    models.JSONText(input.Notes), // free-form text, stored as a JSON string
+		Metadata:   models.JSONText(`{"status":"` + status + `"}`),
 		CreatedAt:  time.Now(),
 	}
 	if err := SafeCreate(database, &logEntry); err != nil {
@@ -302,8 +302,8 @@ func CreateInstructorViolation(c *gin.Context) {
 		Action:     "create",
 		Resource:   "instructor_violation",
 		ResourceID: user.ID,
-		Changes:    description,
-		Metadata:   `{"type":"` + typeValue + `","severity":"` + severity + `"}`,
+		Changes:    models.JSONText(description), // free-form text, stored as a JSON string
+		Metadata:   models.JSONText(`{"type":"` + typeValue + `","severity":"` + severity + `"}`),
 		CreatedAt:  time.Now(),
 	}
 	if err := SafeCreate(database, &logEntry); err != nil {

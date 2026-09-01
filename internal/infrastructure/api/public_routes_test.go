@@ -15,7 +15,7 @@ func TestSetupPublicRoutes_AuthCSRFEndpointBootstrapsToken(t *testing.T) {
 	r := gin.New()
 	SetupPublicRoutes(r)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/csrf", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/csrf", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)

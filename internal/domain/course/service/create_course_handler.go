@@ -2,6 +2,7 @@ package courseservice
 
 import (
 	"context"
+	"errors"
 	"strings"
 	models "thanawy-backend/internal/domain/common"
 	"time"
@@ -64,7 +65,16 @@ func (h *CreateCourseHandler) Handle(ctx context.Context, cmd CreateCourseComman
 	instructorID := uuid.Nil
 	if strings.TrimSpace(cmd.PrimaryInstructorID) != "" {
 		if parsed, err := uuid.Parse(strings.TrimSpace(cmd.PrimaryInstructorID)); err == nil {
+			var count int64
+			if err := h.db.WithContext(ctx).Model(&models.User{}).Where("id = ?", parsed).Count(&count).Error; err != nil {
+				return nil, err
+			}
+			if count == 0 {
+				return nil, errors.New("instructor not found")
+			}
 			instructorID = parsed
+		} else {
+			return nil, errors.New("invalid instructor ID format")
 		}
 	}
 

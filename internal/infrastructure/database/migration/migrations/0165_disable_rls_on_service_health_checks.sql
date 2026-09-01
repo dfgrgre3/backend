@@ -1,0 +1,20 @@
+-- The service_health_checks table is an internal telemetry table written to by
+-- a background scheduler task (worker.TypeServiceHealthCheck). It contains
+-- aggregate probe results with no multi-tenant row isolation requirement.
+--
+-- setup-db-roles.sql enables Row Level Security on ALL tables in the public
+-- schema, but no policies are defined for this table. With RLS enabled and no
+-- applicable policy, PostgreSQL defaults to DENY ALL, which blocks the
+-- app_user from INSERT operations, producing:
+--   "new row violates row-level security policy for table 'service_health_checks'"
+--
+-- Disable RLS on this table to restore write access for the app_user role,
+-- matching 0138_disable_rls_on_http_metric_buckets.sql for the sibling
+-- telemetry table.
+--
+-- NOTE: No BEGIN/COMMIT wrapper — the migration runner (cmd/migrate/main.go and
+-- internal/db/migrations.go) already wraps each migration in a database.Transaction().
+-- Including BEGIN; here would cause: "ERROR: there is already a transaction in
+-- progress" (SQLSTATE 25P02), causing the migration to fail silently and leave
+-- RLS enabled on the table.
+ALTER TABLE public.service_health_checks DISABLE ROW LEVEL SECURITY;

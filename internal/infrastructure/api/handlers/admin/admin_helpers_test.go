@@ -42,6 +42,15 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&models.Campaign{},
 		&models.Automation{},
 		&models.AuditLog{},
+		&models.Affiliate{},
+		&models.AffiliateReferral{},
+		&models.AffiliateTierRule{},
+		&models.AffiliateCampaign{},
+		&models.AffiliateLink{},
+		&models.AffiliateLinkClick{},
+		&models.AffiliatePayout{},
+		&models.AffiliateSetting{},
+		&models.AffiliateAudit{},
 	)
 	require.NoError(t, err)
 
@@ -51,6 +60,17 @@ func setupTestDB(t *testing.T) *gorm.DB {
 func setupTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	return gin.New()
+}
+
+// setupTestRouterWithUser returns a router that injects a fake userId into the
+// gin.Context — needed for handlers that call getAuthenticatedUserID().
+func setupTestRouterWithUser(userID string) *gin.Engine {
+	router := setupTestRouter()
+	router.Use(func(c *gin.Context) {
+		c.Set("userId", userID)
+		c.Next()
+	})
+	return router
 }
 
 // ptr returns a pointer to the given string value (test helper).
