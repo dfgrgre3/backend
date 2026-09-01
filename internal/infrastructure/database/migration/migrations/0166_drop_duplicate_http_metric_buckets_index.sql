@@ -1,0 +1,12 @@
+-- idx_http_metric_buckets_bucket_start (added in 0141) is functionally
+-- identical to idx_http_metric_buckets_time (added in 0117): both are
+-- single-column b-tree indexes on http_metric_buckets ("bucket_start" DESC).
+-- Keeping both doubles the maintenance cost of the hot per-minute batch
+-- upsert (http_metrics.go flushPersistedBatch) for zero query benefit — the
+-- planner can use either index for the
+-- "bucket_start >= $1 AND bucket_start < $2 ORDER BY bucket_start asc" scan.
+--
+-- Drop the redundant copy. DROP INDEX CONCURRENTLY must run outside a
+-- transaction; the migration runner detects it and uses the
+-- non-transactional execution path, so no lock is held on the metrics table.
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_http_metric_buckets_bucket_start;

@@ -211,6 +211,7 @@ BEGIN
         -- backend itself (no app_user policy defined for them).
         AND tablename NOT IN (
             'http_metric_buckets',
+            'service_health_checks',
             'AnalyticsEvent',
             'AuditLog',
             'login_history'
@@ -260,7 +261,7 @@ BEGIN
         SELECT tablename
         FROM pg_tables
         WHERE schemaname = 'public'
-          AND tablename IN ('http_metric_buckets', 'AnalyticsEvent', 'AuditLog', 'login_history')
+          AND tablename IN ('http_metric_buckets', 'service_health_checks', 'AnalyticsEvent', 'AuditLog', 'login_history')
           AND EXISTS (
               SELECT 1 FROM pg_class c
               JOIN pg_namespace n ON n.oid = c.relnamespace

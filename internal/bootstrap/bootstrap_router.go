@@ -1,8 +1,10 @@
 package bootstrap
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -53,7 +55,7 @@ func setupRouter(cfg *config.Config, hexHandlers *application.Handlers) *gin.Eng
 		log.Println("Proxy trusting disabled (SetTrustedProxies(nil))")
 	}
 
-	r.Use(gin.Logger())
+	r.Use(redactingLogger())
 	r.Use(gin.Recovery())
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORS())
@@ -161,4 +163,60 @@ func setupRouter(cfg *config.Config, hexHandlers *application.Handlers) *gin.Eng
 	api.SetupHexagonalRoutes(r, hexHandlers)
 
 	return r
+}
+
+// sensitiveQueryParams are query-string keys whose values must never be
+// written to the access log. The WebSocket handshake authenticates with the
+// access token in the query string (the browser WebSocket API cannot send
+// custom headers), so without redaction every reconnect leaks a fresh JWT
+// into the logs.
+var sensitiveQueryParams = map[string]bool{
+	"access_token": true,
+	"token":        true,
+	"api_key":      true,
+	"apikey":       true,
+	"code":         true,
+	"state":        true,
+}
+
+// redactQuery masks sensitive values in a raw query string while keeping the
+// key present (so logs still show whether auth params were supplied).
+func redactQuery(rawQuery string) string {
+	if rawQuery == "" {
+		return rawQuery
+	}
+	q := make(url.Values)
+	parsed, _ := url.ParseQuery(rawQuery)
+	for key, values := range parsed {
+		if sensitiveQueryParams[key] {
+			for range values {
+				q.Add(key, "[REDACTED]")
+			}
+			continue
+		}
+		for _, v := range values {
+			q.Add(key, v)
+		}
+	}
+	return q.Encode()
+}
+
+// redactingLogger mirrors gin.Logger() but masks sensitive query parameters
+// before writing the request line to the log.
+func redactingLogger() gin.HandlerFunc {
+	return gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
+		path := param.Request.URL.Path
+		if raw := param.Request.URL.RawQuery; raw != "" {
+			path += "?" + redactQuery(raw)
+		}
+		return fmt.Sprintf("[GIN] %v | %3d | %13v | %15s | %-7s %#v\n%s",
+			param.TimeStamp.Format("2006/01/02 - 15:04:05"),
+			param.StatusCode,
+			param.Latency,
+			param.ClientIP,
+			param.Method,
+			path,
+			param.ErrorMessage,
+		)
+	})
 }

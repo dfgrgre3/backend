@@ -1,4 +1,4 @@
-.PHONY: help build test lint fmt clean migrate-up migrate-down run dev install-deps docker-up docker-down docker-down-v docker-ps docker-logs docker-restart backend frontend logs redis-cli postgres clean
+.PHONY: help build test lint fmt clean migrate-up run dev install-deps docker-up docker-down docker-down-v docker-ps docker-logs docker-restart backend frontend logs redis-cli postgres clean
 
 # Variables
 APP_NAME=thanawy-backend
@@ -17,7 +17,6 @@ help:
 	@echo "  make fmt           - Format code"
 	@echo "  make clean         - Clean build artifacts"
 	@echo "  make migrate-up    - Run database migrations"
-	@echo "  make migrate-down  - Rollback database migrations"
 	@echo "  make run           - Run the API server"
 	@echo "  make dev           - Run in development mode with hot reload"
 	@echo "  make install-deps  - Install Go dependencies"
@@ -38,7 +37,7 @@ build:
 	@echo "Building $(APP_NAME)..."
 	@mkdir -p $(BUILD_DIR)
 	$(GO) build -o $(BUILD_DIR)/api $(API_CMD)/main.go
-	$(GO) build -o $(BUILD_DIR)/migrate $(MIGRATE_CMD)/main.go
+	$(GO) build -o $(BUILD_DIR)/migrate $(MIGRATE_CMD)
 	@echo "Build complete: $(BUILD_DIR)/api, $(BUILD_DIR)/migrate"
 
 # Run tests
@@ -75,12 +74,7 @@ clean:
 # Run database migrations up
 migrate-up:
 	@echo "Running database migrations..."
-	$(GO) run $(MIGRATE_CMD)/main.go up
-
-# Run database migrations down
-migrate-down:
-	@echo "Rolling back database migrations..."
-	$(GO) run $(MIGRATE_CMD)/main.go down
+	$(GO) run $(MIGRATE_CMD)
 
 # Run the API server
 run:

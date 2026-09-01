@@ -47,8 +47,7 @@ func loadDashboardRecentItems(conn *gorm.DB, readDB *gorm.DB) dashboardRecentIte
 	}()
 	go func() {
 		defer wg.Done()
-		conn.Session(&gorm.Session{NewDB: true}).Where("deleted_at IS NULL AND role = ?", models.RoleTeacher).
-			Order(createdAtDescSort).Limit(5).Find(&items.RecentOrders)
+		conn.Session(&gorm.Session{NewDB: true}).Order(createdAtDescSort).Limit(5).Find(&items.RecentOrders)
 	}()
 	go func() {
 		defer wg.Done()
