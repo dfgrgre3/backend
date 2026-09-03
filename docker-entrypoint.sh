@@ -8,6 +8,34 @@
 
 set -e
 
+# ==========================================
+# Validate Critical Environment Variables
+# ==========================================
+if [ -z "${DATABASE_HOST}" ]; then
+    echo "[ENTRYPOINT] FATAL: DATABASE_HOST is not set"
+    exit 1
+fi
+
+if [ -z "${POSTGRES_USER}" ]; then
+    echo "[ENTRYPOINT] FATAL: POSTGRES_USER is not set"
+    exit 1
+fi
+
+if [ -z "${POSTGRES_DB}" ]; then
+    echo "[ENTRYPOINT] FATAL: POSTGRES_DB is not set"
+    exit 1
+fi
+
+if [ -z "${POSTGRES_PASSWORD}" ]; then
+    echo "[ENTRYPOINT] FATAL: POSTGRES_PASSWORD is not set"
+    exit 1
+fi
+
+# Set default port if not provided
+if [ -z "${DATABASE_PORT}" ]; then
+    DATABASE_PORT=5432
+fi
+
 echo "=========================================="
 echo "Thanawy Backend - Docker Entrypoint"
 echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
@@ -19,13 +47,14 @@ wait_for_database() {
     local attempt=1
 
     echo "[ENTRYPOINT] Waiting for database to be ready..."
+    echo "[ENTRYPOINT] DATABASE_HOST=${DATABASE_HOST}"
+    echo "[ENTRYPOINT] DATABASE_PORT=${DATABASE_PORT}"
+    echo "[ENTRYPOINT] POSTGRES_USER=${POSTGRES_USER}"
+    echo "[ENTRYPOINT] POSTGRES_DB=${POSTGRES_DB}"
 
     while [ $attempt -le $max_attempts ]; do
-        # Try to connect to PostgreSQL using psql if available, otherwise fall back
-        # to a plain TCP check (psql and /app/migrate aren't present in every stage,
-        # e.g. the api runtime image only ships /app/main).
         if command -v psql > /dev/null 2>&1; then
-            if PGPASSWORD="${POSTGRES_PASSWORD:-Thanawy}" psql -h "${DATABASE_HOST:-postgres}" -U "${POSTGRES_USER:-thanawy}" -d "${POSTGRES_DB:-thanawy}" -c "SELECT 1" > /dev/null 2>&1; then
+            if PGPASSWORD="${POSTGRES_PASSWORD}" psql -h "${DATABASE_HOST}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c "SELECT 1" > /dev/null 2>&1; then
                 echo "[ENTRYPOINT] Database is ready!"
                 return 0
             fi
@@ -35,8 +64,8 @@ wait_for_database() {
                 return 0
             fi
         elif command -v nc > /dev/null 2>&1; then
-            if nc -z "${DATABASE_HOST:-postgres}" "${DATABASE_PORT:-5432}" > /dev/null 2>&1; then
-                echo "[ENTRYPOINT] Database is ready!"
+            if nc -z "${DATABASE_HOST}" "${DATABASE_PORT}" > /dev/null 2>&1; then
+                echo "[ENTRYPOINT] Database port is open"
                 return 0
             fi
         fi

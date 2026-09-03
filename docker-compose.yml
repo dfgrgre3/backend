@@ -281,7 +281,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: worker
+      target: api
       args:
         VERSION: ${VERSION:-dev}
         COMMIT: ${COMMIT:-unknown}

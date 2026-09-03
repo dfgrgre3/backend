@@ -66,7 +66,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-
     -o /build/bin/check-migration-status ./cmd/check-migration-status && \
     \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
-    -o /build/bin/test-db-connection ./cmd/test-db-connection
+    -o /build/bin/test-db-connection ./cmd/test-db-connection && \
+    \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /build/bin/worker ./cmd/api
 
 # ------------------------------------------
 # Stage 2: API Runtime - Main server (Hardened)
@@ -120,6 +123,10 @@ WORKDIR /app
 
 RUN apk add --no-cache ca-certificates tzdata
 RUN adduser -D -H -h /app -s /sbin/nologin nonroot
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Copy all database management binaries
 COPY --from=builder /build/bin/migrate /app/migrate

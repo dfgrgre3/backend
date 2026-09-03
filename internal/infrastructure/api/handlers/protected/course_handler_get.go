@@ -22,10 +22,12 @@ func (h *CourseRESTHandler) GetCourseMeta(c *gin.Context) {
 
 	db := h.db.Model(&models.LmsCourse{})
 	db.Count(&totalCount)
-	db.Where("status = ?", "draft").Count(&draftCount)
-	db.Where("status = ?", "pending_review").Count(&reviewCount)
-	db.Where("status = ?", "published").Count(&publishedCount)
-	db.Where("status = ?", "archived").Count(&archivedCount)
+	// LmsCourse.Status يُخزَّن بالحروف الكبيرة (DRAFT / UNDER_REVIEW / PUBLISHED / ARCHIVED)
+	// انظر ثوابت CourseStatus* في domain/common/entity.go — القيم الصغيرة كانت تُرجع 0 دائماً.
+	db.Where("status = ?", models.CourseStatusDraft).Count(&draftCount)
+	db.Where("status = ?", models.CourseStatusUnderReview).Count(&reviewCount)
+	db.Where("status = ?", models.CourseStatusPublished).Count(&publishedCount)
+	db.Where("status = ?", models.CourseStatusArchived).Count(&archivedCount)
 
 	api_response.Success(c, gin.H{
 		"total":          totalCount,
@@ -33,8 +35,13 @@ func (h *CourseRESTHandler) GetCourseMeta(c *gin.Context) {
 		"pending_review": reviewCount,
 		"published":      publishedCount,
 		"archived":       archivedCount,
-		"levels":         []string{"BEGINNER", "INTERMEDIATE", "ADVANCED"},
-		"statuses":       []string{"draft", "pending_review", "published", "archived"},
+		"levels":         []string{"BEGINNER", "INTERMEDIATE", "ADVANCED", "ALL_LEVELS"},
+		"statuses": []string{
+			string(models.CourseStatusDraft),
+			string(models.CourseStatusUnderReview),
+			string(models.CourseStatusPublished),
+			string(models.CourseStatusArchived),
+		},
 	})
 }
 

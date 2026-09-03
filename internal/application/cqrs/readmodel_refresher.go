@@ -29,6 +29,46 @@ that each materialized view has at least one UNIQUE INDEX.
 Ensure your database migrations create these unique indexes, otherwise the refresh will fail.
 */
 
+// ValidateMaterializedViewIndexes validates that all materialized views have required unique indexes.
+// This should be called during application startup to catch configuration issues early.
+func ValidateMaterializedViewIndexes() error {
+	wdb := db.WriteDB()
+	if wdb == nil {
+		return errors.New("database write connection is not initialized")
+	}
+
+	views := []materializedView{
+		{name: "mv_user_progress_summary"},
+		{name: "mv_user_weekly_analytics"},
+		{name: "mv_user_watch_time"},
+	}
+
+	for _, v := range views {
+		// Check if the materialized view has at least one unique index
+		var indexCount int64
+		err := wdb.Raw(`
+			SELECT COUNT(*) FROM pg_indexes 
+			WHERE schemaname = 'public' 
+			AND tablename = ? 
+			AND indexname LIKE '%_unique_%' OR indexname LIKE '%_pk'
+		`, v.name).Scan(&indexCount).Error
+
+		if err != nil {
+			return fmt.Errorf("failed to validate indexes for %s: %w", v.name, err)
+		}
+
+		if indexCount == 0 {
+			slog.Warn("materialized view is missing required unique index",
+				"view", v.name,
+				"warning", "REFRESH MATERIALIZED VIEW CONCURRENTLY will fail without a unique index",
+			)
+		}
+	}
+
+	slog.Info("materialized view indexes validated successfully")
+	return nil
+}
+
 // RefreshMaterializedViews refreshes all CQRS read model materialized views
 // sequentially to avoid write-DB contention. Called periodically by the background worker.
 func RefreshMaterializedViews() error {

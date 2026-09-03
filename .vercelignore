@@ -37,9 +37,6 @@ static/videos/
 static/images/raw/
 tmp/
 
-# Prisma migrations (اختياري)
-prisma/migrations/
-
 # اختبارات
 tests/
 test/

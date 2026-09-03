@@ -9,6 +9,7 @@ import (
 
 // CircuitBreakerService wraps external service calls with circuit breakers
 type CircuitBreakerService struct {
+	mu       sync.RWMutex
 	breakers map[string]*circuitbreaker.CircuitBreaker
 }
 
@@ -27,10 +28,13 @@ func GetCircuitBreakerService() *CircuitBreakerService {
 
 // CallAIService executes an AI service call with circuit breaker protection
 func (s *CircuitBreakerService) CallAIService(fn func() (string, error)) (string, error) {
-	cb := circuitbreaker.GetCircuitBreaker("ai-service", 3, 15*time.Second)
+	cb, err := s.getOrCreateBreaker("ai-service", 3, 15*time.Second)
+	if err != nil {
+		return "", err
+	}
 
 	var result string
-	err := cb.Execute(func() error {
+	err = cb.Execute(func() error {
 		var err error
 		result, err = fn()
 		return err
@@ -41,15 +45,44 @@ func (s *CircuitBreakerService) CallAIService(fn func() (string, error)) (string
 
 // CallPaymentService executes a payment service call with circuit breaker protection
 func (s *CircuitBreakerService) CallPaymentService(fn func() error) error {
-	cb := circuitbreaker.GetCircuitBreaker("payment-service", 5, 30*time.Second)
+	cb, err := s.getOrCreateBreaker("payment-service", 5, 30*time.Second)
+	if err != nil {
+		return err
+	}
 
 	return cb.Execute(fn)
 }
 
 // CallExternalAPI executes an external API call with circuit breaker protection
 func (s *CircuitBreakerService) CallExternalAPI(name string, fn func() error) error {
-	cb := circuitbreaker.GetCircuitBreaker(name, 3, 15*time.Second)
+	cb, err := s.getOrCreateBreaker(name, 3, 15*time.Second)
+	if err != nil {
+		return err
+	}
 	return cb.Execute(fn)
+}
+
+// getOrCreateBreaker retrieves or creates a circuit breaker instance
+func (s *CircuitBreakerService) getOrCreateBreaker(name string, threshold int, timeout time.Duration) (*circuitbreaker.CircuitBreaker, error) {
+	s.mu.RLock()
+	cb, exists := s.breakers[name]
+	s.mu.RUnlock()
+
+	if exists {
+		return cb, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if cb, exists := s.breakers[name]; exists {
+		return cb, nil
+	}
+
+	cb = circuitbreaker.GetCircuitBreaker(name, threshold, timeout)
+	s.breakers[name] = cb
+	return cb, nil
 }
 
 // GetStatus returns the status of all circuit breakers

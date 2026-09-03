@@ -37,7 +37,9 @@ type UserSession struct {
 	RevokedBy         *string        `gorm:"type:uuid;column:revoked_by" json:"revokedBy,omitempty"`
 	CreatedAt         time.Time      `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt         time.Time      `gorm:"column:updated_at" json:"updatedAt"`
-	DeletedAt         gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
+	// Note: deleted_at column was intentionally removed in migration 0176
+	// (soft-delete → hard-delete + audit trail phase A). UserSession
+	// uses is_active/status/revoked_at/expires_at for lifecycle instead.
 }
 
 func (UserSession) TableName() string {

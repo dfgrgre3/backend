@@ -2,10 +2,11 @@ package courseservice
 
 import (
 	"context"
-	models "thanawy-backend/internal/domain/common"
+	"errors"
+	"fmt"
 	"time"
 
-	"fmt"
+	models "thanawy-backend/internal/domain/common"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -22,14 +23,23 @@ func NewEnrollUserHandler(db *gorm.DB) *EnrollUserHandler {
 	return &EnrollUserHandler{db: db}
 }
 
-// Handle handles the enrollment command
+// Handle handles the enrollment command with proper context propagation and error handling
 func (h *EnrollUserHandler) Handle(ctx context.Context, cmd EnrollUserCommand) (*models.LmsEnrollment, error) {
 	// Check if already enrolled
 	var existingEnrollment models.LmsEnrollment
-	if err := h.db.Where("course_id = ? AND user_id = ?", cmd.CourseID, cmd.UserID).First(&existingEnrollment).Error; err == nil {
+	err := h.db.WithContext(ctx).Where("course_id = ? AND user_id = ?", cmd.CourseID, cmd.UserID).First(&existingEnrollment).Error
+
+	// Distinguish between "already enrolled" and database errors
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("failed to check enrollment status: %w", err)
+	}
+
+	// If no error and record found, user is already enrolled
+	if err == nil {
 		return nil, fmt.Errorf("user already enrolled in course")
 	}
 
+	// Parse IDs with proper error handling
 	courseID, err := uuid.Parse(cmd.CourseID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid course ID: %w", err)
@@ -46,8 +56,9 @@ func (h *EnrollUserHandler) Handle(ctx context.Context, cmd EnrollUserCommand) (
 		EnrolledAt: time.Now(),
 	}
 
-	if err := h.db.Create(enrollment).Error; err != nil {
-		return nil, err
+	// Create enrollment with context
+	if err := h.db.WithContext(ctx).Create(enrollment).Error; err != nil {
+		return nil, fmt.Errorf("failed to create enrollment: %w", err)
 	}
 	return enrollment, nil
 }

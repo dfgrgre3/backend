@@ -21,8 +21,8 @@ type MailTask struct {
 	Body      string         `gorm:"type:text" json:"body"`
 	Status    string         `gorm:"index;size:50;default:'pending'" json:"status"` // pending, processing, sent, failed, retry
 	Attempts  int            `gorm:"default:0" json:"attempts"`
-	MaxRetry  int            `gorm:"default:3" json:"maxRetry"`
-	LastError string         `gorm:"type:text" json:"lastError"`
+	MaxRetry  int            `gorm:"column:max_retry;default:3" json:"maxRetry"`
+	LastError string         `gorm:"column:last_error;type:text" json:"lastError"`
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
@@ -66,6 +66,7 @@ func (w *MailQueueWorker) Start() {
 	defer w.mu.Unlock()
 
 	if w.active {
+		log.Println("[MailWorker] Already running, skipping duplicate start")
 		return
 	}
 
@@ -79,14 +80,16 @@ func (w *MailQueueWorker) Start() {
 // Stop halts the polling worker
 func (w *MailQueueWorker) Stop() {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	if !w.active {
+		w.mu.Unlock()
 		return
 	}
 
-	close(w.quit)
 	w.active = false
+	quit := w.quit
+	w.mu.Unlock()
+
+	close(quit)
 	log.Println("[MailWorker] Background daemon stopped")
 }
 

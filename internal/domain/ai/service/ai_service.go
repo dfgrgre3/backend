@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"unicode/utf8"
 )
 
@@ -36,10 +37,15 @@ func safeString(s *string) string {
 	return *s
 }
 
-var aiServiceInstance *AIService
+var (
+	aiServiceInstance *AIService
+	aiServiceOnce     sync.Once
+)
 
+// GetAIService returns a thread-safe singleton instance of AIService.
+// Initialization is protected by sync.Once to prevent race conditions.
 func GetAIService() *AIService {
-	if aiServiceInstance == nil {
+	aiServiceOnce.Do(func() {
 		provider := os.Getenv("AI_PROVIDER")
 		if provider == "" {
 			provider = "openrouter" // default
@@ -70,7 +76,7 @@ func GetAIService() *AIService {
 			enabled:  enabled,
 			provider: provider,
 		}
-	}
+	})
 	return aiServiceInstance
 }
 

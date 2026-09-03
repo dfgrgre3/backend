@@ -154,15 +154,6 @@ desktop.ini
 
 
 # ==========================================
-# Prisma (Migration Tool — CLI only, not used at runtime)
-# ==========================================
-# Generated Prisma client — should NOT be committed (generated on demand)
-/prisma/generated/
-# The schema and migrations ARE tracked — they are source of truth for DB structure
-# prisma/schema.prisma         ← tracked ✅
-# prisma/migrations/           ← tracked ✅
-
-# ==========================================
 # Generated Code (Protobuf, gRPC, etc.)
 # ==========================================
 # Generated Go files from protobuf
@@ -171,7 +162,5 @@ internal/proto/**/*_grpc.pb.go
 internal/proto/**/*connect*.go
 # Generated TypeScript files from protobuf
 src/gen/
-# Generated Prisma client
-node_modules/.prisma/
 
 testsprite_tests\tmp\config.json

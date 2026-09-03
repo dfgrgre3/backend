@@ -30,6 +30,23 @@ func invalidateRoleMembersCache(roleID string) {
 	}
 }
 
+// roleUserCount returns the number of users currently assigned to a role via
+// the user_roles mapping table. Users are linked to roles by assignment
+// (models.UserRoleMapping), not by the User.role enum column.
+func roleUserCount(roleID string) int64 {
+	var count int64
+	db.DB.Model(&models.UserRoleMapping{}).Where("role_id = ?", roleID).Count(&count)
+	return count
+}
+
+// rolePermissionIDs returns the permission ids assigned to a role from the
+// role_permissions join table.
+func rolePermissionIDs(roleID string) []string {
+	ids := make([]string, 0)
+	db.DB.Model(&models.RolePermission{}).Where("role_id = ?", roleID).Pluck("permission_id", &ids)
+	return ids
+}
+
 // ─────────────────────────────────────────────
 //  Roles Management
 // ─────────────────────────────────────────────
@@ -59,16 +76,14 @@ func AdminListRoles(c *gin.Context) {
 	query.Count(&total)
 
 	var roles []models.Role
-	if err := query.Order("created_at DESC").Offset(offset).Limit(limit).Find(&roles).Error; err != nil {
+	if err := query.Order("level DESC, created_at DESC").Offset(offset).Limit(limit).Find(&roles).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch roles")
 		return
 	}
 
 	items := make([]gin.H, 0, len(roles))
 	for _, r := range roles {
-		var userCount int64
-		db.DB.Model(&models.User{}).Where("role_id = ?", r.ID).Count(&userCount)
-		items = append(items, roleToGin(r, userCount))
+		items = append(items, roleToGin(r, roleUserCount(r.ID), rolePermissionIDs(r.ID)))
 	}
 
 	var systemCount, customCount int64
@@ -89,22 +104,39 @@ func AdminGetRole(c *gin.Context) {
 		api_response.Error(c, http.StatusNotFound, "Role not found")
 		return
 	}
-	var userCount int64
-	db.DB.Model(&models.User{}).Where("role_id = ?", role.ID).Count(&userCount)
-	api_response.Success(c, roleToGin(role, userCount))
+	api_response.Success(c, roleToGin(role, roleUserCount(role.ID), rolePermissionIDs(role.ID)))
 }
 
 func AdminCreateRole(c *gin.Context) {
-	var req models.Role
+	var req struct {
+		Name        string   `json:"name" binding:"required"`
+		Description *string  `json:"description"`
+		Permissions []string `json:"permissions"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := SafeCreate(db.DB, &req); err != nil {
+
+	role := models.Role{Name: req.Name, Description: req.Description}
+	if err := SafeCreate(db.DB, &role); err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to create role")
 		return
 	}
-	api_response.Created(c, roleToGin(req, 0))
+
+	// Persist the initial permission assignments through the same join-table
+	// path used by AdminAssignPermissionsToRole.
+	for _, permID := range req.Permissions {
+		rp := models.RolePermission{
+			RoleID:       role.ID,
+			PermissionID: permID,
+		}
+		db.DB.Where("role_id = ? AND permission_id = ?", role.ID, permID).
+			FirstOrCreate(&rp)
+	}
+	invalidateRoleMembersCache(role.ID)
+
+	api_response.Created(c, roleToGin(role, 0, req.Permissions))
 }
 
 func AdminUpdateRole(c *gin.Context) {
@@ -113,6 +145,19 @@ func AdminUpdateRole(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
+	}
+	// System roles are protected: their name and is_system flag cannot be
+	// changed through the admin API. Description and level are still editable
+	// so that admins can refine the label / sort order.
+	var existing models.Role
+	if err := db.DB.Select("id, is_system, name").Where("id = ?", id).First(&existing).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Role not found")
+		return
+	}
+	if existing.IsSystem {
+		delete(req, "name")
+		delete(req, "is_system")
+		delete(req, "isSystem")
 	}
 	req["updated_at"] = time.Now()
 	if err := db.DB.Model(&models.Role{}).Where("id = ?", id).Updates(req).Error; err != nil {
@@ -124,6 +169,18 @@ func AdminUpdateRole(c *gin.Context) {
 
 func AdminDeleteRole(c *gin.Context) {
 	id := c.Param("id")
+	// System roles cannot be deleted — they are part of the canonical role
+	// catalog (SUPER_ADMIN, ADMIN, ...) and removing them would break
+	// mergeCustomRolePermissions lookups for any user assigned to them.
+	var existing models.Role
+	if err := db.DB.Select("is_system").Where("id = ?", id).First(&existing).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Role not found")
+		return
+	}
+	if existing.IsSystem {
+		api_response.Error(c, http.StatusForbidden, "System roles cannot be deleted")
+		return
+	}
 	invalidateRoleMembersCache(id)
 	if err := db.DB.Delete(&models.Role{}, "id = ?", id).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to delete role")
@@ -135,15 +192,20 @@ func AdminDeleteRole(c *gin.Context) {
 	api_response.Success(c, gin.H{"message": "Role deleted"})
 }
 
-func roleToGin(r models.Role, userCount int64) gin.H {
+func roleToGin(r models.Role, userCount int64, permissionIDs []string) gin.H {
+	if permissionIDs == nil {
+		permissionIDs = []string{}
+	}
 	return gin.H{
 		"id":          r.ID,
 		"name":        r.Name,
 		"description": r.Description,
-		"permissions": r.Permissions,
+		"permissions": permissionIDs,
 		"usersCount":  userCount,
 		"isSystem":    r.IsSystem,
+		"level":       r.Level,
 		"createdAt":   r.CreatedAt,
+		"updatedAt":   r.UpdatedAt,
 	}
 }
 
