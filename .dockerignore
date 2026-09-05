@@ -1,91 +1,194 @@
-# Git files
+# =============================================================================
+# .dockerignore — keep the Docker build context as small as possible
+# =============================================================================
+# Without this, `COPY . .` in the Dockerfile stage 1 ships ~585MB of
+# unneeded content to the Docker daemon (.git = 293MB, node_modules = 278MB,
+# uploads = 14MB, .claude/.devin/.trae AI-tool metadata, etc.).
+# Docker IS supposed to honor this file when computing the build context,
+# so the daemon never even sees the excluded paths — both faster build and
+# smaller attack surface (no .git, no .env.*, no test fixtures leak into
+# the image even if .dockerignore is later loosened).
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# VCS / Git (largest single saving — ~293MB)
+# -----------------------------------------------------------------------------
 .git
 .gitignore
 .gitattributes
 
-# Documentation
-docs
-*.md
-!README.md
-
-# IDE and editor files
-.idea
+# -----------------------------------------------------------------------------
+# AI tool / IDE metadata
+# -----------------------------------------------------------------------------
+.claude
+.claude/**
+.devin
+.devin/**
+.kilo
+.kilo/**
+.trae
+.trae/**
 .vscode
+.vscode/**
+.idea
 *.swp
 *.swo
 *~
+*.code-workspace
 
-# Test files
+# -----------------------------------------------------------------------------
+# Node / frontend (not used by the Go API build)
+# -----------------------------------------------------------------------------
+node_modules
+.next
+.nuxt
+dist
+build
+out
+coverage
+.cache
+.turbo
+.tsbuildinfo
+next-env.d.ts
+
+# -----------------------------------------------------------------------------
+# Documentation (Swagger output stays via !README.md exception)
+# -----------------------------------------------------------------------------
+docs
+*.md
+!README.md
+!CHANGELOG.md
+!CONTRIBUTING.md
+
+# -----------------------------------------------------------------------------
+# Test files and coverage
+# -----------------------------------------------------------------------------
 *_test.go
 *_test
 test
 tests
-*_test.go
-internal/*/*_test.go
-internal/*/*/*_test.go
-cmd/*/*_test.go
-
-# Coverage files
+testsprite_tests
+testsprite_tests/**
 coverage.out
 coverage.html
 *.cover
 
+# -----------------------------------------------------------------------------
 # Build artifacts
+# -----------------------------------------------------------------------------
 bin
-dist
-build
+bin/**
 *.exe
+*.exe~
 *.dll
 *.so
 *.dylib
+*.test
+*.out
+*.prof
+*.tmp
 
-# Go modules - included in build context
-!go.sum
-!go.mod
-
-# Environment files with secrets
+# -----------------------------------------------------------------------------
+# Environment files with secrets — never ship into an image
+# -----------------------------------------------------------------------------
 .env
 .env.*
-!.env.example
-!.env.docker.example
 .env.local
 .env.development
 .env.production
+.env.test
+.env.check
+.env.vercel
+.env.vercel.*
+.env.docker
+.env.docker.*
+.env.backend.prod
+.env.production.pulled
+.env.development.pulled
+.env.database.template
+!.env.example
+!.env.docker.example
 
-# Temporary files
+# -----------------------------------------------------------------------------
+# Temporary / log files
+# -----------------------------------------------------------------------------
 tmp
 temp
 *.tmp
 *.log
+logs
+logs/**
 
-# Docker files
-!Dockerfile*
-!docker-compose*.yml
-
-# Scripts that shouldn't be in the image
+# -----------------------------------------------------------------------------
+# Scripts (only docker-entrypoint.sh is whitelisted below)
+# -----------------------------------------------------------------------------
 scripts
 !scripts/docker-entrypoint.sh
 
-# Vercel config
+# -----------------------------------------------------------------------------
+# Vercel-specific (not needed in Docker image)
+# -----------------------------------------------------------------------------
 vercel.json
 .vercel
+.vercel/**
 
-# README files (keep main one)
-README*
-
-# Travis, CircleCI, etc.
-.travis.yml
-.circleci
-.github
-
-# Local uploads (should use volumes)
+# -----------------------------------------------------------------------------
+# Local uploads (should be a mounted volume, not baked into the image)
+# -----------------------------------------------------------------------------
 uploads
+uploads/**
 *.upload
 
+# -----------------------------------------------------------------------------
+# Backups and scratch / debug artifacts
+# -----------------------------------------------------------------------------
+backups
+backups/**
+_scratch
+_scratch/**
+scratch
+scratch/**
+
+# -----------------------------------------------------------------------------
 # Database files
+# -----------------------------------------------------------------------------
 *.sqlite
+*.sqlite3
 *.db
 
-# Swagger gen files
+# -----------------------------------------------------------------------------
+# Swagger generated files (regenerated at build via swag init)
+# -----------------------------------------------------------------------------
 swagger.json
 swagger.yaml
+internal/proto/**/*.pb.go
+internal/proto/**/*_grpc.pb.go
+
+# -----------------------------------------------------------------------------
+# CI / Git hooks
+# -----------------------------------------------------------------------------
+.github
+.gitlab-ci.yml
+.travis.yml
+.circleci
+
+# -----------------------------------------------------------------------------
+# Python (not used by Go build, but kept clean just in case)
+# -----------------------------------------------------------------------------
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+.mypy_cache
+.pytest_cache
+
+# =============================================================================
+# Explicitly required files (whitelist overrides for the rules above)
+# =============================================================================
+# These are the ONLY files outside go.mod / go.sum that the build needs.
+!go.mod
+!go.sum
+!Dockerfile
+!docker-compose*.yml
+!docker-entrypoint.sh

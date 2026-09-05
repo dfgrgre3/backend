@@ -54,7 +54,13 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./config/postgresql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # NOTE: ./config/postgresql/init.sql is intentionally NOT mounted.
+      # It is currently a directory on the host (not a file), which causes
+      # Docker to fail the bind-mount silently — Postgres' init scripts dir
+      # only accepts files. Schema/data initialization is handled exclusively
+      # by the custom Go migrator in cmd/migrate (104 files under
+      # internal/infrastructure/database/migration/migrations/), which runs
+      # via docker-entrypoint.sh before the API starts.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-thanawy} -d ${POSTGRES_DB:-thanawy}"]
       interval: 10s

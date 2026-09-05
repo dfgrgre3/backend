@@ -190,8 +190,8 @@ func (h *MFAHandler) DisableMFA(c *gin.Context) {
 
 func (h *MFAHandler) VerifyMFA(c *gin.Context) {
 	var req struct {
-		Ticket string `json:"ticket" binding:"required"`
-		Code   string `json:"code" binding:"required"`
+		ChallengeID string `json:"challengeId" binding:"required"`
+		Code        string `json:"code" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, "Invalid request body")
@@ -205,7 +205,7 @@ func (h *MFAHandler) VerifyMFA(c *gin.Context) {
 
 	// Retrieve user ID from Redis ticket
 	ctx := c.Request.Context()
-	ticketKey := fmt.Sprintf("mfa_ticket:%s", req.Ticket)
+	ticketKey := fmt.Sprintf("mfa_ticket:%s", req.ChallengeID)
 	userID, err := cache.Redis.Get(ctx, ticketKey).Result()
 	if err != nil || userID == "" {
 		response.Error(c, http.StatusUnauthorized, "Invalid or expired verification ticket")

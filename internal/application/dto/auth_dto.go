@@ -154,8 +154,8 @@ type SetupMFAResponse struct {
 }
 
 type VerifyMFARequest struct {
-	Ticket string `json:"ticket" binding:"required"`
-	Code   string `json:"code" binding:"required"`
+	ChallengeID string `json:"challengeId" binding:"required"`
+	Code        string `json:"code" binding:"required"`
 }
 
 type EnableMFARequest struct {
@@ -226,12 +226,12 @@ type AccountRecoveryRequest struct {
 }
 
 type AccountRecoveryResponse struct {
-	Ticket  string `json:"ticket,omitempty"`
-	Message string `json:"message"`
+	ChallengeID string `json:"challengeId,omitempty"`
+	Message     string `json:"message"`
 }
 
 type RecoverAccountRequest struct {
-	Ticket      string `json:"ticket" binding:"required"`
+	ChallengeID string `json:"challengeId" binding:"required"`
 	Code        string `json:"code" binding:"required"`
 	NewPassword string `json:"newPassword" binding:"required,min=8,max=128"`
 }

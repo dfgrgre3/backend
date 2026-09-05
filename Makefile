@@ -252,3 +252,31 @@ install-tools:
 	$(GO) install github.com/cosmtrek/air@latest
 	$(GO) install golang.org/x/tools/cmd/goimports@latest
 	@echo "Development tools installed"
+
+# Install gitleaks + register the pre-commit secret scan hook.
+# Idempotent: safe to run multiple times.
+install-hooks:
+	@echo "Installing gitleaks pre-commit hook..."
+	@if ! command -v gitleaks >/dev/null 2>&1; then \
+		echo ""; \
+		echo "  WARNING: gitleaks is not on PATH."; \
+		echo "  Install with one of:"; \
+		echo "    brew install gitleaks                 # macOS"; \
+		echo "    go install github.com/gitleaks/gitleaks/v8@latest"; \
+		echo "    scoop install gitleaks                # Windows"; \
+		echo ""; \
+	fi
+	@mkdir -p .githooks
+	@chmod +x .githooks/pre-commit
+	@git config core.hooksPath .githooks
+	@echo "Pre-commit hook registered at .githooks/pre-commit"
+	@echo "Every 'git commit' will now scan staged changes for secrets."
+
+# Run gitleaks against the full git history. Useful for a one-off audit
+# of an existing repo, or to verify the config behaves as expected.
+gitleaks-scan:
+	@if ! command -v gitleaks >/dev/null 2>&1; then \
+		echo "gitleaks not installed. See 'make install-hooks' for install instructions."; \
+		exit 1; \
+	fi
+	gitleaks detect --source . --redact --verbose --config .gitleaks.toml

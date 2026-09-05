@@ -176,8 +176,8 @@ func SetupProtectedRoutes(router *gin.Engine, hexHandlers *application.Handlers)
 			userRoutes.PATCH(pathUploadChunked, handlers.UploadChunked)
 			userRoutes.GET("/upload/chunked/:uploadId/status", handlers.GetUploadStatus)
 
-			// Exam routes
-			userRoutes.POST("/exams/:id/submit", handlers.SubmitExam)
+			// Exam routes (Enforce StudentRequired guard at the backend route boundary)
+			userRoutes.POST("/exams/:id/submit", middleware.StudentRequired(), handlers.SubmitExam)
 
 			// Gamification routes
 			userRoutes.GET("/gamification/progress", handlers.GetUserProgress)

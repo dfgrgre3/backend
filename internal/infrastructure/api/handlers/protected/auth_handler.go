@@ -93,7 +93,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			ticket := strings.TrimPrefix(err.Error(), "MFA_REQUIRED:")
 			response.Success(c, gin.H{
 				"mfaRequired": true,
-				"ticket":      ticket,
+				"challengeId": ticket,
 			})
 			return
 		}

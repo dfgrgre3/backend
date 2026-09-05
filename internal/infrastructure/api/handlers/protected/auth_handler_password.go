@@ -177,8 +177,8 @@ func (h *AuthHandler) AccountRecovery(c *gin.Context) {
 	}
 
 	response.Success(c, authdto.AccountRecoveryResponse{
-		Ticket:  ticket,
-		Message: "Recovery initiated. Check your email/phone for verification code.",
+		ChallengeID: ticket,
+		Message:     "Recovery initiated. Check your email/phone for verification code.",
 	})
 }
 
@@ -193,7 +193,7 @@ func (h *AuthHandler) RecoverAccount(c *gin.Context) {
 		return
 	}
 
-	if err := h.authService.FinalizeAccountRecovery(c.Request.Context(), req.Ticket, req.Code, req.NewPassword); err != nil {
+	if err := h.authService.FinalizeAccountRecovery(c.Request.Context(), req.ChallengeID, req.Code, req.NewPassword); err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}

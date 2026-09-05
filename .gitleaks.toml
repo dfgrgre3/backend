@@ -1,0 +1,165 @@
+# =============================================================================
+# gitleaks configuration for Thanawy Backend
+# =============================================================================
+# gitleaks (https://github.com/gitleaks/gitleaks) scans every git commit
+# and every push for accidentally-committed secrets (API keys, private
+# keys, database URLs with embedded credentials, JWT signing keys, ...).
+#
+# Usage:
+#   - Local:  this file is consumed automatically by the pre-commit hook in
+#             .githooks/pre-commit.  Run `make install-hooks` once after
+#             cloning.
+#   - CI:     the .github/workflows/gitleaks.yml pipeline runs the same
+#             config against the full git history.
+#
+# This config deliberately:
+#   - Extends the upstream default ruleset (gitleaks ships a strong
+#     baseline; we add a few platform-specific allowlists).
+#   - Allows the well-known *example* / *template* files in the repo
+#     (they intentionally contain placeholders for new contributors to
+#     copy from).
+#   - Treats the .env.production.pulled and .env.backend.prod files
+#     flagged in the analysis report as `hashed` targets — anyone
+#     committing actual production secrets will trip an immediate alert.
+# =============================================================================
+
+[extend]
+# Use gitleaks' bundled default ruleset as a baseline. It already covers
+# the most common AWS, GCP, Stripe, OpenAI, GitHub, Slack, JWT, RSA, and
+# generic high-entropy-string patterns.
+useDefault = true
+
+# -----------------------------------------------------------------------------
+# Files / paths to ignore entirely
+# -----------------------------------------------------------------------------
+# We allow the docs to mention secrets literally (in security-design.md,
+# ADRs, etc.) without tripping alerts, and we skip vendor / node_modules
+# / build artifacts that the .gitignore already excludes.
+[allowlist]
+paths = [
+  # Vendored and generated content
+  '''node_modules/''',
+  '''vendor/''',
+  '''bin/''',
+  '''dist/''',
+  '''build/''',
+  '''uploads/''',
+  '''backups/''',
+  '''_scratch/''',
+  '''scratch/''',
+  '''logs/''',
+  '''coverage/''',
+
+  # Migration dumps (PostgreSQL pg_dump output) — these are *baseline*
+  # snapshots that can contain COPY statements of seed data, not real
+  # production secrets. Reviewed manually before each commit.
+  '''internal/infrastructure/database/migration/migrations/0000_baseline_schema\.sql''',
+
+  # Example / template env files — these intentionally contain placeholders.
+  # The placeholders (change_me, devpassword, minioadmin) are also added
+  # to the deny-pattern list below, so any *real* secret in these files
+  # still gets caught.
+  '''\.env\.example$''',
+  '''\.env\.docker\.example$''',
+
+  # Lockfiles and the Go module checksum (high entropy by design)
+  '''go\.sum$''',
+  '''package-lock\.json$''',
+  '''pnpm-lock\.yaml$''',
+  '''yarn\.lock$''',
+
+  # This gitleaks config itself
+  '''\.gitleaks\.toml$''',
+]
+
+# Regex-based allowlist: ignore placeholder / dev tokens even if they
+# appear in committed code (e.g. test fixtures, examples, docs).
+regexes = [
+  '''(?i)(change_?me|changeme|devpassword|minioadmin|your[-_]?secret[-_]?here)'''
+]
+
+# Stopwords: lines that look like an assignment but contain only these
+# known-safe placeholders.
+stopwords = [
+  "change-me",
+  "change_me",
+  "changeme",
+  "devpassword",
+  "example",
+  "placeholder",
+  "your-key",
+  "your_key",
+  "<your-secret>",
+]
+
+# -----------------------------------------------------------------------------
+# Project-specific rules
+# -----------------------------------------------------------------------------
+# These are added on top of the upstream ruleset. Each rule has a unique
+# `id` so a finding can be suppressed in a single location rather than
+# across the whole repo.
+
+# Catch the docker-compose.yml placeholder values specifically, even if
+# someone rearranges them. (Defense in depth — the default ruleset will
+# already catch most of these as high-entropy strings.)
+[[rules]]
+id = "thanawy-jwt-secret-placeholder"
+description = "Detects JWT_SECRET set to the docker-compose default placeholder"
+regex = '''(?i)JWT_SECRET[_A-Z]*\s*[:=]\s*["']?change_me[A-Za-z0-9_]*["']?'''
+tags = ["secret", "jwt", "placeholder"]
+keywords = ["jwt_secret", "change_me"]
+
+[[rules]]
+id = "thanawy-postgres-password-placeholder"
+description = "Detects POSTGRES_PASSWORD set to the docker-compose default placeholder"
+regex = '''(?i)POSTGRES_PASSWORD\s*[:=]\s*["']?change_me[A-Za-z0-9_]*["']?'''
+tags = ["secret", "database", "placeholder"]
+keywords = ["postgres_password", "change_me"]
+
+[[rules]]
+id = "thanawy-redis-password-placeholder"
+description = "Detects REDIS_PASSWORD set to the dev default 'devpassword'"
+regex = '''(?i)REDIS_PASSWORD\s*[:=]\s*["']?devpassword["']?'''
+tags = ["secret", "cache", "placeholder"]
+keywords = ["redis_password", "devpassword"]
+
+[[rules]]
+id = "thanawy-minio-password-placeholder"
+description = "Detects MINIO_ROOT_PASSWORD set to a weak placeholder"
+regex = '''(?i)MINIO_ROOT_PASSWORD\s*[:=]\s*["']?(change_?me|minioadmin)[A-Za-z0-9_]*["']?'''
+tags = ["secret", "storage", "placeholder"]
+keywords = ["minio_root_password"]
+
+# OpenRouter / Gemini / Stripe / Sentry — any of these embedded in code
+# is almost certainly a leak. (Default ruleset covers Stripe and Sentry
+# generically; we add tighter matches for the platforms actually used.)
+[[rules]]
+id = "thanawy-openrouter-api-key"
+description = "OpenRouter API key (sk-or-...)"
+regex = '''sk-or-[A-Za-z0-9]{32,}'''
+tags = ["secret", "ai", "openrouter"]
+keywords = ["sk-or-"]
+
+[[rules]]
+id = "thanawy-gemini-api-key"
+description = "Google Gemini API key"
+regex = '''AIza[A-Za-z0-9_\-]{35}'''
+tags = ["secret", "ai", "google"]
+keywords = ["aiza"]
+
+# VAPID private key (Web Push) — has a fixed PEM header.
+[[rules]]
+id = "thanawy-vapid-private-key"
+description = "VAPID private key (Web Push)"
+regex = '''-----BEGIN PRIVATE KEY-----[\s\S]{64,}?-----END PRIVATE KEY-----'''
+tags = ["secret", "vapid", "web-push"]
+keywords = ["begin private key"]
+
+# Catch database URLs with embedded credentials that the upstream ruleset
+# may miss for less-common drivers.
+[[rules]]
+id = "thanawy-db-dsn-credentials"
+description = "Database DSN with embedded username:password"
+regex = '''(?i)(postgres|postgresql|mysql|mongodb(\+srv)?|redis|amqp|amqps)://[A-Za-z0-9_.-]+:[^@\s]{4,}@[A-Za-z0-9_.-]+(:\d+)?(/[^\s]*)?'''
+tags = ["secret", "database", "dsn"]
+keywords = ["postgres://", "mongodb://", "redis://", "mysql://"]

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# =============================================================================
+# thanawy-backend — pre-commit secret scan
+# =============================================================================
+# Runs `gitleaks protect` against the staged changes and aborts the commit
+# if any secret pattern is matched. The full repo is *also* scanned by the
+# `gitleaks` GitHub Actions workflow on every push / PR, but catching the
+# leak at commit time is the only way to keep it out of git history in the
+# first place.
+#
+# Install:
+#   make install-hooks          # configures git to use .githooks/
+#   brew install gitleaks       # or: go install github.com/gitleaks/gitleaks/v8@latest
+#
+# Bypass (use sparingly — every bypass is logged in the CI artifact):
+#   git commit --no-verify
+# =============================================================================
+
+set -euo pipefail
+
+# -----------------------------------------------------------------------------
+# Locate the repo root (works even when this file is run from a subdir).
+# -----------------------------------------------------------------------------
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# -----------------------------------------------------------------------------
+# Make sure gitleaks is installed. If not, the hook prints an actionable
+# message rather than silently passing — secrets would slip into the
+# commit history otherwise.
+# -----------------------------------------------------------------------------
+if ! command -v gitleaks >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
+================================================================
+  gitleaks is not installed.
+  This repository requires gitleaks for the pre-commit hook.
+  Install one of:
+    brew install gitleaks                       (macOS)
+    go install github.com/gitleaks/gitleaks/v8@latest
+    scoop install gitleaks                      (Windows)
+  Or skip this check once with: git commit --no-verify
+================================================================
+EOF
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# Run gitleaks. Exit code 1 = leak found, exit code 0 = clean.
+#   --staged        : only inspect the changes about to be committed
+#   --redact        : print redacted findings to stderr
+#   --config        : point at the project config so the allowlist works
+#   --verbose       : show which rule fired
+# -----------------------------------------------------------------------------
+exec gitleaks protect \
+    --staged \
+    --redact \
+    --verbose \
+    --config "$REPO_ROOT/.gitleaks.toml" \
+    --report-path "$REPO_ROOT/.gitleaks-report.json"

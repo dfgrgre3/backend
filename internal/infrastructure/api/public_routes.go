@@ -187,9 +187,11 @@ func SetupPublicRoutes(router *gin.Engine) {
 	router.GET("/api/v1/announcements", protected.GetPublicAnnouncements)
 	router.POST("/api/v1/announcements", middleware.Auth(), protected.CreatePublicAnnouncement)
 
-	// Lightweight community chat compatibility routes
-	router.GET("/api/v1/chat/conversations/:userId", middleware.Auth(), protected.GetChatConversations)
-	router.GET("/api/v1/chat/messages/:userId/:chatUserId", middleware.Auth(), protected.GetChatMessages)
+	// Community chat routes — session-scoped: the caller's identity comes from
+	// the JWT (middleware.Auth), never from a client-supplied userId path
+	// segment (IDOR/BOLA). Only the counterpart user id remains a parameter.
+	router.GET("/api/v1/chat/conversations", middleware.Auth(), protected.GetChatConversations)
+	router.GET("/api/v1/chat/messages/:chatUserId", middleware.Auth(), protected.GetChatMessages)
 	router.POST("/api/v1/chat/messages", middleware.Auth(), protected.SendChatMessage)
 
 	// Metrics endpoints (admin auth required for detailed metrics)

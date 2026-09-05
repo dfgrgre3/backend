@@ -1,0 +1,65 @@
+# =============================================================================
+# gitleaks — full-history secret scan
+# =============================================================================
+# Runs on every push and every pull_request so a leak that slipped past a
+# developer's local hook (e.g. they used --no-verify) is still caught
+# before it can be merged or shipped.
+#
+# The pre-commit hook in .githooks/pre-commit is the primary line of
+# defense; this workflow is the safety net.
+# =============================================================================
+
+name: gitleaks
+
+on:
+  push:
+    branches: [main, master, develop, release/**]
+  pull_request:
+    branches: [main, master, develop, release/**]
+  # Allow manual triggers from the Actions tab.
+  workflow_dispatch:
+
+# Cancel an in-flight scan for the same branch when a new commit lands.
+concurrency:
+  group: gitleaks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan git history for secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # We need the full history so gitleaks can scan every commit,
+          # not just the diff against the base ref.
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          # gitleaks-action reads GITHUB_TOKEN automatically; we set it
+          # explicitly so a green check is also reported on the PR.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use the project config (custom rules + allowlist) rather than
+          # the action's default. The config path is relative to the
+          # repository root inside the runner.
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # Fail the build on any finding. The action defaults to this
+          # but we set it explicitly so the contract is obvious.
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
+          GITLEAKS_ENABLE_SUMMARY: "true"
+
+      - name: Upload scan report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+          if-no-files-found: ignore
+          retention-days: 30

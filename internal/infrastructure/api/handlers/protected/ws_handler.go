@@ -278,6 +278,15 @@ func WSHandler(c *gin.Context) {
 		return
 	}
 
+	// Security: If the client provides a non-authoritative hint (?userId=...),
+	// verify that it strictly matches the authenticated session subject.
+	// Never trust client-provided identity for routing or socket association.
+	if clientHint := c.Query("userId"); clientHint != "" && clientHint != userID {
+		log.Printf("[WebSocket] Security violation: identity mismatch between session (%s) and hint (%s)", userID, clientHint)
+		api_response.Error(c, http.StatusForbidden, "Forbidden: User identity mismatch")
+		return
+	}
+
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("Failed to upgrade to websocket: %v", err)

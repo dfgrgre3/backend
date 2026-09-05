@@ -46,6 +46,20 @@ func SubmitExam(c *gin.Context) {
 		return
 	}
 
+	// ---- AUTHORIZATION: Entitlement & Resource Ownership Check ----
+	// The backend MUST enforce fine-grained access: Verify if the user is enrolled in the subject.
+	roleVal, _ := c.Get("role")
+	roleStr, _ := roleVal.(string)
+	isAdmin := roleStr == string(models.RoleAdmin) || roleStr == string(models.RoleSuperAdmin)
+
+	if !isAdmin && exam.SubjectID != "" {
+		var enrollment models.Enrollment
+		if err := db.DB.Where("user_id = ? AND subject_id = ?", userID, exam.SubjectID).First(&enrollment).Error; err != nil {
+			api_response.Error(c, http.StatusForbidden, "You must be enrolled in this course to take this exam")
+			return
+		}
+	}
+
 	// ---- BUSINESS LOGIC: Grade the exam (no DB) ----
 	correctCount := 0
 	totalQuestions := len(exam.Questions)

@@ -20,40 +20,17 @@ var (
 	gamificationQuery = gamificationservice.NewGamificationQueryService()
 )
 
-// resolveGamificationUserID returns the user ID whose gamification data the
-// caller may view: their own by default, or another user's only if the
-// caller holds an admin/moderator role. Without this check, any
-// authenticated user could pass ?userId=<victim> and read another user's
-// progress/achievements (BOLA/IDOR) — see GetLessons for the same pattern
-// applied elsewhere in this package.
+// resolveGamificationUserID returns the authenticated user's ID from the JWT
+// session. Gamification progress/achievements are strictly per-user views:
+// the previously accepted ?userId= override was dropped entirely (same
+// decision as GetExamResults) so the session is the single source of identity —
+// the client can no longer influence which user's data is read (IDOR/BOLA).
 func resolveGamificationUserID(c *gin.Context) (string, bool) {
-	authUserIDVal, exists := c.Get("userId")
-	if !exists {
+	userID := c.GetString("userId")
+	if userID == "" {
 		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return "", false
 	}
-	authUserID, _ := authUserIDVal.(string)
-
-	userID := c.Query("userId")
-	if userID == "" {
-		userID = authUserID
-	}
-
-	if userID != authUserID {
-		role, _ := c.Get("role")
-		roleStr, _ := role.(string)
-		isAdmin := roleStr == "ADMIN" || roleStr == "SUPER_ADMIN" || roleStr == "MODERATOR"
-		if !isAdmin {
-			api_response.Error(c, http.StatusForbidden, "You are not authorized to view this user's data")
-			return "", false
-		}
-	}
-
-	if userID == "" {
-		api_response.Error(c, http.StatusBadRequest, "User ID is required")
-		return "", false
-	}
-
 	return userID, true
 }
 
@@ -112,9 +89,11 @@ func GetUserProgress(c *gin.Context) {
 }
 
 func CreateCustomGoal(c *gin.Context) {
+	// SECURITY: goals are always created for the authenticated session's user.
+	// The optional body userId field was removed so the client cannot influence
+	// ownership of the created row (IDOR/BOLA).
 	userID := c.GetString("userId")
 	var input struct {
-		UserID       string  `json:"userId"`
 		Title        string  `json:"title"`
 		Description  string  `json:"description"`
 		TargetValue  float64 `json:"targetValue"`
@@ -125,11 +104,6 @@ func CreateCustomGoal(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		api_response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	if input.UserID != "" && input.UserID != userID {
-		api_response.Error(c, http.StatusForbidden, "Cannot create goals for another user")
 		return
 	}
 

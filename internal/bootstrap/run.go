@@ -78,6 +78,13 @@ func Run() {
 	cfg := config.Load()
 	config.GlobalConfig = cfg
 
+	// SECURITY: refuse to start if production is being served with any of
+	// the insecure defaults that the docker-compose file ships (e.g.
+	// JWT_SECRET=change_me_in_production, COOKIE_SECURE=false, an empty
+	// TRUSTED_PROXIES, etc.). See bootstrap_env.go for the full list and
+	// ANALYSIS_REPORT.md §10 / §13 for the rationale.
+	MustValidateProductionConfig()
+
 	// Initialize Sentry SDK early
 	if cfg.SentryDSN != "" {
 		if err := sentry.Init(sentry.ClientOptions{
