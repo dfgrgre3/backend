@@ -25,7 +25,7 @@ func SetupPublicRoutes(router *gin.Engine) {
 	// Public Course routes
 	router.GET("/api/v1/courses", protected.GetSubjects)
 	router.GET("/api/v1/courses/popular", protected.GetPopularCourses)
-	router.GET("/api/v1/courses/:id", protected.GetSubject)
+	router.GET("/api/v1/courses/:id", middleware.OptionalAuth(), protected.GetSubject)
 	router.GET("/api/v1/homepage", protected.GetHomepageData)
 	router.GET("/api/v1/courses/:id/lessons", protected.GetCourseLessons)
 	router.GET("/api/v1/lessons/:lessonId/subtitles", protected.GetLessonSubtitles) // Public subtitles

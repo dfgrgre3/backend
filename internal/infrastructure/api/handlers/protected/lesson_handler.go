@@ -15,29 +15,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// GetLessons returns lessons for a given user
+// GetLessons returns the authenticated user's scheduled lessons
 func GetLessons(c *gin.Context) {
-	authUserID, exists := c.Get("userId")
+	// JWT-only: the caller's identity comes from the session — the previously
+	// accepted ?userId= override is dropped entirely so the client can no
+	// longer influence whose lessons are read (IDOR/BOLA).
+	userId, exists := c.Get("userId")
 	if !exists {
 		api_response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	authUserIDStr, _ := authUserID.(string)
-
-	userId := c.Query("userId")
-	if userId == "" {
-		userId = authUserIDStr
-	}
-
-	// Verify ownership or administrative privilege (BOLA/IDOR prevention)
-	role, _ := c.Get("role")
-	roleStr, _ := role.(string)
-	isAdmin := roleStr == "ADMIN" || roleStr == "SUPER_ADMIN" || roleStr == "MODERATOR"
-
-	if userId != authUserIDStr && !isAdmin {
-		api_response.Error(c, http.StatusForbidden, "You are not authorized to view these lessons")
-		return
-	}
+	userIdStr, _ := userId.(string)
 
 	readDB := db.ReadDB()
 	if readDB == nil {
@@ -59,7 +47,7 @@ func GetLessons(c *gin.Context) {
 	var lessons []models.ScheduledLesson
 	if err := readDB.
 		Preload("Teacher").
-		Where("user_id = ? AND start_time >= ?", userId, time.Now()).
+		Where("user_id = ? AND start_time >= ?", userIdStr, time.Now()).
 		Order("start_time asc").
 		Limit(limit).
 		Offset(offset).

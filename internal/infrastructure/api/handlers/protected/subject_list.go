@@ -129,13 +129,16 @@ func GetSubject(c *gin.Context) {
 		return
 	}
 
-	// Check enrollment if userId is provided in query or context
-	userID := c.Query("userId")
-	if userID == "" {
-		if uid, exists := c.Get("userId"); exists {
-			if s, ok := uid.(string); ok {
-				userID = s
-			}
+	// Resolve the caller exclusively from the authenticated session (set by
+	// middleware.OptionalAuth on the public route). The previously accepted
+	// ?userId= override is dropped: this endpoint unredacts paid-lesson
+	// content for enrolled users, so trusting a client-supplied id let any
+	// anonymous visitor read paid content by guessing another user's id
+	// (IDOR/BOLA).
+	userID := ""
+	if uid, exists := c.Get("userId"); exists {
+		if s, ok := uid.(string); ok {
+			userID = s
 		}
 	}
 
