@@ -16,10 +16,12 @@ type Config struct {
 	BCryptCost           int
 
 	// JWT Token validation configuration
-	JWTSecretKey string
-	JWTIssuerURL string
-	JWTJWKSURL   string
-	JWTClientID  string
+	JWTSecretKey  string
+	JWTPrivateKey string
+	JWTPublicKey  string
+	JWTIssuerURL  string
+	JWTJWKSURL    string
+	JWTClientID   string
 
 	// Storage Configuration
 	StorageType string // "s3" (Cloudflare R2 / AWS S3 / MinIO)
@@ -86,6 +88,8 @@ func LoadSafe() (*Config, error) {
 		BCryptCost:           getEnvInt("BCRYPT_COST", 12),
 		StorageType:          getEnv("STORAGE_TYPE", "s3"),
 		JWTSecretKey:         getEnv("JWT_SECRET_KEY", getEnv("JWT_SECRET", "")),
+		JWTPrivateKey:        getEnv("JWT_PRIVATE_KEY", ""),
+		JWTPublicKey:         getEnv("JWT_PUBLIC_KEY", ""),
 		JWTIssuerURL:         getEnv("JWT_ISSUER_URL", ""),
 		JWTJWKSURL:           getEnv("JWT_JWKS_URL", ""),
 		JWTClientID:          getEnv("JWT_CLIENT_ID", ""),
@@ -145,8 +149,8 @@ func LoadSafe() (*Config, error) {
 	c.AppVersion = getEnv("APP_VERSION", "1.0.0")
 
 	if environment == "production" {
-		if len(c.JWTSecretKey) < 32 {
-			return nil, fmt.Errorf("JWT_SECRET_KEY (or JWT_SECRET) must be set and at least 32 characters in production")
+		if strings.TrimSpace(c.JWTPrivateKey) == "" || strings.TrimSpace(c.JWTPublicKey) == "" {
+			return nil, fmt.Errorf("JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be set in production for RS256 signing")
 		}
 		if c.CookieDomain == "" {
 			log.Println("[WARN] COOKIE_DOMAIN is not set in production — auth cookies will be scoped to the exact request host only. Set COOKIE_DOMAIN explicitly if the admin panel and API are on different subdomains.")

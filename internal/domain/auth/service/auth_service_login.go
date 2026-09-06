@@ -15,10 +15,20 @@ import (
 	"github.com/google/uuid"
 )
 
+// unknownUserPasswordHash is a fixed, valid bcrypt hash with no matching
+// plaintext. It is compared against on the "user not found" / "no
+// credential" paths so those paths take roughly the same time as a real
+// password check, closing the timing side-channel that would otherwise let
+// an attacker enumerate registered emails by measuring Login() latency.
+const unknownUserPasswordHash = "$2a$12$CwTycUXWue0Thq9StjUM0uJ8/2i9BeMoRUsFRxg8LqXKcNq5Y5w8u"
+
 func (s *authService) Login(ctx context.Context, req *authdto.LoginRequest, userAgent, ip string) (*authdto.LoginResponse, error) {
 	// Find user via repository
 	user, err := s.authRepo.FindUserByEmail(ctx, req.Email)
 	if err != nil {
+		// Run a dummy bcrypt comparison so this path costs about as much as
+		// the real one below — see unknownUserPasswordHash.
+		_ = bcrypt.CompareHashAndPassword([]byte(unknownUserPasswordHash), []byte(req.Password))
 		s.logFailedLogin(ctx, "", ip, userAgent, "Invalid credentials")
 		return nil, errors.New("invalid email or password")
 	}
@@ -32,6 +42,7 @@ func (s *authService) Login(ctx context.Context, req *authdto.LoginRequest, user
 	// Get user credential for password verification
 	credential, err := s.authRepo.GetCredentialByUserID(ctx, user.ID)
 	if err != nil {
+		_ = bcrypt.CompareHashAndPassword([]byte(unknownUserPasswordHash), []byte(req.Password))
 		s.logFailedLogin(ctx, user.ID, ip, userAgent, "Invalid credentials")
 		return nil, errors.New("invalid email or password")
 	}

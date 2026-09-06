@@ -95,9 +95,6 @@ func (s *authTokenService) GenerateTokenPair(user *models.User) (*TokenPair, err
 	if s.cfg == nil {
 		s.cfg = config.Load()
 	}
-	if s.cfg.JWTSecretKey == "" {
-		return nil, errors.New("JWT secret key is not configured")
-	}
 	if user == nil {
 		return nil, errors.New("user is required")
 	}
@@ -119,7 +116,7 @@ func (s *authTokenService) GenerateTokenPair(user *models.User) (*TokenPair, err
 		},
 	}
 
-	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(s.cfg.JWTSecretKey))
+	accessToken, err := s.signAccessToken(claims)
 	if err != nil {
 		return nil, err
 	}
@@ -141,9 +138,6 @@ func (s *authTokenService) GenerateAccessTokenForSession(user *models.User, sess
 	if s.cfg == nil {
 		s.cfg = config.Load()
 	}
-	if s.cfg.JWTSecretKey == "" {
-		return "", errors.New("JWT secret key is not configured")
-	}
 	if user == nil {
 		return "", errors.New("user is required")
 	}
@@ -164,6 +158,24 @@ func (s *authTokenService) GenerateAccessTokenForSession(user *models.User, sess
 		},
 	}
 
+	return s.signAccessToken(claims)
+}
+
+func (s *authTokenService) signAccessToken(claims CustomClaims) (string, error) {
+	if strings.TrimSpace(s.cfg.JWTPrivateKey) != "" {
+		privateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(strings.ReplaceAll(s.cfg.JWTPrivateKey, `\n`, "\n")))
+		if err != nil {
+			return "", fmt.Errorf("invalid JWT_PRIVATE_KEY: %w", err)
+		}
+		return jwt.NewWithClaims(jwt.SigningMethodRS256, claims).SignedString(privateKey)
+	}
+
+	if s.cfg.Environment == "production" {
+		return "", errors.New("JWT_PRIVATE_KEY is required in production")
+	}
+	if s.cfg.JWTSecretKey == "" {
+		return "", errors.New("JWT secret key is not configured")
+	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(s.cfg.JWTSecretKey))
 }
 
@@ -171,64 +183,44 @@ func (s *authTokenService) ValidateAccessToken(tokenString string) (*CustomClaim
 	if s.cfg == nil {
 		s.cfg = config.Load()
 	}
-	if s.cfg.JWTSecretKey == "" {
-		return nil, errors.New("JWT secret key is not configured")
-	}
-
 	var claims *CustomClaims
-	var err error
-
-	// Try HMAC signing first (our primary signing method for local tokens)
-	claims = &CustomClaims{}
 	var token *jwt.Token
-	token, err = jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		if token.Method == nil || token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+	var err error
+	if strings.TrimSpace(s.cfg.JWTPublicKey) != "" {
+		publicKey, parseErr := jwt.ParseRSAPublicKeyFromPEM([]byte(strings.ReplaceAll(s.cfg.JWTPublicKey, `\n`, "\n")))
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid JWT_PUBLIC_KEY: %w", parseErr)
 		}
-		return []byte(s.cfg.JWTSecretKey), nil
-	}, jwt.WithAudience("thanawy-api"), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
-	if err == nil && token != nil && token.Valid {
-		if claims.ExpiresAt == nil {
-			return nil, errors.New("token missing exp claim")
-		}
-		if claims.UserID == "" {
-			claims.UserID = claims.Subject
-		}
-		goto checkBlacklist
-	}
-
-	// Fallback: try parsing as RSA public key (for external JWTs)
-	if s.cfg.JWTIssuerURL != "" {
-		publicKey, parseErr := jwt.ParseRSAPublicKeyFromPEM([]byte(strings.ReplaceAll(s.cfg.JWTSecretKey, `\n`, "\n")))
-		if parseErr == nil {
-			claims = &CustomClaims{}
-			token, err = jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-				if token.Method == nil || token.Method.Alg() != jwt.SigningMethodRS256.Alg() {
-					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-				}
-				return publicKey, nil
-			}, jwt.WithIssuer(s.cfg.JWTIssuerURL), jwt.WithAudience("thanawy-api"), jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}))
-			if err != nil {
-				return nil, err
+		claims = &CustomClaims{}
+		token, err = jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+			if token.Method == nil || token.Method.Alg() != jwt.SigningMethodRS256.Alg() {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			if token == nil || !token.Valid {
-				return nil, errors.New("invalid token")
+			return publicKey, nil
+		}, jwt.WithIssuer(s.cfg.JWTIssuerURL), jwt.WithAudience("thanawy-api"), jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}))
+	} else if s.cfg.Environment != "production" && s.cfg.JWTSecretKey != "" {
+		claims = &CustomClaims{}
+		token, err = jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+			if token.Method == nil || token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			if claims.ExpiresAt == nil {
-				return nil, errors.New("token missing exp claim")
-			}
-			if claims.Subject == "" {
-				return nil, errors.New("missing subject")
-			}
-			claims.UserID = claims.Subject
-		} else {
-			return nil, fmt.Errorf("invalid JWT secret key: %w", parseErr)
-		}
+			return []byte(s.cfg.JWTSecretKey), nil
+		}, jwt.WithAudience("thanawy-api"), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	} else {
-		return nil, err
+		return nil, errors.New("JWT_PUBLIC_KEY is required for access-token validation")
 	}
-
-checkBlacklist:
+	if err != nil || token == nil || !token.Valid {
+		if err != nil {
+			return nil, err
+		}
+		return nil, errors.New("invalid token")
+	}
+	if claims.ExpiresAt == nil {
+		return nil, errors.New("token missing exp claim")
+	}
+	if claims.UserID == "" {
+		claims.UserID = claims.Subject
+	}
 
 	if claims != nil && s.IsJTIBlacklisted(claims.ID) {
 		return nil, errors.New("token has been blacklisted/revoked")
