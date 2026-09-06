@@ -58,14 +58,22 @@ jobs:
     - name: Run go vet
       run: go vet ./...
 
+    - name: Run go fmt
+      run: if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then echo "Files need gofmt:"; gofmt -s -l .; exit 1; fi
+
+    # staticcheck — stricter than go vet, catches common bugs vet misses
+    # (e.g. unused result, wrong printf verb, suspicious lock usage).
+    # Install pinned version for reproducibility; bump quarterly.
+    - name: Run staticcheck
+      run: |
+        go install honnef.co/go/tools/cmd/staticcheck@2024.1.1
+        staticcheck ./...
+
     - name: Run govulncheck
       uses: golang/govulncheck-action@v1
       with:
         go-version-input: '1.26'
 
-    - name: Run go fmt
-      run: if [ $(gofmt -s -l . | wc -l) -gt 0 ]; then gofmt -s -l . && exit 1; fi
-    
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v3
       with:
@@ -91,11 +99,32 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
         go-version: '1.26'
-    
+
+    - name: Install swag CLI
+      run: go install github.com/swaggo/swag/cmd/swag@latest
+
+    # Regenerate swagger spec from handler annotations. Output goes
+    # to docs/ which is the package imported by main.go (see
+    # internal/bootstrap/bootstrap_router.go). The frontend CI consumes
+    # docs/swagger.json via the artifact uploaded below.
+    - name: Regenerate swagger spec
+      run: swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal
+
     - name: Build
       run: go build -v ./cmd/api
+
+    # Publish the swagger artifact so the frontend repo can pin its
+    # generated TS types against this exact spec. Workflow consumers
+    # must use `actions/download-artifact` with `name: backend-swagger`.
+    - name: Upload swagger artifact
+      uses: actions/upload-artifact@50769540e7f4c5e42452ba3ad26393d1f73f7b6e # v4.4.0
+      with:
+        name: backend-swagger
+        path: docs/swagger.json
+        if-no-files-found: error
+        retention-days: 14

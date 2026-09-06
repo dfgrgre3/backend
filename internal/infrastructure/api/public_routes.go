@@ -194,6 +194,11 @@ func SetupPublicRoutes(router *gin.Engine) {
 	router.GET("/api/v1/chat/messages/:chatUserId", middleware.Auth(), protected.GetChatMessages)
 	router.POST("/api/v1/chat/messages", middleware.Auth(), protected.SendChatMessage)
 
+	// Community user directory (id, name, avatar only) for starting chats.
+	// Session-scoped: the caller's own entry is excluded server-side.
+	router.GET("/api/v1/community/users", middleware.Auth(), protected.GetCommunityUsers)
+	router.GET("/api/v1/community/users/:id", middleware.Auth(), protected.GetCommunityUserProfile)
+
 	// Metrics endpoints (admin auth required for detailed metrics)
 	// Auth() must run first so that AdminRequired() has a user_id to inspect.
 	router.GET("/api/v1/metrics", middleware.Auth(), middleware.AdminRequired(), protected.GetMetricsEndpoint)
