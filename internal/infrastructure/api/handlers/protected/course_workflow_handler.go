@@ -20,6 +20,7 @@ func (h *CourseRESTHandler) SubmitForReview(c *gin.Context) {
 		api_response.Error(c, http.StatusBadRequest, "Failed to submit for review: "+err.Error())
 		return
 	}
+	getSubjectRepo().InvalidateSubjectCache(id)
 
 	// Log audit
 	h.logAudit(c, "STATUS_CHANGE", "course", id, gin.H{"action": "submit_for_review"})
@@ -52,6 +53,7 @@ func (h *CourseRESTHandler) ApproveCourse(c *gin.Context) {
 		api_response.Error(c, http.StatusBadRequest, "Failed to approve course: "+err.Error())
 		return
 	}
+	getSubjectRepo().InvalidateSubjectCache(id)
 
 	// Log audit
 	h.logAudit(c, "STATUS_CHANGE", "course", id, gin.H{
@@ -90,6 +92,7 @@ func (h *CourseRESTHandler) RejectCourse(c *gin.Context) {
 		api_response.Error(c, http.StatusBadRequest, "Failed to reject course: "+err.Error())
 		return
 	}
+	getSubjectRepo().InvalidateSubjectCache(id)
 
 	// Log audit
 	h.logAudit(c, "STATUS_CHANGE", "course", id, gin.H{
@@ -115,6 +118,7 @@ func (h *CourseRESTHandler) ArchiveCourse(c *gin.Context) {
 		api_response.Error(c, http.StatusBadRequest, "Failed to archive course: "+err.Error())
 		return
 	}
+	getSubjectRepo().InvalidateSubjectCache(id)
 
 	// Log audit
 	h.logAudit(c, "STATUS_CHANGE", "course", id, gin.H{"action": "archive"})
@@ -136,6 +140,7 @@ func (h *CourseRESTHandler) UnarchiveCourse(c *gin.Context) {
 		api_response.Error(c, http.StatusBadRequest, "Failed to unarchive course: "+err.Error())
 		return
 	}
+	getSubjectRepo().InvalidateSubjectCache(id)
 
 	// Log audit
 	h.logAudit(c, "STATUS_CHANGE", "course", id, gin.H{"action": "unarchive"})

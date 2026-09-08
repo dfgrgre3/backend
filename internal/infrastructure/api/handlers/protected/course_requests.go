@@ -25,6 +25,7 @@ type CreateCourseRequest struct {
 	PrimaryInstructorID   string   `json:"primaryInstructorId"`
 	InstructorID          string   `json:"instructorId"`
 	CategoryIDs           []string `json:"categoryIds"`
+	IsPublished           bool     `json:"isPublished"`
 }
 
 // UpdateCourseRequest represents the REST request body for updating a course
@@ -55,4 +56,5 @@ type UpdateCourseRequest struct {
 	PrimaryInstructorID   *string  `json:"primaryInstructorId"`
 	InstructorID          *string  `json:"instructorId"`
 	CategoryIDs           []string `json:"categoryIds"`
+	IsPublished           *bool    `json:"isPublished"`
 }

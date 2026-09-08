@@ -2,6 +2,7 @@ package protected
 
 import (
 	"net/http"
+	models "thanawy-backend/internal/domain/common"
 	courseservice "thanawy-backend/internal/domain/course/service"
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 
@@ -59,6 +60,7 @@ func (h *CourseRESTHandler) CreateCourse(c *gin.Context) {
 		LearningOutcomes:      req.LearningOutcomes,
 		PrimaryInstructorID:   req.PrimaryInstructorID,
 		CategoryIDs:           req.CategoryIDs,
+		IsPublished:           req.IsPublished,
 	}
 
 	courseEntity, err := h.createCourseHandler.Handle(c.Request.Context(), cmd)
@@ -67,5 +69,8 @@ func (h *CourseRESTHandler) CreateCourse(c *gin.Context) {
 		return
 	}
 
+	if course, ok := courseEntity.(*models.LmsCourse); ok {
+		getSubjectRepo().InvalidateSubjectCache(course.ID.String())
+	}
 	api_response.Created(c, gin.H{"course": courseEntity})
 }

@@ -89,6 +89,7 @@ func TeachingListCourses(c *gin.Context) {
 		Price         float64       `json:"price"`
 		Duration      string        `json:"duration"`
 		Category      string        `json:"category"`
+		CategoryID    *string       `json:"categoryId"`
 		CreatedDate   string        `json:"createdDate"`
 		Chapters      []ChapterItem `json:"chapters"`
 	}
@@ -143,6 +144,7 @@ func TeachingListCourses(c *gin.Context) {
 			Price:         price,
 			Duration:      fmt.Sprintf("%d ساعة", s.DurationHours),
 			Category:      "", // CategoryId not expanded
+			CategoryID:    s.CategoryId,
 			CreatedDate:   s.CreatedAt.Format("2006-01-02"),
 			Chapters:      chapters,
 		})

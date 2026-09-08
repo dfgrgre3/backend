@@ -26,7 +26,7 @@ func (h *GetCourseHandler) Handle(ctx context.Context, query GetCourseQuery) (in
 	}
 
 	var c models.LmsCourse
-	q := h.db.WithContext(ctx)
+	q := h.db.WithContext(ctx).Preload("Pricings").Preload("Instructors")
 
 	if query.ID != "" {
 		idUUID, err := uuid.Parse(query.ID)

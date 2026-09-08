@@ -24,6 +24,7 @@ type CreateCourseCommand struct {
 	LearningOutcomes      []string
 	PrimaryInstructorID   string
 	CategoryIDs           []string
+	IsPublished           bool
 }
 
 // UpdateCourseCommand represents a command to update a course
@@ -58,6 +59,7 @@ type UpdateCourseCommand struct {
 	LearningOutcomes         []string
 	PrimaryInstructorID      *string
 	CategoryIDs              []string
+	IsPublished              *bool
 }
 
 // EnrollUserCommand represents a command to enroll a user in a course

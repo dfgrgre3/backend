@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -58,6 +59,9 @@ func GetEnrollmentStatus(c *gin.Context) {
 			Count(&completedLessons)
 	}
 
+	completedRequiredExams, requiredExams := courseRequiredExamCompletion(userId, subject.ID)
+	completedCourseQuizzes, requiredCourseQuizzes := courseRequiredQuizCompletion(userId, subject.ID)
+
 	// Check if payment is required
 	price, _ := subject.Price.Float64()
 	paymentRequired := price > 0 && !hasPaidForSubject(userId, subject.ID)
@@ -71,21 +75,62 @@ func GetEnrollmentStatus(c *gin.Context) {
 	status := "not_enrolled"
 	if isEnrolled {
 		status = "enrolled"
-		if totalLessons > 0 && completedLessons == totalLessons {
+		if courseCompletionSatisfied(totalLessons, completedLessons, requiredExams, completedRequiredExams) && completedCourseQuizzes >= requiredCourseQuizzes {
 			status = "completed"
 		}
 	}
 
 	api_response.Success(c, gin.H{
-		"isEnrolled":       isEnrolled,
-		"status":           status,
-		"enrolledAt":       enrollment.EnrolledAt,
-		"progress":         progress,
-		"totalLessons":     totalLessons,
-		"completedLessons": completedLessons,
-		"paymentRequired":  paymentRequired,
-		"price":            subject.Price,
+		"isEnrolled":             isEnrolled,
+		"status":                 status,
+		"enrolledAt":             enrollment.EnrolledAt,
+		"progress":               progress,
+		"totalLessons":           totalLessons,
+		"completedLessons":       completedLessons,
+		"requiredExams":          requiredExams,
+		"completedRequiredExams": completedRequiredExams,
+		"requiredCourseQuizzes":  requiredCourseQuizzes,
+		"completedCourseQuizzes": completedCourseQuizzes,
+		"paymentRequired":        paymentRequired,
+		"price":                  subject.Price,
 	})
+}
+
+func courseRequiredQuizCompletion(userID, subjectID string) (completed, required int64) {
+	db.DB.Model(&models.CourseQuiz{}).Where("course_id = ? AND required = ?", subjectID, true).Count(&required)
+	db.DB.Model(&models.CourseQuizAttempt{}).
+		Where("user_id = ? AND passed = ? AND quiz_id IN (?)", userID, true,
+			db.DB.Table("CourseQuiz").Select("id").Where("course_id = ? AND required = ?", subjectID, true)).
+		Distinct("quiz_id").Count(&completed)
+	return completed, required
+}
+
+// courseRequiredExamCompletion returns the number of exam-backed lessons in a
+// course and how many of those exams the learner has passed. Exam-backed
+// lessons are the backend's explicit representation of required quizzes.
+func courseRequiredExamCompletion(userID, subjectID string) (completed, required int64) {
+	examIDs := db.DB.Table("SubTopic").
+		Select("DISTINCT exam_id").
+		Joins("JOIN Topic ON Topic.id = SubTopic.topic_id").
+		Where("Topic.subject_id = ? AND SubTopic.exam_id IS NOT NULL", subjectID)
+
+	db.DB.Table("SubTopic").
+		Joins("JOIN Topic ON Topic.id = SubTopic.topic_id").
+		Where("Topic.subject_id = ? AND SubTopic.exam_id IS NOT NULL", subjectID).
+		Distinct("exam_id").Count(&required)
+
+	db.DB.Model(&models.ExamResult{}).
+		Where("user_id = ? AND passed = ?", userID, true).
+		Where("exam_id IN (?)", examIDs).
+		Distinct("exam_id").Count(&completed)
+
+	return completed, required
+}
+
+func courseCompletionSatisfied(totalLessons, completedLessons, requiredExams, completedRequiredExams int64) bool {
+	lessonsComplete := totalLessons == 0 || completedLessons >= totalLessons
+	examsComplete := completedRequiredExams >= requiredExams
+	return lessonsComplete && examsComplete
 }
 
 // UnenrollCourse removes a user's enrollment from a course
@@ -110,7 +155,6 @@ func UnenrollCourse(c *gin.Context) {
 		api_response.Error(c, http.StatusNotFound, "You are not enrolled in this course")
 		return
 	}
-
 	// Execute unenrollment in a transaction
 	err := db.DB.Transaction(func(tx *gorm.DB) error {
 		// Delete lesson progress for this course
@@ -180,6 +224,7 @@ func CompleteCourse(c *gin.Context) {
 		api_response.Error(c, http.StatusBadRequest, "You must be enrolled to complete this course")
 		return
 	}
+	wasAlreadyComplete := enrollment.Progress.GreaterThanOrEqual(decimal.NewFromInt(100))
 
 	// Verify all lessons are completed
 	var totalLessons int64
@@ -199,8 +244,10 @@ func CompleteCourse(c *gin.Context) {
 		).
 		Count(&completedLessons)
 
-	if totalLessons > 0 && completedLessons < totalLessons {
-		api_response.Error(c, http.StatusBadRequest, "You must complete all lessons first")
+	completedRequiredExams, requiredExams := courseRequiredExamCompletion(userId, subject.ID)
+	completedCourseQuizzes, requiredCourseQuizzes := courseRequiredQuizCompletion(userId, subject.ID)
+	if !courseCompletionSatisfied(totalLessons, completedLessons, requiredExams, completedRequiredExams) || completedCourseQuizzes < requiredCourseQuizzes {
+		api_response.Error(c, http.StatusBadRequest, "You must complete all required lessons and pass all required quizzes first")
 		return
 	}
 
@@ -219,8 +266,11 @@ func CompleteCourse(c *gin.Context) {
 		return
 	}
 
-	// Fire course completion event for gamification
-	fireEnrollmentEvent(c, userId, subject.ID, string(events.EventCourseComplete))
+	// Completion is idempotent: repeated client retries must not award the
+	// course-complete event more than once.
+	if !wasAlreadyComplete {
+		fireEnrollmentEvent(c, userId, subject.ID, string(events.EventCourseComplete))
+	}
 
 	// Invalidate cache
 	cache.NewCacheInvalidator().InvalidateSubject(c.Request.Context(), subject.ID)

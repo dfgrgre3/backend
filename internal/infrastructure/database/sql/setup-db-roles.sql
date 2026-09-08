@@ -216,6 +216,18 @@ BEGIN
             'AuditLog',
             'login_history'
         )
+        -- RLS without at least one policy denies every operation for
+        -- app_user.  This application does not currently install policies
+        -- or pass a request user id into PostgreSQL, so only enable RLS on
+        -- tables that are actually policy-protected.
+        AND EXISTS (
+            SELECT 1
+            FROM pg_policy p
+            JOIN pg_class c ON c.oid = p.polrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relname = pg_tables.tablename
+        )
 
     LOOP
 

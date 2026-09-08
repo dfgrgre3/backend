@@ -95,7 +95,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     needs: test
-    
+    # Minimal, job-scoped grant: publishing the swagger-latest Release needs
+    # `contents: write`. The `test` job must NOT inherit this permission.
+    permissions:
+      contents: write
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -105,26 +109,66 @@ jobs:
       with:
         go-version: '1.26'
 
-    - name: Install swag CLI
-      run: go install github.com/swaggo/swag/cmd/swag@latest
+    # Install swag CLI pinned to the exact version in go.mod. A moving
+    # @latest would make the drift check below non-deterministic (different
+    # swag versions can emit slightly different spec formatting).
+    - name: Install swag CLI (pinned to go.mod version)
+      run: go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
     # Regenerate swagger spec from handler annotations. Output goes
     # to docs/ which is the package imported by main.go (see
-    # internal/bootstrap/bootstrap_router.go). The frontend CI consumes
-    # docs/swagger.json via the artifact uploaded below.
+    # internal/bootstrap/bootstrap_router.go). The freshly generated
+    # docs/swagger.json is published below as the `swagger-latest`
+    # Release asset consumed by the frontend CI.
     - name: Regenerate swagger spec
       run: swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal
+
+    # Drift guard: the committed docs/swagger.json must already match what
+    # swag generates from the current handler annotations. If this fails,
+    # someone changed annotations without regenerating/committing the spec —
+    # exactly the "stale contract" bug class the frontend freshness check
+    # exists to catch. Fail here, backend-side, before anything is published.
+    - name: Check swagger spec has no drift
+      run: |
+        if ! git diff --exit-code -- docs/docs.go docs/swagger.json docs/swagger.yaml; then
+          echo "::error::Generated swagger files are stale (docs.go / swagger.json / swagger.yaml). Run: swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal, then commit the result."
+          exit 1
+        fi
 
     - name: Build
       run: go build -v ./cmd/api
 
-    # Publish the swagger artifact so the frontend repo can pin its
-    # generated TS types against this exact spec. Workflow consumers
-    # must use `actions/download-artifact` with `name: backend-swagger`.
-    - name: Upload swagger artifact
-      uses: actions/upload-artifact@50769540e7f4c5e42452ba3ad26393d1f73f7b6e # v4.4.0
-      with:
-        name: backend-swagger
-        path: docs/swagger.json
-        if-no-files-found: error
-        retention-days: 14
+    # Publish swagger.json as a GitHub Release asset so external consumers
+    # (frontend CI) can fetch it via GitHub REST API.
+    #
+    # IMPORTANT: actions/upload-artifact only shares artifacts within the
+    # SAME workflow run. The frontend CI CANNOT download that artifact.
+    #
+    # We use a static tag `swagger-latest`. Frontend fetches via:
+    #   GET /repos/{owner}/{repo}/releases/tags/swagger-latest
+    #   -> assets[{name: "swagger.json"}].browser_download_url
+    #
+    # Only pushes to main may mutate the published contract: PR runs (and
+    # pushes to develop) must never change what the frontend gate compares
+    # against, or the freshness check could be poisoned by unreviewed code.
+    #
+    # If the release already exists we only clobber the asset (no
+    # delete-then-recreate window where the release 404s). If any step here
+    # fails, the frontend CI's fetch will fail loudly — never silently fall
+    # back to a stale committed spec.
+    - name: Publish swagger-latest release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        NOTES="Auto-generated swagger spec from main @ ${GITHUB_SHA}. Consumed by frontend CI for contract freshness checks — do not pin versions to this moving release."
+        if gh release view swagger-latest > /dev/null 2>&1; then
+          gh release upload swagger-latest docs/swagger.json --clobber
+          gh release edit swagger-latest --title "Swagger Latest" --notes "$NOTES"
+        else
+          gh release create swagger-latest docs/swagger.json \
+            --target "$GITHUB_SHA" \
+            --title "Swagger Latest" \
+            --notes "$NOTES"
+        fi

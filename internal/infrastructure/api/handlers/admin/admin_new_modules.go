@@ -95,40 +95,9 @@ func AdminUpdateAttendance(c *gin.Context) {
 //  CMS Pages Management
 // ─────────────────────────────────────────────
 
-func AdminListCMSPages(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-	if limit <= 0 || limit > 100 {
-		limit = 100
-	}
-	if page <= 0 {
-		page = 1
-	}
-	if limit <= 0 {
-		limit = 10
-	}
-
-	api_response.Success(c, gin.H{
-		"items":      []gin.H{},
-		"pagination": gin.H{"page": page, "limit": limit, "total": 0},
-	})
-}
-
-func AdminGetCMSPage(c *gin.Context) {
-	api_response.Error(c, http.StatusNotFound, "CMS page not found")
-}
-
-func AdminCreateCMSPage(c *gin.Context) {
-	api_response.Success(c, gin.H{"message": "CMS page created"})
-}
-
-func AdminUpdateCMSPage(c *gin.Context) {
-	api_response.Success(c, gin.H{"message": "CMS page updated"})
-}
-
-func AdminDeleteCMSPage(c *gin.Context) {
-	api_response.Success(c, gin.H{"message": "CMS page deleted"})
-}
+// AdminListCMSPages, AdminGetCMSPage, AdminCreateCMSPage, AdminUpdateCMSPage
+// and AdminDeleteCMSPage now live in admin_content_handlers.go, backed by
+// the real "CMSPage" table.
 
 // ─────────────────────────────────────────────
 //  Integrations Management
@@ -254,13 +223,8 @@ func AdminGetMediaTags(c *gin.Context) {
 //  Landing Page Management
 // ─────────────────────────────────────────────
 
-func AdminListLandingSections(c *gin.Context) {
-	api_response.Success(c, []gin.H{})
-}
-
-func AdminUpsertLandingSection(c *gin.Context) {
-	api_response.Success(c, gin.H{"message": "Landing section updated"})
-}
+// AdminListLandingSections and AdminUpsertLandingSection now live in
+// admin_content_handlers.go, backed by the real "HomepageSection" table.
 
 // ─────────────────────────────────────────────
 //  AI Analysis Management

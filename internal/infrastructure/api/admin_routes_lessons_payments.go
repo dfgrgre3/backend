@@ -30,6 +30,16 @@ func registerAdminLessonPaymentRoutes(admin *gin.RouterGroup) {
 	admin.GET("/invoices", handlers.GetAdminInvoices)
 	admin.GET("/invoices/:id", handlers.GetAdminInvoice)
 
+	// Wallets — platform-wide wallet balances & transactions
+	admin.GET("/wallets", admindelivery.AdminListWallets)
+	admin.GET("/wallet-transactions", admindelivery.AdminListWalletTransactions)
+
+	// Installments — split-payment plans
+	admin.GET("/installments", admindelivery.AdminListInstallments)
+	admin.POST("/installments", admindelivery.AdminCreateInstallmentPlan)
+	admin.POST("/installments/:id/mark-paid", admindelivery.AdminMarkInstallmentPaid)
+	admin.POST("/installments/:id/cancel", admindelivery.AdminCancelInstallment)
+
 	// Dunning — subscription payment failure tracking
 	admin.GET("/dunning", admindelivery.AdminListDunning)
 
@@ -40,6 +50,7 @@ func registerAdminLessonPaymentRoutes(admin *gin.RouterGroup) {
 	admin.POST("/exams", handlers.CreateExam)
 	admin.PATCH("/exams", handlers.UpdateExam)
 	admin.DELETE("/exams", handlers.DeleteExam)
+	admin.GET("/exam-results", admindelivery.AdminListExamResults)
 
 	// -------------------------------
 	// Refunds Management

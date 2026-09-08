@@ -22,6 +22,12 @@ var DB *gorm.DB
 // the application runs with DATABASE_USE_APP_ROLE=true.
 var rawWriteDB *gorm.DB
 
+// poolDSNs records the DSNs backing the active connection pools (write
+// source, read replicas, and the raw telemetry pool). Warm-up logic inspects
+// them to detect whether the database is local (cheap handshakes) or remote
+// (expensive handshakes).
+var poolDSNs []string
+
 // LegacySchemaNamingStrategy preserves the existing database contract while
 // decoupling GORM from the removed Prisma toolchain. New schema changes must be
 // expressed as versioned SQL migrations rather than inferred from an ORM.
@@ -96,6 +102,16 @@ func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
 	replicaDialectors := getReplicaDialectors()
 	pool := getPoolSettings()
 
+	// Record the DSNs backing the active pools so warm-up can distinguish a
+	// local database (handshake <1ms) from a remote one (handshake 300ms+).
+	// Reset on every (re)connect attempt.
+	poolDSNs = append(poolDSNs[:0], sourceDSN)
+	if len(replicaDialectors) > 0 {
+		poolDSNs = append(poolDSNs, getReplicaDSNs()...)
+	} else {
+		poolDSNs = append(poolDSNs, appDSN) // replica falls back to the app DSN
+	}
+
 	log.Printf("Database connection pool settings: MaxIdleConns=%d, MaxOpenConns=%d, ConnMaxLifetime=%s, ConnMaxIdleTime=%s",
 		pool.MaxIdleConns, pool.MaxOpenConns, pool.MaxLifetime, pool.MaxIdleTime)
 
@@ -144,6 +160,7 @@ func ConnectWithWriteDSN(dsn, writeDSN string) (*gorm.DB, error) {
 				log.Printf("[WARN] Failed to create raw DB connection for telemetry: %v", err)
 			} else {
 				rawWriteDB = rawDB
+				poolDSNs = append(poolDSNs, strippedDSN)
 				sqlDB, _ := rawDB.DB()
 				sqlDB.SetMaxIdleConns(pool.MaxIdleConns)
 				sqlDB.SetMaxOpenConns(pool.MaxOpenConns)

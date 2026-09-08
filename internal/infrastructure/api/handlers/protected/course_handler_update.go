@@ -95,6 +95,7 @@ func (h *CourseRESTHandler) UpdateCourse(c *gin.Context) {
 		LearningOutcomes:         req.LearningOutcomes,
 		PrimaryInstructorID:      req.PrimaryInstructorID,
 		CategoryIDs:              req.CategoryIDs,
+		IsPublished:              req.IsPublished,
 	}
 
 	courseEntity, err := h.updateCourseHandler.Handle(c.Request.Context(), cmd)
@@ -107,5 +108,6 @@ func (h *CourseRESTHandler) UpdateCourse(c *gin.Context) {
 		return
 	}
 
+	getSubjectRepo().InvalidateSubjectCache(id)
 	api_response.Success(c, gin.H{"course": courseEntity})
 }

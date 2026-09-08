@@ -33,14 +33,18 @@ func TeachingCreateCourse(c *gin.Context) {
 		Status      string  `json:"status"`
 		Level       string  `json:"level"`
 		Language    string  `json:"language"`
+		CategoryID  *string `json:"categoryId"`
 		Chapters    []struct {
+			ID      string `json:"id"`
 			Title   string `json:"title"`
 			Lessons []struct {
-				Title    string `json:"title"`
-				Duration string `json:"duration"`
-				Type     string `json:"type"`
-				URL      string `json:"url"`
-				Preview  bool   `json:"isPreview"`
+				ID              string `json:"id"`
+				Title           string `json:"title"`
+				DurationMinutes *int   `json:"durationMinutes"`
+				Duration        string `json:"duration"` // legacy clients
+				Type            string `json:"type"`
+				URL             string `json:"url"`
+				Preview         bool   `json:"isPreview"`
 			} `json:"lessons"`
 		} `json:"chapters"`
 	}
@@ -72,6 +76,7 @@ func TeachingCreateCourse(c *gin.Context) {
 		Description:   strPtr(description),
 		Level:         models.Level(input.Level),
 		Language:      input.Language,
+		CategoryId:    input.CategoryID,
 		Status:        status,
 		InstructorId:  &userID,
 		EnrolledCount: 0,
@@ -84,6 +89,9 @@ func TeachingCreateCourse(c *gin.Context) {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to create course")
 		return
 	}
+	// The public catalog is backed by Redis list caches. Invalidate them so a
+	// newly-published teaching course is available without waiting for TTL.
+	getSubjectRepo().InvalidateSubjectCache(subject.ID)
 
 	// Create chapters and lessons if provided. Any failure here is reported
 	// back to the caller instead of being silently swallowed — previously a
@@ -91,6 +99,7 @@ func TeachingCreateCourse(c *gin.Context) {
 	// than submitted while still returning 201 Created, so the instructor had
 	// no way to know part of their content was lost.
 	var creationWarnings []string
+	responseChapters := make([]gin.H, 0, len(input.Chapters))
 	for i, ch := range input.Chapters {
 		topic := models.Topic{
 			SubjectID: subject.ID,
@@ -101,18 +110,14 @@ func TeachingCreateCourse(c *gin.Context) {
 			creationWarnings = append(creationWarnings, fmt.Sprintf("chapter %q was not saved: %v", ch.Title, err))
 			continue
 		}
+		responseLessons := make([]gin.H, 0, len(ch.Lessons))
 
 		for j, les := range ch.Lessons {
-			durationMinutes := 15
-			if les.Duration != "" {
-				if n, err := strconv.Atoi(strings.TrimSuffix(les.Duration, " دقيقة")); err == nil {
-					durationMinutes = n
-				}
-			}
+			durationMinutes := lessonDurationMinutes(les.DurationMinutes, les.Duration)
 			subTopic := models.SubTopic{
 				TopicID:         topic.ID,
 				Title:           les.Title,
-				Type:            models.SubTopicType(strings.ToUpper(les.Type)),
+				Type:            normalizeTeachingLessonType(les.Type),
 				VideoUrl:        strPtr(les.URL),
 				IsFree:          les.Preview,
 				Order:           j + 1,
@@ -120,8 +125,11 @@ func TeachingCreateCourse(c *gin.Context) {
 			}
 			if err := database.Create(&subTopic).Error; err != nil {
 				creationWarnings = append(creationWarnings, fmt.Sprintf("lesson %q was not saved: %v", les.Title, err))
+				continue
 			}
+			responseLessons = append(responseLessons, gin.H{"id": subTopic.ID, "title": subTopic.Title, "type": string(subTopic.Type), "durationMinutes": subTopic.DurationMinutes, "isPreview": subTopic.IsFree})
 		}
+		responseChapters = append(responseChapters, gin.H{"id": topic.ID, "title": topic.Title, "lessons": responseLessons})
 	}
 
 	// Count created lessons
@@ -144,8 +152,9 @@ func TeachingCreateCourse(c *gin.Context) {
 			"price":         input.Price,
 			"duration":      "0 ساعة",
 			"category":      "",
+			"categoryId":    subject.CategoryId,
 			"createdDate":   subject.CreatedAt.Format("2006-01-02"),
-			"chapters":      []interface{}{},
+			"chapters":      responseChapters,
 		},
 	}
 	// Surface partial-failure warnings (see comment above) instead of
@@ -154,4 +163,32 @@ func TeachingCreateCourse(c *gin.Context) {
 		response["warnings"] = creationWarnings
 	}
 	api_response.Created(c, response)
+}
+
+func lessonDurationMinutes(value *int, legacy string) int {
+	if value != nil && *value >= 0 {
+		return *value
+	}
+	legacy = strings.TrimSpace(legacy)
+	if legacy != "" {
+		if n, err := strconv.Atoi(strings.Fields(legacy)[0]); err == nil && n >= 0 {
+			return n
+		}
+	}
+	return 0
+}
+
+func normalizeTeachingLessonType(value string) models.SubTopicType {
+	switch strings.ToUpper(strings.TrimSpace(value)) {
+	case "VIDEO":
+		return models.SubTopicVideo
+	case "PDF", "ARTICLE", "DOCUMENT":
+		return models.SubTopicArticle
+	case "QUIZ":
+		return models.SubTopicQuiz
+	case "ASSIGNMENT":
+		return models.SubTopicAssignment
+	default:
+		return models.SubTopicVideo
+	}
 }

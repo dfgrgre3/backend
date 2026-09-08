@@ -51,9 +51,23 @@ func TeachingUpdateCourse(c *gin.Context) {
 		Status      *string  `json:"status"`
 		Level       *string  `json:"level"`
 		Language    *string  `json:"language"`
+		CategoryID  *string  `json:"categoryId"`
 		TrailerUrl  *string  `json:"trailerUrl"`
 		ShortDesc   *string  `json:"shortDescription"`
 		LongDesc    *string  `json:"longDescription"`
+		Chapters    *[]struct {
+			ID      string `json:"id"`
+			Title   string `json:"title"`
+			Lessons []struct {
+				ID              string `json:"id"`
+				Title           string `json:"title"`
+				DurationMinutes *int   `json:"durationMinutes"`
+				Duration        string `json:"duration"` // legacy clients
+				Type            string `json:"type"`
+				URL             string `json:"url"`
+				Preview         bool   `json:"isPreview"`
+			} `json:"lessons"`
+		} `json:"chapters"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -99,6 +113,9 @@ func TeachingUpdateCourse(c *gin.Context) {
 	if input.Language != nil {
 		updates["language"] = *input.Language
 	}
+	if input.CategoryID != nil {
+		updates["category_id"] = strings.TrimSpace(*input.CategoryID)
+	}
 	if input.Status != nil {
 		status := strings.ToUpper(*input.Status)
 		switch models.CourseStatus(status) {
@@ -124,7 +141,53 @@ func TeachingUpdateCourse(c *gin.Context) {
 			api_response.Error(c, http.StatusInternalServerError, "Failed to update course")
 			return
 		}
+		getSubjectRepo().InvalidateSubjectCache(subject.ID)
 	}
 
-	api_response.Success(c, gin.H{"message": "Course updated successfully"})
+	var responseChapters []gin.H
+	// Curriculum is replaced atomically when supplied. Omitting `chapters`
+	// leaves the existing curriculum untouched; sending [] intentionally clears it.
+	if input.Chapters != nil {
+		responseChapters = make([]gin.H, 0, len(*input.Chapters))
+		err := database.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Where("subject_id = ?", subject.ID).Delete(&models.Topic{}).Error; err != nil {
+				return err
+			}
+			for chapterIndex, chapter := range *input.Chapters {
+				topic := models.Topic{SubjectID: subject.ID, Title: strings.TrimSpace(chapter.Title), Order: chapterIndex + 1}
+				if err := tx.Create(&topic).Error; err != nil {
+					return err
+				}
+				responseLessons := make([]gin.H, 0, len(chapter.Lessons))
+				for lessonIndex, lesson := range chapter.Lessons {
+					subTopic := models.SubTopic{
+						TopicID:         topic.ID,
+						Title:           strings.TrimSpace(lesson.Title),
+						Type:            normalizeTeachingLessonType(lesson.Type),
+						VideoUrl:        strPtr(strings.TrimSpace(lesson.URL)),
+						IsFree:          lesson.Preview,
+						Order:           lessonIndex + 1,
+						DurationMinutes: lessonDurationMinutes(lesson.DurationMinutes, lesson.Duration),
+					}
+					if err := tx.Create(&subTopic).Error; err != nil {
+						return err
+					}
+					responseLessons = append(responseLessons, gin.H{"id": subTopic.ID, "title": subTopic.Title, "type": string(subTopic.Type), "durationMinutes": subTopic.DurationMinutes, "isPreview": subTopic.IsFree})
+				}
+				responseChapters = append(responseChapters, gin.H{"id": topic.ID, "title": topic.Title, "lessons": responseLessons})
+			}
+			return nil
+		})
+		if err != nil {
+			api_response.Error(c, http.StatusInternalServerError, "Failed to update course curriculum")
+			return
+		}
+		getSubjectRepo().InvalidateSubjectCache(subject.ID)
+	}
+
+	response := gin.H{"message": "Course updated successfully"}
+	if input.Chapters != nil {
+		response["course"] = gin.H{"id": subject.ID, "chapters": responseChapters}
+	}
+	api_response.Success(c, response)
 }

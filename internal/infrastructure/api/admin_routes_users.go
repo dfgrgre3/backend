@@ -32,6 +32,8 @@ func registerAdminUserRoutes(admin, sensitive *gin.RouterGroup) {
 	admin.GET("/users/:id/login-attempts", handlers.GetUserLoginAttempts)
 	admin.GET("/users/:id/video-engagement", handlers.GetUserVideoEngagement)
 	admin.GET("/users/:id/wallet/transactions", handlers.GetUserWalletTransactions)
+	admin.GET("/users/:id/attendance", admindelivery.AdminListUserAttendance)
+	admin.POST("/users/:id/attendance", admindelivery.AdminRecordAttendance)
 	admin.GET("/search/users", handlers.SearchUsers)
 	admin.POST("/users/search", handlers.SearchUsers)
 

@@ -133,6 +133,14 @@ func SetupProtectedRoutes(router *gin.Engine, hexHandlers *application.Handlers)
 			userRoutes.POST("/courses/:id/complete", handlers.CompleteCourse)
 			userRoutes.POST("/courses/:id/checkout", handlers.CourseCheckout)
 			userRoutes.GET("/courses/:id/curriculum", handlers.GetSubjectCurriculum)
+			userRoutes.GET("/courses/:id/quizzes", handlers.GetCourseQuizzes)
+			userRoutes.GET("/courses/:id/lessons/:lessonId/quizzes", handlers.GetLessonCourseQuizzes)
+			userRoutes.POST("/courses/:id/quizzes", handlers.CreateCourseQuiz)
+			userRoutes.GET("/courses/:id/quizzes/:quizId", handlers.GetCourseQuiz)
+			userRoutes.PATCH("/courses/:id/quizzes/:quizId", handlers.UpdateCourseQuiz)
+			userRoutes.POST("/courses/:id/quizzes/:quizId/start", handlers.StartCourseQuiz)
+			userRoutes.POST("/courses/:id/quizzes/:quizId/submit", handlers.SubmitCourseQuiz)
+			userRoutes.GET("/courses/:id/quizzes/:quizId/results", handlers.GetCourseQuizResults)
 			userRoutes.GET("/courses/lessons/:id/progress", handlers.GetLessonProgress)
 			userRoutes.POST("/courses/lessons/:id/progress", handlers.UpdateLessonProgress)
 			userRoutes.POST("/courses/lessons/:id/view", handlers.TrackLessonView) // Track view stats
@@ -222,6 +230,20 @@ func SetupProtectedRoutes(router *gin.Engine, hexHandlers *application.Handlers)
 			teachingRoutes.GET("/notifications", handlers.TeachingGetNotifications)
 			teachingRoutes.POST("/notifications/:id/read", handlers.TeachingMarkNotificationRead)
 			teachingRoutes.POST("/notifications/read-all", handlers.TeachingMarkAllNotificationsRead)
+
+			// Teacher workspace extensions. These endpoints intentionally return
+			// empty, valid payloads until their backing services are enabled. This
+			// keeps the dashboard contract stable and prevents the frontend from
+			// retrying missing routes with 404 responses.
+			teachingRoutes.GET("/conversations", handlers.TeachingListConversations)
+			teachingRoutes.POST("/conversations/:id/messages", handlers.TeachingSendConversationMessage)
+			teachingRoutes.GET("/analytics", handlers.TeachingGetAnalytics)
+			teachingRoutes.GET("/transactions", handlers.TeachingGetTransactions)
+			teachingRoutes.GET("/calendar", handlers.TeachingGetCalendar)
+			teachingRoutes.POST("/calendar", handlers.TeachingCreateCalendarEvent)
+			teachingRoutes.GET("/settings", handlers.TeachingGetSettings)
+			teachingRoutes.PATCH("/settings", handlers.TeachingUpdateSettings)
+			teachingRoutes.POST("/settings/api-key", handlers.TeachingGenerateAPIKey)
 
 			// Instructor application (for non-teachers who want to become teachers)
 			teachingRoutes.POST("/apply", handlers.TeachingApplyForInstructor)

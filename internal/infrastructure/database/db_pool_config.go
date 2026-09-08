@@ -26,14 +26,27 @@ func getGormLogLevel() logger.LogLevel {
 }
 
 func getReplicaDialectors() []gorm.Dialector {
-	replicas := os.Getenv("DATABASE_REPLICAS")
 	var replicaDialectors []gorm.Dialector
-	if replicas != "" {
-		for _, replicaDSN := range strings.Split(replicas, ",") {
-			replicaDialectors = append(replicaDialectors, postgresDialector(strings.TrimSpace(replicaDSN)))
-		}
+	for _, replicaDSN := range getReplicaDSNs() {
+		replicaDialectors = append(replicaDialectors, postgresDialector(replicaDSN))
 	}
 	return replicaDialectors
+}
+
+// getReplicaDSNs returns the read-replica DSNs configured via DATABASE_REPLICAS
+// (comma-separated), skipping empty entries.
+func getReplicaDSNs() []string {
+	replicas := os.Getenv("DATABASE_REPLICAS")
+	if replicas == "" {
+		return nil
+	}
+	var dsns []string
+	for _, replicaDSN := range strings.Split(replicas, ",") {
+		if d := strings.TrimSpace(replicaDSN); d != "" {
+			dsns = append(dsns, d)
+		}
+	}
+	return dsns
 }
 
 func postgresDialector(dsn string) gorm.Dialector {

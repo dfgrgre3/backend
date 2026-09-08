@@ -91,6 +91,11 @@ func (h *CreateCourseHandler) Handle(ctx context.Context, cmd CreateCourseComman
 		language = "ar"
 	}
 
+	status := models.CourseStatusDraft
+	if cmd.IsPublished {
+		status = models.CourseStatusPublished
+	}
+
 	course := &models.LmsCourse{
 		ID:                    uuid.New(),
 		Title:                 cmd.Title,
@@ -99,7 +104,7 @@ func (h *CreateCourseHandler) Handle(ctx context.Context, cmd CreateCourseComman
 		LongDescription:       cmd.LongDescription,
 		CoverImageURL:         cmd.CoverImageURL,
 		PromoVideoURL:         cmd.PromoVideoURL,
-		Status:                models.CourseStatusDraft,
+		Status:                status,
 		Level:                 level,
 		Language:              language,
 		EstimatedDurationMins: cmd.EstimatedDurationMins,

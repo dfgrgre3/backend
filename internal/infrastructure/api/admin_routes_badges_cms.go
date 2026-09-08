@@ -36,6 +36,22 @@ func registerAdminBadgeCMSRoutes(admin *gin.RouterGroup) {
 	admin.DELETE("/cms/pages/:id", admindelivery.AdminDeleteCMSPage)
 
 	// -------------------------------
+	// Banners Management
+	// -------------------------------
+	admin.GET("/banners", admindelivery.AdminListBanners)
+	admin.POST("/banners", admindelivery.AdminCreateBanner)
+	admin.PATCH("/banners/:id", admindelivery.AdminUpdateBanner)
+	admin.DELETE("/banners/:id", admindelivery.AdminDeleteBanner)
+
+	// -------------------------------
+	// FAQ Management
+	// -------------------------------
+	admin.GET("/faqs", admindelivery.AdminListFAQs)
+	admin.POST("/faqs", admindelivery.AdminCreateFAQ)
+	admin.PATCH("/faqs/:id", admindelivery.AdminUpdateFAQ)
+	admin.DELETE("/faqs/:id", admindelivery.AdminDeleteFAQ)
+
+	// -------------------------------
 	// Integrations Management
 	// -------------------------------
 	admin.GET("/integrations", admindelivery.AdminListIntegrations)

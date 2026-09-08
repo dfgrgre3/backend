@@ -88,6 +88,46 @@ func GetSubjects(c *gin.Context) {
 	// Format response for frontend
 	items := buildSubjectListResponse(subjects, topicCountMap)
 
+	// The admin course editor writes the newer LMS model (LmsCourse), while
+	// older public catalog entries still live in Subject. Include published LMS
+	// courses here so courses created from /admin/courses are visible in the
+	// same public catalog. Draft and under-review courses must remain private.
+	var lmsCourses []models.LmsCourse
+	lmsQuery := readDB.Model(&models.LmsCourse{}).
+		Where("status = ?", models.CourseStatusPublished)
+	if search := sanitizeSearchTerm(c.Query("search")); search != "" {
+		lmsQuery = lmsQuery.Where("title ILIKE ? OR short_description ILIKE ? OR long_description ILIKE ?",
+			"%"+search+"%", "%"+search+"%", "%"+search+"%")
+	}
+	if level := c.Query("level"); isValidLevel(level) {
+		lmsQuery = lmsQuery.Where("level = ?", level)
+	}
+	if c.Query("isPublished") == "false" || c.Query("isActive") == "false" ||
+		(c.Query("status") != "" && c.Query("status") != string(models.CourseStatusPublished)) {
+		lmsCourses = nil
+	} else {
+		// Keep the existing Subject pagination stable and add LMS courses to the
+		// response. The next catalog request will still receive the full LMS set.
+		if err := lmsQuery.Order("created_at DESC").Limit(limit).Find(&lmsCourses).Error; err != nil {
+			api_response.Error(c, http.StatusInternalServerError, "Failed to fetch LMS courses")
+			return
+		}
+		for _, course := range lmsCourses {
+			items = append(items, gin.H{
+				"id": course.ID.String(), "name": course.Title, "nameAr": course.Title,
+				"description": course.LongDescription, "shortDescription": course.ShortDescription,
+				"type": "COURSE", "isActive": true, "isPublished": true,
+				"price": 0, "level": course.Level, "language": course.Language,
+				"thumbnailUrl": course.CoverImageURL, "slug": course.Slug,
+				"instructorId": course.PrimaryInstructorID.String(),
+				"isFeatured":   course.IsFeatured, "isTrending": course.IsTrending, "isNew": course.IsNew,
+				"createdAt": course.CreatedAt, "updatedAt": course.UpdatedAt,
+				"_count": gin.H{"enrollments": 0, "topics": 0, "reviews": 0, "teachers": 0},
+			})
+		}
+	}
+	total += int64(len(lmsCourses))
+
 	responsePayload := gin.H{
 		"items": items,
 		"pagination": api_response.Pagination{
@@ -161,6 +201,17 @@ func GetSubject(c *gin.Context) {
 	// elsewhere for this same content.
 	if !isEnrolled {
 		redactLockedLessonContent(&subject)
+	}
+	// Duration is a server-owned aggregate of the curriculum, not an
+	// independently editable value that can drift from lesson durations.
+	totalLessonMinutes := 0
+	for _, topic := range subject.Topics {
+		for _, lesson := range topic.SubTopics {
+			totalLessonMinutes += lesson.DurationMinutes
+		}
+	}
+	if totalLessonMinutes > 0 {
+		subject.DurationHours = (totalLessonMinutes + 59) / 60
 	}
 
 	// Wrap for frontend

@@ -28,20 +28,19 @@ func buildAdminDashboardPayload(cacheKey string, timeFilter string) (map[string]
 	}
 	conn := db.DB
 
-	// Core platform counters.
-	core, err := loadDashboardCoreStats(readDB, todayStart, weekAgo)
-	if err != nil {
-		return nil, err
-	}
-
-	// The remaining counter groups are independent, so they run concurrently.
-	// Errors are propagated instead of swallowed: a failed aggregate used to be
-	// indistinguishable from a genuine zero on the dashboard.
+	// Every aggregate group below is independent of the others, so they all
+	// run concurrently instead of stacking serially. Errors are propagated
+	// instead of swallowed: a failed aggregate used to be indistinguishable
+	// from a genuine zero on the dashboard.
 	var (
-		audience   dashboardAudienceStats
-		catalog    dashboardCatalogStats
-		revenue    dashboardRevenueStats
-		operations dashboardOperationsStats
+		core              dashboardCoreStats
+		audience          dashboardAudienceStats
+		catalog           dashboardCatalogStats
+		revenue           dashboardRevenueStats
+		operations        dashboardOperationsStats
+		recent            dashboardRecentItems
+		topSellingCourses []gin.H
+		charts            dashboardChartData
 	)
 	group, _ := errgroup.WithContext(context.Background())
 	// Each goroutine gets its own *gorm.DB session: the base readDB is shared
@@ -52,6 +51,10 @@ func buildAdminDashboardPayload(cacheKey string, timeFilter string) (map[string]
 	// over whatever .Model()/.Table() the base statement last had, which leaks
 	// across goroutines (observed as queries against a "dashboardCoreStats"
 	// table that doesn't exist).
+	group.Go(func() (err error) {
+		core, err = loadDashboardCoreStats(readDB.Session(&gorm.Session{NewDB: true}), todayStart, weekAgo)
+		return err
+	})
 	group.Go(func() (err error) {
 		audience, err = loadDashboardAudienceStats(readDB.Session(&gorm.Session{NewDB: true}), todayStart, weekAgo, monthAgo)
 		return err
@@ -69,16 +72,24 @@ func buildAdminDashboardPayload(cacheKey string, timeFilter string) (map[string]
 		operations, err = loadDashboardOperationsStats(readDB.Session(&gorm.Session{NewDB: true}), periodStart)
 		return err
 	})
+	group.Go(func() error {
+		recent = loadDashboardRecentItems(conn, readDB.Session(&gorm.Session{NewDB: true}))
+		return nil
+	})
+	group.Go(func() error {
+		topSellingCourses = buildDashboardTopCourses(conn)
+		return nil
+	})
+	group.Go(func() error {
+		charts = buildDashboardCharts(readDB.Session(&gorm.Session{NewDB: true}), now)
+		return nil
+	})
 	if err := group.Wait(); err != nil {
 		return nil, err
 	}
 
-	recent := loadDashboardRecentItems(conn, readDB)
-
 	recentActivityItems := buildDashboardRecentActivity(recent.RecentAssignments)
 	upcomingEvents := buildDashboardUpcomingEvents(recent.UpcomingExams)
-	topSellingCourses := buildDashboardTopCourses(conn)
-	charts := buildDashboardCharts(readDB, now)
 	trends := computeDashboardTrends(todayStart, monthAgo, yearAgo)
 
 	growthRate := float64(0)

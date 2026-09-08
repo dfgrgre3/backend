@@ -43,6 +43,10 @@ func CreateSubject(c *gin.Context) {
 		api_response.Error(c, http.StatusInternalServerError, getCreateSubjectErrorMessage(err))
 		return
 	}
+	// A newly-created published subject must be visible in the public catalog
+	// immediately. The catalog list is Redis-cached, so clear all subject list
+	// variants after the write.
+	getSubjectRepo().InvalidateSubjectCache(subject.ID)
 
 	LogAudit(c, "CREATE", "subject", subject.ID, subject)
 	api_response.Created(c, gin.H{"course": subject, "id": subject.ID})

@@ -46,6 +46,57 @@ var defaultAdminSettings = map[string]interface{}{
 		"enabled": false,
 		"message": "",
 	},
+	"email": map[string]interface{}{
+		"provider":  "smtp",
+		"smtpHost":  "",
+		"smtpPort":  587,
+		"smtpUser":  "",
+		"fromName":  "Thanawy",
+		"fromEmail": "no-reply@thanawy.local",
+		"useTLS":    true,
+	},
+	"sms": map[string]interface{}{
+		"provider": "",
+		"senderId": "",
+		"apiKey":   "",
+		"enabled":  false,
+	},
+	"storage": map[string]interface{}{
+		"driver":        "local",
+		"maxFileSizeMB": 25,
+		"allowedTypes":  []string{"image/png", "image/jpeg", "application/pdf", "video/mp4"},
+		"bucketName":    "",
+		"region":        "",
+	},
+	"cdn": map[string]interface{}{
+		"enabled":  false,
+		"baseUrl":  "",
+		"provider": "",
+	},
+	"security": map[string]interface{}{
+		"twoFactorRequired":  false,
+		"passwordMinLength":  8,
+		"sessionTimeoutMins": 60,
+		"maxLoginAttempts":   5,
+		"lockoutMinutes":     15,
+	},
+	"authentication": map[string]interface{}{
+		"allowRegistration":  true,
+		"requireEmailVerify": true,
+		"allowGoogleLogin":   false,
+		"allowFacebookLogin": false,
+		"otpEnabled":         false,
+	},
+	"apiKeys": map[string]interface{}{
+		"items": []interface{}{},
+	},
+	"payments": map[string]interface{}{
+		"defaultCurrency":     "EGP",
+		"defaultGateway":      "paymob",
+		"walletEnabled":       true,
+		"installmentsEnabled": true,
+		"taxEnabled":          false,
+	},
 }
 
 func requestBodyOrEmpty(c *gin.Context) gin.H {

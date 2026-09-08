@@ -97,6 +97,7 @@ func TeachingGetCourse(c *gin.Context) {
 			"price":            price,
 			"duration":         fmt.Sprintf("%d ساعة", subject.DurationHours),
 			"category":         stringPtrToString(subject.CategoryId),
+			"categoryId":       subject.CategoryId,
 			"level":            string(subject.Level),
 			"language":         subject.Language,
 			"createdDate":      subject.CreatedAt.Format("2006-01-02"),

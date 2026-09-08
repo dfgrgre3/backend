@@ -61,8 +61,25 @@ func runDashboardServiceProbes(ctx context.Context, selected []dashboardServiceC
 	}
 	raw := make([]rawResult, len(selected))
 
+	// معدل أخطاء الـ API يُقرأ من مقاييس HTTP المُجمّعة لآخر ساعة. تُحسب مرة واحدة
+	// هنا وتُستخدم أيضًا كفحص توفر الـ "api" أدناه، بدل استعلامين منفصلين على
+	// نفس جدول http_metric_buckets في كل تشغيل فحص صحي. تعمل هذه الاستعلام
+	// بالتوازي مع بقية الفحوصات (بدل تنفيذها قبلها بشكل متسلسل) حتى لا تستهلك
+	// وقتها من مهلة السياق المشتركة قبل أن تبدأ الفحوصات الأخرى أصلاً.
+	now := time.Now()
+	var summary monitoring.PerformanceSummary
+	var summaryErr error
+
 	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, summary, summaryErr = monitoring.QueryPerformance(ctx, now.Add(-time.Hour), now, time.Minute)
+	}()
 	for i, check := range selected {
+		if check.Key == "api" {
+			continue
+		}
 		wg.Add(1)
 		go func(idx int, ch dashboardServiceCheck) {
 			defer wg.Done()
@@ -72,10 +89,16 @@ func runDashboardServiceProbes(ctx context.Context, selected []dashboardServiceC
 		}(i, check)
 	}
 	wg.Wait()
+	for i, check := range selected {
+		if check.Key != "api" {
+			continue
+		}
+		// يعتمد على الاستعلام أعلاه بدل تنفيذ استعلام منفصل لنفس الجدول.
+		if summaryErr != nil {
+			raw[i].err = fmt.Errorf("api metrics are unavailable: %w", summaryErr)
+		}
+	}
 
-	// معدل أخطاء الـ API يُقرأ من مقاييس HTTP المُجمّعة لآخر ساعة.
-	now := time.Now()
-	_, summary, summaryErr := monitoring.QueryPerformance(ctx, now.Add(-time.Hour), now, time.Minute)
 	overall := "healthy"
 
 	results := make([]dashboardProbeResult, len(selected))
@@ -256,11 +279,17 @@ func dashboardServiceChecks() []dashboardServiceCheck {
 		},
 		{
 			Key: "api", Name: "واجهة البرمجة", ActionURL: "/admin/api-logs",
+			// The request is being served, so the process is up. What is worth
+			// probing is whether the metrics pipeline that feeds this service's
+			// error rate is actually readable — otherwise the status would be
+			// reported as healthy on no evidence at all.
+			//
+			// runDashboardServiceProbes bypasses this and reuses the hourly
+			// summary query it already runs instead of calling Probe here, to
+			// avoid two separate round trips to http_metric_buckets per health
+			// check. This is kept as the fallback for direct callers (e.g. the
+			// dashboard export builders) that invoke check.Probe on its own.
 			Probe: func(ctx context.Context) error {
-				// The request is being served, so the process is up. What is
-				// worth probing is whether the metrics pipeline that feeds this
-				// service's error rate is actually readable — otherwise the
-				// status would be reported as healthy on no evidence at all.
 				if _, _, err := monitoring.QueryPerformance(ctx, time.Now().Add(-time.Minute), time.Now(), time.Minute); err != nil {
 					return fmt.Errorf("api metrics are unavailable: %w", err)
 				}

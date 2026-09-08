@@ -15,6 +15,7 @@ type Lesson struct {
 	ID                string `json:"id"`
 	Title             string `json:"title"`
 	Description       string `json:"description"`
+	Content           string `json:"content,omitempty"`
 	VideoUrl          string `json:"videoUrl"`
 	AudioUrl          string `json:"audioUrl,omitempty"`
 	AudioDuration     int    `json:"audioDuration,omitempty"`
@@ -26,14 +27,14 @@ type Lesson struct {
 	DurationMinutes   int    `json:"durationMinutes"`
 	ExamID            string `json:"examId,omitempty"`
 	// Advanced fields
-	IsDripEnabled      bool                       `json:"isDripEnabled,omitempty"`
-	DripReleaseDate    string                     `json:"dripReleaseDate,omitempty"`
-	IsContentProtected bool                       `json:"isContentProtected,omitempty"`
-	HasSubtitles       bool                       `json:"hasSubtitles,omitempty"`
-	HasChapters        bool                       `json:"hasChapters,omitempty"`
-	ViewCount          int                        `json:"viewCount,omitempty"`
-	CompletionCount    int                        `json:"completionCount,omitempty"`
-	Attachments        []models.LessonAttachment  `json:"attachments,omitempty"`
+	IsDripEnabled      bool                      `json:"isDripEnabled,omitempty"`
+	DripReleaseDate    string                    `json:"dripReleaseDate,omitempty"`
+	IsContentProtected bool                      `json:"isContentProtected,omitempty"`
+	HasSubtitles       bool                      `json:"hasSubtitles,omitempty"`
+	HasChapters        bool                      `json:"hasChapters,omitempty"`
+	ViewCount          int                       `json:"viewCount,omitempty"`
+	CompletionCount    int                       `json:"completionCount,omitempty"`
+	Attachments        []models.LessonAttachment `json:"attachments,omitempty"`
 }
 
 func GetCourseLessons(c *gin.Context) {
@@ -83,6 +84,7 @@ func GetCourseLessons(c *gin.Context) {
 			// separate GetCourseLessonsWithAccess endpoint, which checks
 			// enrollment/drip eligibility per lesson.
 			if st.IsFree {
+				l.Content = stringOrEmpty(st.Content)
 				l.VideoUrl = stringOrEmpty(st.VideoUrl)
 				l.AudioUrl = stringOrEmpty(st.AudioUrl)
 				l.AudioDuration = st.AudioDurationSeconds
