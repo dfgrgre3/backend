@@ -38,6 +38,12 @@ type Lesson struct {
 	Attachments        []models.LessonAttachment `json:"attachments,omitempty"`
 }
 
+// @Summary Get course lessons
+// @Tags courses
+// @Produce json
+// @Param id path string true "Course ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/courses/{id}/lessons [get]
 func GetCourseLessons(c *gin.Context) {
 	database, aborted := safeDB(c)
 	if aborted {

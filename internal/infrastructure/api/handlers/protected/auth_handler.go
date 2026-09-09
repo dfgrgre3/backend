@@ -77,6 +77,15 @@ func (h *AuthHandler) Register(c *gin.Context) {
 //  Login
 // ─────────────────────────────────────────────
 
+// @Summary User login
+// @Description Authenticate a user and establish a session.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body authdto.LoginRequest true "Login credentials"
+// @Success 200 {object} authdto.LoginResponse
+// @Failure 401 {object} map[string]interface{}
+// @Router /api/v1/auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req authdto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

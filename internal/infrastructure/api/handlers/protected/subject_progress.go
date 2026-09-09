@@ -14,6 +14,14 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// @Summary Update lesson progress
+// @Tags courses
+// @Accept json
+// @Produce json
+// @Param id path string true "Lesson ID"
+// @Param request body map[string]interface{} true "Progress payload"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/courses/lessons/{id}/progress [post]
 func UpdateLessonProgress(c *gin.Context) {
 	userId, ok := getAuthenticatedUserID(c)
 	if !ok {
@@ -142,6 +150,12 @@ func UpdateLessonProgress(c *gin.Context) {
 
 // GetLessonProgress returns the authenticated user's saved progress for a
 // lesson, enabling server-authoritative "resume playback" across devices.
+// @Summary Get lesson progress
+// @Tags courses
+// @Produce json
+// @Param id path string true "Lesson ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/courses/lessons/{id}/progress [get]
 func GetLessonProgress(c *gin.Context) {
 	userId, ok := getAuthenticatedUserID(c)
 	if !ok {

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	authdto "thanawy-backend/internal/application/dto"
 	models "thanawy-backend/internal/domain/common"
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 	db "thanawy-backend/internal/infrastructure/database"
@@ -11,7 +12,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetUserProfile returns the authenticated user's profile details,
+// GetUserProfile returns the authenticated user's profile details.
+// @Summary Get user profile
+// @Description Get the detailed profile of the currently authenticated user.
+// @Tags users
+// @Produce json
+// @Success 200 {object} authdto.UserProfileEnvelope
+// @Failure 401 {object} map[string]interface{}
+// @Router /api/users/profile [get]
 // including whether 2FA is configured (never the backup codes themselves -
 // even hashed, they have no legitimate use on the client and must not be
 // exposed in an API response).
@@ -61,6 +69,16 @@ func GetUserProfile(c *gin.Context) {
 }
 
 // UpdateProfile updates the authenticated user's profile details.
+// @Summary Update user profile
+// @Description Update one or more fields in the currently authenticated user's profile.
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param request body authdto.UserProfileUpdateRequest true "Profile fields to update"
+// @Success 200 {object} authdto.UserProfileUpdateEnvelope
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /api/users/profile [patch]
 func UpdateProfile(c *gin.Context) {
 	userID, exists := c.Get("userId")
 	if !exists {
@@ -68,25 +86,7 @@ func UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Name             *string               `json:"name"`
-		Username         *string               `json:"username"`
-		Bio              *string               `json:"bio"`
-		GradeLevel       *string               `json:"gradeLevel"`
-		EducationType    *string               `json:"educationType"`
-		Section          *string               `json:"section"`
-		Country          *string               `json:"country"`
-		Avatar           *string               `json:"avatar"`
-		Phone            *string               `json:"phone"`
-		AlternativePhone *string               `json:"alternativePhone"`
-		BirthDate        *string               `json:"birthDate"`
-		Gender           *string               `json:"gender"`
-		City             *string               `json:"city"`
-		School           *string               `json:"school"`
-		StudyGoal        *string               `json:"studyGoal"`
-		SubjectsTaught   *models.PGStringArray `json:"subjectsTaught"`
-		ExperienceYears  *string               `json:"experienceYears"`
-	}
+	var req authdto.UserProfileUpdateRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		api_response.Error(c, http.StatusBadRequest, "Invalid request payload: "+err.Error())

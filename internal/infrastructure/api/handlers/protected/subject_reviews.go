@@ -72,6 +72,12 @@ func CreateCourseReview(c *gin.Context) {
 	})
 }
 
+// @Summary Get course reviews
+// @Tags courses
+// @Produce json
+// @Param id path string true "Course ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/courses/{id}/reviews [get]
 func GetCourseReviews(c *gin.Context) {
 	id := c.Param("id")
 	var reviews []models.CourseReview

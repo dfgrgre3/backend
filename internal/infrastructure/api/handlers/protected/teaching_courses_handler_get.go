@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	authdto "thanawy-backend/internal/application/dto"
 	models "thanawy-backend/internal/domain/common"
 
 	api_response "thanawy-backend/internal/infrastructure/api/response"
@@ -13,7 +14,15 @@ import (
 	"gorm.io/gorm"
 )
 
+var _ = authdto.TeachingCourseResponse{}
+
 // TeachingGetCourse returns a single course for the instructor.
+// @Summary Get instructor course
+// @Tags teaching
+// @Produce json
+// @Param id path string true "Course ID"
+// @Success 200 {object} authdto.TeachingCourseResponse
+// @Router /api/v1/teaching/courses/{id} [get]
 func TeachingGetCourse(c *gin.Context) {
 	database, aborted := safeDB(c)
 	if aborted {

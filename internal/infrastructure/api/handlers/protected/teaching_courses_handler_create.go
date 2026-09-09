@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	authdto "thanawy-backend/internal/application/dto"
 	models "thanawy-backend/internal/domain/common"
 
 	api_response "thanawy-backend/internal/infrastructure/api/response"
@@ -14,7 +15,16 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+var _ = authdto.TeachingCourseMutationResponse{}
+
 // TeachingCreateCourse creates a new course for the authenticated instructor.
+// @Summary Create instructor course
+// @Tags teaching
+// @Accept json
+// @Produce json
+// @Param request body map[string]interface{} true "Course payload"
+// @Success 201 {object} authdto.TeachingCourseMutationResponse
+// @Router /api/v1/teaching/courses [post]
 func TeachingCreateCourse(c *gin.Context) {
 	database, aborted := safeDB(c)
 	if aborted {

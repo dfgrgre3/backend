@@ -3,6 +3,7 @@ package protected
 import (
 	"net/http"
 	"strings"
+	authdto "thanawy-backend/internal/application/dto"
 	models "thanawy-backend/internal/domain/common"
 
 	api_response "thanawy-backend/internal/infrastructure/api/response"
@@ -10,7 +11,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var _ = authdto.TeachingCourseDeleteResponse{}
+
 // TeachingDeleteCourse deletes a course.
+// @Summary Delete instructor course
+// @Tags teaching
+// @Produce json
+// @Param id path string true "Course ID"
+// @Success 200 {object} authdto.TeachingCourseDeleteResponse
+// @Router /api/v1/teaching/courses/{id} [delete]
 func TeachingDeleteCourse(c *gin.Context) {
 	database, aborted := safeDB(c)
 	if aborted {

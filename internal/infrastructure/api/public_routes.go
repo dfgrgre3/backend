@@ -40,6 +40,9 @@ func SetupPublicRoutes(router *gin.Engine) {
 	// Public settings route
 	router.GET("/api/v1/settings", protected.GetSystemSettings)
 
+	// Public newsletter subscription
+	router.POST("/api/v1/newsletter/subscribe", middleware.GlobalRateLimiter(20, time.Minute), protected.SubscribeNewsletter)
+
 	// Public blog route (published posts only)
 	router.GET("/api/v1/blog", protected.GetPublicBlogPosts)
 	router.GET("/api/v1/blog/:slug", protected.GetPublicBlogPost)

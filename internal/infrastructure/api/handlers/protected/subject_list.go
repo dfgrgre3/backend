@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	authdto "thanawy-backend/internal/application/dto"
 	models "thanawy-backend/internal/domain/common"
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 	"thanawy-backend/internal/infrastructure/cache"
@@ -15,7 +16,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var _ = authdto.CourseListResponse{}
+
 // Public handlers
+// @Summary List courses
+// @Tags courses
+// @Produce json
+// @Param page query int false "Page number"
+// @Param limit query int false "Page size"
+// @Param offset query int false "Pagination offset"
+// @Param search query string false "Search term"
+// @Param level query string false "Course level"
+// @Success 200 {object} authdto.CourseListResponse
+// @Router /api/v1/courses [get]
 func GetSubjects(c *gin.Context) {
 	// Pagination
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -136,9 +149,7 @@ func GetSubjects(c *gin.Context) {
 			Total:      total,
 			TotalPages: int64(math.Ceil(float64(total) / float64(limit))),
 		},
-		"subjects": items,
-		"courses":  items,
-		"offset":   offset,
+		"offset": offset,
 	}
 
 	if cache.Redis != nil {
@@ -150,6 +161,13 @@ func GetSubjects(c *gin.Context) {
 	api_response.Success(c, responsePayload)
 }
 
+// @Summary Get course
+// @Tags courses
+// @Produce json
+// @Param id path string true "Course ID or slug"
+// @Success 200 {object} authdto.CourseDetailResponse
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/v1/courses/{id} [get]
 func GetSubject(c *gin.Context) {
 	database, aborted := safeDB(c)
 	if aborted {

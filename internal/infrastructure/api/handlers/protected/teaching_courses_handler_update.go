@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	authdto "thanawy-backend/internal/application/dto"
 	models "thanawy-backend/internal/domain/common"
 
 	api_response "thanawy-backend/internal/infrastructure/api/response"
@@ -13,6 +14,8 @@ import (
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
+
+var _ = authdto.TeachingCourseMutationResponse{}
 
 type teachingAttachmentInput struct {
 	ID       string `json:"id"`
@@ -43,6 +46,14 @@ type teachingChapterInput struct {
 }
 
 // TeachingUpdateCourse updates an existing course.
+// @Summary Update instructor course
+// @Tags teaching
+// @Accept json
+// @Produce json
+// @Param id path string true "Course ID"
+// @Param request body map[string]interface{} true "Course payload"
+// @Success 200 {object} authdto.TeachingCourseMutationResponse
+// @Router /api/v1/teaching/courses/{id} [patch]
 func TeachingUpdateCourse(c *gin.Context) {
 	database, aborted := safeDB(c)
 	if aborted {

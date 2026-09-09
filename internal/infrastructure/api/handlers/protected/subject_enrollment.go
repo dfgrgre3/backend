@@ -18,6 +18,12 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// @Summary Enroll in a course
+// @Tags courses
+// @Produce json
+// @Param id path string true "Course ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/courses/{id}/enroll [post]
 func EnrollCourse(c *gin.Context) {
 	userId, ok := getAuthenticatedUserID(c)
 	if !ok {
@@ -265,6 +271,11 @@ func getUserSubjectsLegacy(c *gin.Context, userId string) {
 //   - Cursor mode (?v=2): flat CursorPage {data, nextCursor, hasNextPage}.
 //
 // Cached per-user via EnhancedCache; user id is part of the key identity.
+// @Summary List enrolled courses
+// @Tags courses
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/my-courses [get]
 func GetMyCourses(c *gin.Context) {
 	userId, ok := getAuthenticatedUserID(c)
 	if !ok {
@@ -366,16 +377,16 @@ func getMyCoursesLegacy(c *gin.Context, userId string) {
 	})
 
 	var cached struct {
-		Courses []gin.H `json:"courses"`
-		Data    struct {
-			Courses []gin.H `json:"courses"`
+		Items []gin.H `json:"items"`
+		Data  struct {
+			Items []gin.H `json:"items"`
 		} `json:"data"`
 	}
-	if err := ec.Get(c.Request.Context(), cacheKey, &cached); err == nil && cached.Courses != nil {
+	if err := ec.Get(c.Request.Context(), cacheKey, &cached); err == nil && cached.Items != nil {
 		api_response.Success(c, gin.H{
-			"courses": cached.Courses,
+			"items": cached.Items,
 			"data": gin.H{
-				"courses": cached.Data.Courses,
+				"items": cached.Data.Items,
 			},
 		})
 		return
@@ -395,20 +406,20 @@ func getMyCoursesLegacy(c *gin.Context, userId string) {
 	courses := buildMyCourseCards(enrollments)
 
 	payload := struct {
-		Courses []gin.H `json:"courses"`
-		Data    struct {
-			Courses []gin.H `json:"courses"`
+		Items []gin.H `json:"items"`
+		Data  struct {
+			Items []gin.H `json:"items"`
 		} `json:"data"`
 	}{}
-	payload.Courses = courses
-	payload.Data.Courses = courses
+	payload.Items = courses
+	payload.Data.Items = courses
 
 	_ = ec.Set(c.Request.Context(), cacheKey, &payload, cache.TTLMyCoursesList)
 
 	api_response.Success(c, gin.H{
-		"courses": courses,
+		"items": courses,
 		"data": gin.H{
-			"courses": courses,
+			"items": courses,
 		},
 	})
 }

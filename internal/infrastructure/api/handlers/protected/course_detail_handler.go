@@ -14,6 +14,14 @@ import (
 
 // GetCourseDetailHydration returns one consistent public/private snapshot for
 // the course detail page. Protected media is included only for enrolled users.
+// @Summary Get course detail
+// @Description Get the public/private course detail snapshot.
+// @Tags courses
+// @Produce json
+// @Param id path string true "Course ID or slug"
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/v1/courses/{id}/detail [get]
 func GetCourseDetailHydration(c *gin.Context) {
 	database, aborted := safeDB(c)
 	if aborted {

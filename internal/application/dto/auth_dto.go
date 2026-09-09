@@ -104,6 +104,68 @@ type UpdateProfileResponse struct {
 	User    UserDTO `json:"user"`
 }
 
+// UserProfileUpdateRequest is the request body for the canonical
+// /api/users/profile endpoint.
+type UserProfileUpdateRequest struct {
+	Name             *string   `json:"name,omitempty"`
+	Username         *string   `json:"username,omitempty"`
+	Bio              *string   `json:"bio,omitempty"`
+	GradeLevel       *string   `json:"gradeLevel,omitempty"`
+	EducationType    *string   `json:"educationType,omitempty"`
+	Section          *string   `json:"section,omitempty"`
+	Country          *string   `json:"country,omitempty"`
+	Avatar           *string   `json:"avatar,omitempty"`
+	Phone            *string   `json:"phone,omitempty"`
+	AlternativePhone *string   `json:"alternativePhone,omitempty"`
+	BirthDate        *string   `json:"birthDate,omitempty"`
+	Gender           *string   `json:"gender,omitempty"`
+	City             *string   `json:"city,omitempty"`
+	School           *string   `json:"school,omitempty"`
+	StudyGoal        *string   `json:"studyGoal,omitempty"`
+	SubjectsTaught   *[]string `json:"subjectsTaught,omitempty"`
+	ExperienceYears  *string   `json:"experienceYears,omitempty"`
+}
+
+// UserProfileResponse is the data object returned by the canonical profile endpoint.
+type UserProfileResponse struct {
+	ID               string   `json:"id"`
+	Email            string   `json:"email"`
+	Username         string   `json:"username"`
+	Name             string   `json:"name"`
+	Avatar           string   `json:"avatar"`
+	Phone            string   `json:"phone"`
+	PhoneVerified    bool     `json:"phoneVerified"`
+	EmailVerified    bool     `json:"emailVerified"`
+	GradeLevel       string   `json:"gradeLevel"`
+	EducationType    string   `json:"educationType"`
+	Section          string   `json:"section"`
+	Bio              string   `json:"bio"`
+	Country          string   `json:"country"`
+	City             string   `json:"city"`
+	Gender           string   `json:"gender"`
+	School           string   `json:"school"`
+	AlternativePhone string   `json:"alternativePhone"`
+	DateOfBirth      string   `json:"dateOfBirth"`
+	StudyGoal        string   `json:"studyGoal"`
+	SubjectsTaught   []string `json:"subjectsTaught"`
+	ExperienceYears  string   `json:"experienceYears"`
+	MFAEnabled       bool     `json:"mfaEnabled"`
+}
+
+type UserProfileUpdateResponse struct {
+	Message string `json:"message"`
+}
+
+type UserProfileEnvelope struct {
+	Success bool                `json:"success"`
+	Data    UserProfileResponse `json:"data"`
+}
+
+type UserProfileUpdateEnvelope struct {
+	Success bool                      `json:"success"`
+	Data    UserProfileUpdateResponse `json:"data"`
+}
+
 // ─── Delete Account ────────────────────────────────────────────────
 
 type DeleteAccountRequest struct {

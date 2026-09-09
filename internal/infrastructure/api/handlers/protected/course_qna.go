@@ -90,6 +90,12 @@ func isAdminRole(c *gin.Context) bool {
 
 // GetCourseQuestions returns a course's Q&A, optionally filtered to one
 // lesson via ?subTopicId=, each question preloaded with its answers.
+// @Summary Get course questions
+// @Tags courses
+// @Produce json
+// @Param id path string true "Course ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/courses/{id}/questions [get]
 func GetCourseQuestions(c *gin.Context) {
 	id := c.Param("id")
 

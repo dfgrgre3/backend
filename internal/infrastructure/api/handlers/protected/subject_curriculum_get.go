@@ -11,6 +11,12 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// @Summary Get course curriculum
+// @Tags courses
+// @Produce json
+// @Param id path string true "Course ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/courses/{id}/curriculum [get]
 func GetSubjectCurriculum(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" || strings.EqualFold(id, "undefined") || strings.EqualFold(id, "null") {

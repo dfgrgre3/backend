@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	authdto "thanawy-backend/internal/application/dto"
 	authservice "thanawy-backend/internal/domain/auth/service"
 	models "thanawy-backend/internal/domain/common"
 	"thanawy-backend/internal/infrastructure/cache"
@@ -188,11 +189,17 @@ func (h *MFAHandler) DisableMFA(c *gin.Context) {
 	response.Success(c, gin.H{"message": "MFA disabled successfully"})
 }
 
+// @Summary Verify MFA challenge
+// @Description Verify a one-time MFA code and establish a session.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body authdto.VerifyMFARequest true "MFA verification"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /api/v1/auth/mfa/verify [post]
 func (h *MFAHandler) VerifyMFA(c *gin.Context) {
-	var req struct {
-		ChallengeID string `json:"challengeId" binding:"required"`
-		Code        string `json:"code" binding:"required"`
-	}
+	var req authdto.VerifyMFARequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, "Invalid request body")
 		return
