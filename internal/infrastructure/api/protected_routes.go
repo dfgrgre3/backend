@@ -153,8 +153,13 @@ func SetupProtectedRoutes(router *gin.Engine, hexHandlers *application.Handlers)
 			// Lesson Notes & Reviews
 			userRoutes.GET("/courses/lessons/:id/notes", handlers.GetLessonNotes)
 			userRoutes.POST("/courses/lessons/:id/notes", handlers.CreateLessonNote)
+			userRoutes.GET("/courses/lessons/:id/questions", handlers.GetLessonQuestions)
+			userRoutes.POST("/courses/lessons/:id/questions", handlers.CreateLessonQuestion)
 			userRoutes.GET("/courses/lessons/:id/transcript", handlers.GetLessonTranscript)
 			userRoutes.POST("/courses/:id/reviews", handlers.CreateCourseReview)
+			userRoutes.GET("/courses/:id/eligibility", handlers.GetCourseEnrollmentEligibility)
+			userRoutes.POST("/courses/reviews/:reviewId/comments", handlers.CreateCourseReviewComment)
+			userRoutes.DELETE("/courses/reviews/comments/:commentId", handlers.DeleteCourseReviewComment)
 
 			// Q&A (student questions on a course, optionally scoped to a lesson;
 			// instructor replies are flagged automatically, no separate route)

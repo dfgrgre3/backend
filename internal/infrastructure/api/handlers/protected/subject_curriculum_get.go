@@ -8,6 +8,7 @@ import (
 	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 func GetSubjectCurriculum(c *gin.Context) {
@@ -37,7 +38,55 @@ func GetSubjectCurriculum(c *gin.Context) {
 			}
 		}
 
+		curriculum := make([]gin.H, 0, len(subject.Topics))
+		for _, topic := range subject.Topics {
+			lessons := make([]gin.H, 0, len(topic.SubTopics))
+			for _, lesson := range topic.SubTopics {
+				lessons = append(lessons, gin.H{
+					"id": lesson.ID, "name": lesson.Title, "title": lesson.Title,
+					"order": lesson.Order, "durationMinutes": lesson.DurationMinutes,
+					"type": lesson.Type, "isFree": lesson.IsFree,
+					"locked": false, "completed": false,
+				})
+			}
+			curriculum = append(curriculum, gin.H{
+				"id": topic.ID, "name": topic.Title, "title": topic.Title,
+				"order": topic.Order, "subTopics": lessons,
+			})
+		}
+
+		var enrollment *models.Enrollment
+		if userID, ok := getAuthenticatedUserID(c); ok {
+			var row models.Enrollment
+			if db.DB.Where("user_id = ? AND subject_id = ?", userID, subject.ID).First(&row).Error == nil {
+				enrollment = &row
+			}
+		}
+		completedRequiredExams, requiredExams := int64(0), int64(0)
+		completedCourseQuizzes, requiredCourseQuizzes := int64(0), int64(0)
+		if enrollment != nil {
+			userID, _ := getAuthenticatedUserID(c)
+			completedRequiredExams, requiredExams = courseRequiredExamCompletion(userID, subject.ID)
+			completedCourseQuizzes, requiredCourseQuizzes = courseRequiredQuizCompletion(userID, subject.ID)
+		}
 		api_response.Success(c, gin.H{
+			"subject": subject, "enrollment": enrollment,
+			"completion": gin.H{
+				"isComplete": enrollment != nil && enrollment.Progress.GreaterThanOrEqual(decimal.NewFromInt(100)),
+				"progress": func() float64 {
+					if enrollment == nil {
+						return 0
+					}
+					value, _ := enrollment.Progress.Float64()
+					return value
+				}(),
+				"certificateEligible":    enrollment != nil && enrollment.Progress.GreaterThanOrEqual(decimal.NewFromInt(100)) && subject.HasCertificate,
+				"completedRequiredExams": completedRequiredExams,
+				"requiredExams":          requiredExams,
+				"completedCourseQuizzes": completedCourseQuizzes,
+				"requiredCourseQuizzes":  requiredCourseQuizzes,
+			},
+			"curriculum": curriculum,
 			"stats": gin.H{
 				"chaptersCount":        chaptersCount,
 				"lessonsCount":         lessonsCount,

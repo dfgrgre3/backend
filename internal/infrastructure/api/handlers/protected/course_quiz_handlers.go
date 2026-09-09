@@ -17,6 +17,7 @@ import (
 )
 
 type courseQuizInput struct {
+	ID                     *string         `json:"id"`
 	LessonID               *string         `json:"lessonId"`
 	Title                  string          `json:"title" binding:"required"`
 	Description            string          `json:"description"`
@@ -56,8 +57,9 @@ func quizCourseAccess(c *gin.Context, courseID, userID string) bool {
 func publicQuestion(question map[string]interface{}) map[string]interface{} {
 	for _, key := range []string{
 		"isCorrect", "referenceAnswer", "graderNotes", "gradingMethod",
+		"blanks",
 		"correctOption", "correctOptionId", "correctAnswer", "acceptedAnswers",
-		"answer", "answers", "blanks", "orderItems", "matchPairs", "matchTarget",
+		"answer", "answers", "orderItems", "matchPairs", "matchTarget",
 	} {
 		delete(question, key)
 	}
@@ -283,6 +285,15 @@ func StartCourseQuiz(c *gin.Context) {
 	var quiz models.CourseQuiz
 	if err := db.ReadDB().Where("id = ? AND course_id = ?", quizID, courseID).First(&quiz).Error; err != nil {
 		api_response.Error(c, http.StatusNotFound, "Quiz not found")
+		return
+	}
+	var activeAttempt models.CourseQuizAttempt
+	if err := db.ReadDB().Where("quiz_id = ? AND user_id = ? AND status = ?", quiz.ID, userID, "in_progress").Order("started_at DESC").First(&activeAttempt).Error; err == nil {
+		deadline := ""
+		if quiz.TimeLimitMinutes != nil {
+			deadline = activeAttempt.StartedAt.Add(time.Duration(*quiz.TimeLimitMinutes) * time.Minute).Format(time.RFC3339)
+		}
+		api_response.Success(c, gin.H{"attemptId": activeAttempt.ID, "startedAt": activeAttempt.StartedAt, "deadline": deadline})
 		return
 	}
 	var attempts int64

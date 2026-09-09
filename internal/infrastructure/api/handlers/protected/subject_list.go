@@ -60,7 +60,7 @@ func GetSubjects(c *gin.Context) {
 		return
 	}
 	var subjects []models.Subject
-	query := readDB.Model(&models.Subject{})
+	query := readDB.Model(&models.Subject{}).Preload("Tags")
 
 	// Apply filters once and reuse
 	query = buildSubjectFilters(query, c)

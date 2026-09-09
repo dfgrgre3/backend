@@ -52,32 +52,39 @@ func isValidCourseStatus(status string) bool {
 	}
 }
 
-// fetchTopicCounts retrieves topic counts for multiple subjects in a single query
-func fetchTopicCounts(ctx context.Context, subjectIDs []string) map[string]int64 {
+type subjectCurriculumCounts struct {
+	Topics  int64
+	Lessons int64
+}
+
+// fetchTopicCounts retrieves chapter and lesson counts for multiple subjects.
+func fetchTopicCounts(ctx context.Context, subjectIDs []string) map[string]subjectCurriculumCounts {
 	if len(subjectIDs) == 0 {
-		return map[string]int64{}
+		return map[string]subjectCurriculumCounts{}
 	}
 
 	type countResult struct {
 		SubjectID string
-		Count     int64
+		Topics    int64
+		Lessons   int64
 	}
-	var topicCounts []countResult
+	var counts []countResult
 	db.ReadDB(ctx).Table("Topic").
-		Select("subject_id, count(*) as count").
+		Select(`"Topic".subject_id, count(DISTINCT "Topic".id) as topics, count("SubTopic".id) as lessons`).
+		Joins(`LEFT JOIN "SubTopic" ON "SubTopic".topic_id = "Topic".id AND "SubTopic".deleted_at IS NULL`).
 		Where("subject_id IN ?", subjectIDs).
-		Group("subject_id").
-		Scan(&topicCounts)
+		Group(`"Topic".subject_id`).
+		Scan(&counts)
 
-	topicCountMap := make(map[string]int64)
-	for _, c := range topicCounts {
-		topicCountMap[c.SubjectID] = c.Count
+	countMap := make(map[string]subjectCurriculumCounts)
+	for _, c := range counts {
+		countMap[c.SubjectID] = subjectCurriculumCounts{Topics: c.Topics, Lessons: c.Lessons}
 	}
-	return topicCountMap
+	return countMap
 }
 
 // buildSubjectListResponse creates a standardized response for subject lists
-func buildSubjectListResponse(subjects []models.Subject, topicCountMap map[string]int64) []gin.H {
+func buildSubjectListResponse(subjects []models.Subject, topicCountMap map[string]subjectCurriculumCounts) []gin.H {
 	items := make([]gin.H, 0, len(subjects))
 	for _, subject := range subjects {
 		items = append(items, gin.H{
@@ -109,9 +116,17 @@ func buildSubjectListResponse(subjects []models.Subject, topicCountMap map[strin
 			"enrolledCount":          subject.EnrolledCount,
 			"createdAt":              subject.CreatedAt,
 			"updatedAt":              subject.UpdatedAt,
+			"tags": func() []string {
+				tags := make([]string, 0, len(subject.Tags))
+				for _, tag := range subject.Tags {
+					tags = append(tags, tag.Name)
+				}
+				return tags
+			}(),
 			"_count": gin.H{
 				"enrollments": subject.EnrolledCount,
-				"topics":      topicCountMap[subject.ID],
+				"topics":      topicCountMap[subject.ID].Topics,
+				"lessons":     topicCountMap[subject.ID].Lessons,
 				"reviews":     0,
 				"teachers":    0,
 			},

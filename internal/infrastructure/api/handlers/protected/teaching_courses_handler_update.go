@@ -10,6 +10,7 @@ import (
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
@@ -44,28 +45,39 @@ func TeachingUpdateCourse(c *gin.Context) {
 	}
 
 	var input struct {
-		Title       *string  `json:"title"`
-		Description *string  `json:"description"`
-		Thumbnail   *string  `json:"thumbnail"`
-		Price       *float64 `json:"price"`
-		Status      *string  `json:"status"`
-		Level       *string  `json:"level"`
-		Language    *string  `json:"language"`
-		CategoryID  *string  `json:"categoryId"`
-		TrailerUrl  *string  `json:"trailerUrl"`
-		ShortDesc   *string  `json:"shortDescription"`
-		LongDesc    *string  `json:"longDescription"`
+		Title       *string            `json:"title"`
+		Description *string            `json:"description"`
+		Thumbnail   *string            `json:"thumbnail"`
+		Price       *float64           `json:"price"`
+		Status      *string            `json:"status"`
+		Level       *string            `json:"level"`
+		Language    *string            `json:"language"`
+		CategoryID  *string            `json:"categoryId"`
+		Quiz        *courseQuizInput   `json:"quiz"`
+		Quizzes     []*courseQuizInput `json:"quizzes"`
+		TrailerUrl  *string            `json:"trailerUrl"`
+		ShortDesc   *string            `json:"shortDescription"`
+		LongDesc    *string            `json:"longDescription"`
 		Chapters    *[]struct {
 			ID      string `json:"id"`
 			Title   string `json:"title"`
 			Lessons []struct {
-				ID              string `json:"id"`
-				Title           string `json:"title"`
+				ID          string  `json:"id"`
+				Title       string  `json:"title"`
+				Description *string `json:"description"`
+				Content     *string `json:"content"`
+				VideoURL    *string `json:"videoUrl"`
+				ExamID      *string `json:"examId"`
+				Attachments []struct {
+					Title    string `json:"title"`
+					FileURL  string `json:"fileUrl"`
+					FileType string `json:"fileType"`
+					FileSize int64  `json:"fileSize"`
+				} `json:"attachments"`
 				DurationMinutes *int   `json:"durationMinutes"`
 				Duration        string `json:"duration"` // legacy clients
 				Type            string `json:"type"`
-				URL             string `json:"url"`
-				Preview         bool   `json:"isPreview"`
+				Preview         bool   `json:"isFree"`
 			} `json:"lessons"`
 		} `json:"chapters"`
 	}
@@ -164,17 +176,40 @@ func TeachingUpdateCourse(c *gin.Context) {
 						TopicID:         topic.ID,
 						Title:           strings.TrimSpace(lesson.Title),
 						Type:            normalizeTeachingLessonType(lesson.Type),
-						VideoUrl:        strPtr(strings.TrimSpace(lesson.URL)),
+						Description:     lesson.Description,
+						Content:         lesson.Content,
+						VideoUrl:        lesson.VideoURL,
+						ExamID:          lesson.ExamID,
 						IsFree:          lesson.Preview,
 						Order:           lessonIndex + 1,
 						DurationMinutes: lessonDurationMinutes(lesson.DurationMinutes, lesson.Duration),
 					}
+					if uuid.Validate(strings.TrimSpace(lesson.ID)) == nil {
+						subTopic.ID = strings.TrimSpace(lesson.ID)
+					}
 					if err := tx.Create(&subTopic).Error; err != nil {
 						return err
+					}
+					for _, attachment := range lesson.Attachments {
+						if strings.TrimSpace(attachment.Title) == "" || strings.TrimSpace(attachment.FileURL) == "" {
+							continue
+						}
+						if err := tx.Create(&models.LessonAttachment{
+							SubTopicID: subTopic.ID,
+							Title:      strings.TrimSpace(attachment.Title),
+							FileUrl:    strings.TrimSpace(attachment.FileURL),
+							FileType:   strings.TrimSpace(attachment.FileType),
+							FileSize:   attachment.FileSize,
+						}).Error; err != nil {
+							return err
+						}
 					}
 					responseLessons = append(responseLessons, gin.H{"id": subTopic.ID, "title": subTopic.Title, "type": string(subTopic.Type), "durationMinutes": subTopic.DurationMinutes, "isPreview": subTopic.IsFree})
 				}
 				responseChapters = append(responseChapters, gin.H{"id": topic.ID, "title": topic.Title, "lessons": responseLessons})
+			}
+			if err := persistTeachingQuizzes(tx, subject.ID, userID, input.Quizzes, input.Quiz); err != nil {
+				return err
 			}
 			return nil
 		})
@@ -183,6 +218,12 @@ func TeachingUpdateCourse(c *gin.Context) {
 			return
 		}
 		getSubjectRepo().InvalidateSubjectCache(subject.ID)
+	}
+	if input.Chapters == nil {
+		if err := persistTeachingQuizzes(database, subject.ID, userID, input.Quizzes, input.Quiz); err != nil {
+			api_response.Error(c, http.StatusInternalServerError, "Failed to save course quiz")
+			return
+		}
 	}
 
 	response := gin.H{"message": "Course updated successfully"}

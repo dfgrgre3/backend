@@ -10,6 +10,7 @@ import (
 	db "thanawy-backend/internal/infrastructure/database"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func CreateCourseReview(c *gin.Context) {
@@ -98,6 +99,8 @@ func GetCourseReviews(c *gin.Context) {
 
 	if err := db.DB.WithContext(c.Request.Context()).
 		Preload("User").
+		Preload("Comments", func(q *gorm.DB) *gorm.DB { return q.Order("created_at ASC") }).
+		Preload("Comments.User").
 		Where("subject_id = ? AND is_visible = ?", subject.ID, true).
 		Limit(limit).
 		Offset(offset).
@@ -107,4 +110,69 @@ func GetCourseReviews(c *gin.Context) {
 	}
 
 	api_response.Success(c, reviews)
+}
+
+func CreateCourseReviewComment(c *gin.Context) {
+	userID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		api_response.Error(c, http.StatusUnauthorized, authRequired)
+		return
+	}
+	var review models.CourseReview
+	if err := db.DB.WithContext(c.Request.Context()).Where(idQuery, c.Param("reviewId")).First(&review).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Review not found")
+		return
+	}
+	if !isEnrolledInSubject(userID, review.SubjectID) && !isReviewManagerOrInstructor(c, userID, review.SubjectID) {
+		api_response.Error(c, http.StatusForbidden, "Course enrollment is required")
+		return
+	}
+	var body struct {
+		Comment string `json:"comment" binding:"required,min=1,max=2000"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		api_response.Error(c, http.StatusBadRequest, msgInvalidInput)
+		return
+	}
+	comment := models.StudentReviewComment{ReviewID: review.ID, UserID: userID, Comment: body.Comment}
+	if err := SafeCreate(db.DB, &comment); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to create review comment")
+		return
+	}
+	api_response.Created(c, gin.H{"comment": comment})
+}
+
+func DeleteCourseReviewComment(c *gin.Context) {
+	userID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		api_response.Error(c, http.StatusUnauthorized, authRequired)
+		return
+	}
+	var comment models.StudentReviewComment
+	if err := db.DB.Where(idQuery, c.Param("commentId")).First(&comment).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Review comment not found")
+		return
+	}
+	var review models.CourseReview
+	if err := db.DB.Select("subject_id").Where(idQuery, comment.ReviewID).First(&review).Error; err != nil {
+		api_response.Error(c, http.StatusNotFound, "Review not found")
+		return
+	}
+	if comment.UserID != userID && !isReviewManagerOrInstructor(c, userID, review.SubjectID) {
+		api_response.Error(c, http.StatusForbidden, "You are not allowed to delete this comment")
+		return
+	}
+	if err := db.DB.Delete(&comment).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to delete review comment")
+		return
+	}
+	api_response.Success(c, gin.H{"deleted": true})
+}
+
+func isReviewManagerOrInstructor(c *gin.Context, userID, subjectID string) bool {
+	if isAdminRole(c) || c.GetString("role") == "MODERATOR" {
+		return true
+	}
+	var subject models.Subject
+	return db.DB.Select("instructor_id").Where(idQuery, subjectID).First(&subject).Error == nil && subject.InstructorId != nil && *subject.InstructorId == userID
 }

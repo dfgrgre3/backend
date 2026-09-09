@@ -23,6 +23,7 @@ type Lesson struct {
 	ExternalLinkTitle string `json:"externalLinkTitle,omitempty"`
 	Type              string `json:"type"`
 	IsFree            bool   `json:"isFree"`
+	Locked            bool   `json:"locked"`
 	Order             int    `json:"order"`
 	DurationMinutes   int    `json:"durationMinutes"`
 	ExamID            string `json:"examId,omitempty"`

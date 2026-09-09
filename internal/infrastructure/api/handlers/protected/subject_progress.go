@@ -108,6 +108,9 @@ func UpdateLessonProgress(c *gin.Context) {
 	if isCourseComplete {
 		courseProgress = 100
 	}
+	var subject models.Subject
+	_ = db.ReadDB().Select("has_certificate").Where(idQuery, lesson.Topic.SubjectID).First(&subject).Error
+	certificateEligible := isCourseComplete && subject.HasCertificate
 	if err := db.WriteDB().Model(&enrollment).Updates(map[string]interface{}{"progress": courseProgress}).Error; err != nil {
 		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to update course progress", err)
 		return
@@ -127,6 +130,7 @@ func UpdateLessonProgress(c *gin.Context) {
 		"lessonProgress":         lessonProgress,
 		"courseProgress":         courseProgress,
 		"isCourseComplete":       isCourseComplete,
+		"certificateEligible":    certificateEligible,
 		"completedLessons":       completedLessons,
 		"totalLessons":           totalLessons,
 		"requiredExams":          requiredExams,

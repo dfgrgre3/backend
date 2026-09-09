@@ -190,7 +190,21 @@ type CourseReview struct {
 	DeletedAt gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
 
 	// Relations
-	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	User     User                   `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Comments []StudentReviewComment `gorm:"foreignKey:ReviewID" json:"comments,omitempty"`
+}
+
+// CourseReviewComment is a public discussion reply attached to one student
+// review. It is intentionally separate from workflow review comments.
+type StudentReviewComment struct {
+	ID        string         `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	ReviewID  string         `gorm:"not null;index;type:uuid;column:review_id;constraint:OnDelete:CASCADE" json:"reviewId"`
+	UserID    string         `gorm:"not null;index;type:uuid;column:user_id;constraint:OnDelete:CASCADE" json:"userId"`
+	Comment   string         `gorm:"not null;type:text;column:comment" json:"comment"`
+	CreatedAt time.Time      `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt time.Time      `gorm:"column:updated_at" json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index;column:deleted_at" json:"-"`
+	User      User           `gorm:"foreignKey:UserID" json:"user,omitempty"`
 }
 
 func (Subject) TableName() string {
@@ -271,6 +285,15 @@ func (cr *CourseReview) BeforeCreate(tx *gorm.DB) (err error) {
 	}
 	cr.IsVisible = true
 	return
+}
+
+func (StudentReviewComment) TableName() string { return "StudentCourseReviewComment" }
+
+func (cc *StudentReviewComment) BeforeCreate(tx *gorm.DB) (err error) {
+	if cc.ID == "" {
+		cc.ID = uuid.New().String()
+	}
+	return nil
 }
 
 // CourseQuestion is a student-asked question on a course, optionally scoped

@@ -10,6 +10,7 @@ import (
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
@@ -26,25 +27,36 @@ func TeachingCreateCourse(c *gin.Context) {
 	}
 
 	var input struct {
-		Title       string  `json:"title" binding:"required"`
-		Description string  `json:"description"`
-		Thumbnail   string  `json:"thumbnail"`
-		Price       float64 `json:"price"`
-		Status      string  `json:"status"`
-		Level       string  `json:"level"`
-		Language    string  `json:"language"`
-		CategoryID  *string `json:"categoryId"`
+		Title       string             `json:"title" binding:"required"`
+		Description string             `json:"description"`
+		Thumbnail   string             `json:"thumbnail"`
+		Price       float64            `json:"price"`
+		Status      string             `json:"status"`
+		Level       string             `json:"level"`
+		Language    string             `json:"language"`
+		CategoryID  *string            `json:"categoryId"`
+		Quiz        *courseQuizInput   `json:"quiz"`
+		Quizzes     []*courseQuizInput `json:"quizzes"`
 		Chapters    []struct {
 			ID      string `json:"id"`
 			Title   string `json:"title"`
 			Lessons []struct {
-				ID              string `json:"id"`
-				Title           string `json:"title"`
+				ID          string  `json:"id"`
+				Title       string  `json:"title"`
+				Description *string `json:"description"`
+				Content     *string `json:"content"`
+				VideoURL    *string `json:"videoUrl"`
+				ExamID      *string `json:"examId"`
+				Attachments []struct {
+					Title    string `json:"title"`
+					FileURL  string `json:"fileUrl"`
+					FileType string `json:"fileType"`
+					FileSize int64  `json:"fileSize"`
+				} `json:"attachments"`
 				DurationMinutes *int   `json:"durationMinutes"`
 				Duration        string `json:"duration"` // legacy clients
 				Type            string `json:"type"`
-				URL             string `json:"url"`
-				Preview         bool   `json:"isPreview"`
+				Preview         bool   `json:"isFree"`
 			} `json:"lessons"`
 		} `json:"chapters"`
 	}
@@ -84,8 +96,14 @@ func TeachingCreateCourse(c *gin.Context) {
 		IsActive:      true,
 		IsPublished:   status == models.CourseStatusPublished,
 	}
+	tx := database.Begin()
+	if tx.Error != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to start course transaction")
+		return
+	}
+	defer tx.Rollback()
 
-	if err := database.Create(&subject).Error; err != nil {
+	if err := tx.Create(&subject).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to create course")
 		return
 	}
@@ -106,7 +124,7 @@ func TeachingCreateCourse(c *gin.Context) {
 			Title:     ch.Title,
 			Order:     i + 1,
 		}
-		if err := database.Create(&topic).Error; err != nil {
+		if err := tx.Create(&topic).Error; err != nil {
 			creationWarnings = append(creationWarnings, fmt.Sprintf("chapter %q was not saved: %v", ch.Title, err))
 			continue
 		}
@@ -118,26 +136,59 @@ func TeachingCreateCourse(c *gin.Context) {
 				TopicID:         topic.ID,
 				Title:           les.Title,
 				Type:            normalizeTeachingLessonType(les.Type),
-				VideoUrl:        strPtr(les.URL),
+				Description:     les.Description,
+				Content:         les.Content,
+				VideoUrl:        les.VideoURL,
+				ExamID:          les.ExamID,
 				IsFree:          les.Preview,
 				Order:           j + 1,
 				DurationMinutes: durationMinutes,
 			}
-			if err := database.Create(&subTopic).Error; err != nil {
+			if uuid.Validate(strings.TrimSpace(les.ID)) == nil {
+				subTopic.ID = strings.TrimSpace(les.ID)
+			}
+			if err := tx.Create(&subTopic).Error; err != nil {
 				creationWarnings = append(creationWarnings, fmt.Sprintf("lesson %q was not saved: %v", les.Title, err))
 				continue
+			}
+			for _, attachment := range les.Attachments {
+				if strings.TrimSpace(attachment.Title) == "" || strings.TrimSpace(attachment.FileURL) == "" {
+					continue
+				}
+				if err := tx.Create(&models.LessonAttachment{
+					SubTopicID: subTopic.ID,
+					Title:      strings.TrimSpace(attachment.Title),
+					FileUrl:    strings.TrimSpace(attachment.FileURL),
+					FileType:   strings.TrimSpace(attachment.FileType),
+					FileSize:   attachment.FileSize,
+				}).Error; err != nil {
+					creationWarnings = append(creationWarnings, fmt.Sprintf("attachment for lesson %q was not saved: %v", les.Title, err))
+				}
 			}
 			responseLessons = append(responseLessons, gin.H{"id": subTopic.ID, "title": subTopic.Title, "type": string(subTopic.Type), "durationMinutes": subTopic.DurationMinutes, "isPreview": subTopic.IsFree})
 		}
 		responseChapters = append(responseChapters, gin.H{"id": topic.ID, "title": topic.Title, "lessons": responseLessons})
 	}
+	if len(creationWarnings) > 0 {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to save course curriculum: "+strings.Join(creationWarnings, "; "))
+		return
+	}
 
 	// Count created lessons
+	if err := persistTeachingQuizzes(tx, subject.ID, userID, input.Quizzes, input.Quiz); err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to save course quiz")
+		return
+	}
 	var lessonsCount int64
-	database.Model(&models.SubTopic{}).
+	tx.Model(&models.SubTopic{}).
 		Joins("JOIN topic ON topic.id = sub_topic.topic_id").
 		Where("topic.subject_id = ?", subject.ID).
 		Count(&lessonsCount)
+	if err := tx.Commit().Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Failed to commit course")
+		return
+	}
+	getSubjectRepo().InvalidateSubjectCache(subject.ID)
 
 	response := gin.H{
 		"course": gin.H{
