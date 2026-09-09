@@ -1,6 +1,6 @@
 basePath: /api
 definitions:
-  handlers.ConversionEventRequest:
+  internal_infrastructure_api_handlers_protected.ConversionEventRequest:
     properties:
       goal:
         type: string
@@ -20,7 +20,7 @@ definitions:
     - timestamp
     - userId
     type: object
-  handlers.CreateBackupRequest:
+  internal_infrastructure_api_handlers_protected.CreateBackupRequest:
     properties:
       includesDatabase:
         type: boolean
@@ -48,7 +48,7 @@ definitions:
     - name
     - type
     type: object
-  handlers.CreateTicketRequest:
+  internal_infrastructure_api_handlers_protected.CreateTicketRequest:
     properties:
       category:
         enum:
@@ -83,7 +83,7 @@ definitions:
     - subject
     - userId
     type: object
-  handlers.CustomReportRequest:
+  internal_infrastructure_api_handlers_protected.CustomReportRequest:
     properties:
       dateRange:
         properties:
@@ -97,7 +97,7 @@ definitions:
         type: string
       filters:
         items:
-          $ref: '#/definitions/handlers.ReportFilter'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.ReportFilter'
         type: array
       isPublic:
         type: boolean
@@ -123,27 +123,35 @@ definitions:
         type: object
       widgets:
         items:
-          $ref: '#/definitions/handlers.ReportWidget'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.ReportWidget'
         minItems: 1
         type: array
     required:
     - name
     - widgets
     type: object
-  handlers.LoginRequest:
+  internal_infrastructure_api_handlers_protected.MegaMenuTrackRequest:
     properties:
-      email:
+      component:
+        description: '"mega_menu"'
         type: string
-      password:
-        minLength: 6
+      label:
+        description: menu label
         type: string
-      rememberMe:
-        type: boolean
+      metadata:
+        additionalProperties: true
+        description: 'e.g. { trigger: "toggle" }'
+        type: object
+      timestamp:
+        description: client epoch ms
+        type: integer
+      type:
+        description: '"open" | "close"'
+        type: string
     required:
-    - email
-    - password
+    - type
     type: object
-  handlers.NotificationRequest:
+  internal_infrastructure_api_handlers_protected.NotificationRequest:
     properties:
       actionUrl:
         type: string
@@ -184,16 +192,16 @@ definitions:
     - title
     - userIds
     type: object
-  handlers.NotificationResponse:
+  internal_infrastructure_api_handlers_protected.NotificationResponse:
     properties:
       broadcastId:
         type: string
       queued:
         type: boolean
       summary:
-        $ref: '#/definitions/handlers.NotificationSummary'
+        $ref: '#/definitions/internal_infrastructure_api_handlers_protected.NotificationSummary'
     type: object
-  handlers.NotificationSummary:
+  internal_infrastructure_api_handlers_protected.NotificationSummary:
     properties:
       failure:
         type: integer
@@ -204,7 +212,25 @@ definitions:
       total:
         type: integer
     type: object
-  handlers.ReportDimension:
+  internal_infrastructure_api_handlers_protected.PromoEventRequest:
+    properties:
+      component:
+        type: string
+      eventType:
+        type: string
+      id:
+        type: string
+      metadata:
+        additionalProperties: true
+        type: object
+      promoId:
+        type: string
+      timestamp:
+        type: integer
+      type:
+        type: string
+    type: object
+  internal_infrastructure_api_handlers_protected.ReportDimension:
     properties:
       field:
         type: string
@@ -220,7 +246,7 @@ definitions:
     - field
     - label
     type: object
-  handlers.ReportFilter:
+  internal_infrastructure_api_handlers_protected.ReportFilter:
     properties:
       field:
         type: string
@@ -240,7 +266,7 @@ definitions:
     - operator
     - value
     type: object
-  handlers.ReportMetric:
+  internal_infrastructure_api_handlers_protected.ReportMetric:
     properties:
       aggregation:
         enum:
@@ -267,7 +293,7 @@ definitions:
     - field
     - name
     type: object
-  handlers.ReportSort:
+  internal_infrastructure_api_handlers_protected.ReportSort:
     properties:
       direction:
         enum:
@@ -280,17 +306,17 @@ definitions:
     - direction
     - field
     type: object
-  handlers.ReportWidget:
+  internal_infrastructure_api_handlers_protected.ReportWidget:
     properties:
       dataSource:
         type: string
       dimensions:
         items:
-          $ref: '#/definitions/handlers.ReportDimension'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.ReportDimension'
         type: array
       filters:
         items:
-          $ref: '#/definitions/handlers.ReportFilter'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.ReportFilter'
         type: array
       id:
         type: string
@@ -301,10 +327,10 @@ definitions:
         type: integer
       metrics:
         items:
-          $ref: '#/definitions/handlers.ReportMetric'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.ReportMetric'
         type: array
       sort:
-        $ref: '#/definitions/handlers.ReportSort'
+        $ref: '#/definitions/internal_infrastructure_api_handlers_protected.ReportSort'
       title:
         type: string
       type:
@@ -323,7 +349,7 @@ definitions:
     - title
     - type
     type: object
-  handlers.RestoreBackupRequest:
+  internal_infrastructure_api_handlers_protected.RestoreBackupRequest:
     properties:
       dryRun:
         type: boolean
@@ -334,7 +360,7 @@ definitions:
           type: string
         type: array
     type: object
-  handlers.ScheduleBackupRequest:
+  internal_infrastructure_api_handlers_protected.ScheduleBackupRequest:
     properties:
       dayOfMonth:
         maximum: 31
@@ -369,7 +395,7 @@ definitions:
     - time
     - type
     type: object
-  handlers.ScheduledItemRequest:
+  internal_infrastructure_api_handlers_protected.ScheduledItemRequest:
     properties:
       content:
         additionalProperties: true
@@ -409,7 +435,41 @@ definitions:
     - title
     - type
     type: object
-  handlers.SendMessageRequest:
+  internal_infrastructure_api_handlers_protected.SearchHistoryRequest:
+    properties:
+      metadata:
+        additionalProperties: true
+        type: object
+      query:
+        type: string
+      results:
+        type: integer
+      timestamp:
+        type: integer
+      type:
+        description: course, resource, teacher, video, all
+        type: string
+    required:
+    - query
+    type: object
+  internal_infrastructure_api_handlers_protected.SearchResultItem:
+    properties:
+      category:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      relevance:
+        type: integer
+      title:
+        type: string
+      type:
+        type: string
+      url:
+        type: string
+    type: object
+  internal_infrastructure_api_handlers_protected.SendMessageRequest:
     properties:
       isInternal:
         type: boolean
@@ -419,7 +479,16 @@ definitions:
     required:
     - message
     type: object
-  handlers.UpdateTicketPriorityRequest:
+  internal_infrastructure_api_handlers_protected.UnifiedSearchResponse:
+    properties:
+      results:
+        items:
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.SearchResultItem'
+        type: array
+      total:
+        type: integer
+    type: object
+  internal_infrastructure_api_handlers_protected.UpdateTicketPriorityRequest:
     properties:
       priority:
         enum:
@@ -431,7 +500,7 @@ definitions:
     required:
     - priority
     type: object
-  handlers.UpdateTicketStatusRequest:
+  internal_infrastructure_api_handlers_protected.UpdateTicketStatusRequest:
     properties:
       status:
         enum:
@@ -444,7 +513,7 @@ definitions:
     required:
     - status
     type: object
-  handlers.UserJourneyRequest:
+  internal_infrastructure_api_handlers_protected.UserJourneyRequest:
     properties:
       completed:
         type: boolean
@@ -458,7 +527,7 @@ definitions:
         type: string
       steps:
         items:
-          $ref: '#/definitions/handlers.UserJourneyStep'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.UserJourneyStep'
         type: array
       totalDuration:
         type: integer
@@ -467,10 +536,9 @@ definitions:
     required:
     - sessionId
     - startedAt
-    - steps
     - userId
     type: object
-  handlers.UserJourneyStep:
+  internal_infrastructure_api_handlers_protected.UserJourneyStep:
     properties:
       action:
         type: string
@@ -490,7 +558,1042 @@ definitions:
       userId:
         type: string
     type: object
-  pagination.PaginatedResponse:
+  thanawy-backend_internal_application_dto.CourseDetailData:
+    properties:
+      course:
+        $ref: '#/definitions/thanawy-backend_internal_domain_common.Subject'
+      subject:
+        $ref: '#/definitions/thanawy-backend_internal_domain_common.Subject'
+    type: object
+  thanawy-backend_internal_application_dto.CourseDetailResponse:
+    properties:
+      data:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.CourseDetailData'
+      enrollment:
+        $ref: '#/definitions/thanawy-backend_internal_domain_common.Enrollment'
+      subject:
+        $ref: '#/definitions/thanawy-backend_internal_domain_common.Subject'
+      success:
+        type: boolean
+    type: object
+  thanawy-backend_internal_application_dto.CourseListData:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/thanawy-backend_internal_domain_common.Subject'
+        type: array
+      offset:
+        type: integer
+      pagination:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.Pagination'
+    type: object
+  thanawy-backend_internal_application_dto.CourseListResponse:
+    properties:
+      data:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.CourseListData'
+      success:
+        type: boolean
+    type: object
+  thanawy-backend_internal_application_dto.LoginRequest:
+    properties:
+      deviceName:
+        type: string
+      email:
+        type: string
+      fingerprint:
+        type: string
+      password:
+        minLength: 8
+        type: string
+      rememberMe:
+        type: boolean
+    required:
+    - email
+    - password
+    type: object
+  thanawy-backend_internal_application_dto.LoginResponse:
+    properties:
+      accessToken:
+        type: string
+      refreshToken:
+        type: string
+      user:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.UserDTO'
+    type: object
+  thanawy-backend_internal_application_dto.Pagination:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+      totalPages:
+        type: integer
+    type: object
+  thanawy-backend_internal_application_dto.TeachingChapterContract:
+    properties:
+      id:
+        type: string
+      lessons:
+        items:
+          $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingLessonContract'
+        type: array
+      title:
+        type: string
+    type: object
+  thanawy-backend_internal_application_dto.TeachingCourseContract:
+    properties:
+      category:
+        type: string
+      categoryId:
+        type: string
+      chapters:
+        items:
+          $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingChapterContract'
+        type: array
+      createdDate:
+        type: string
+      description:
+        type: string
+      duration:
+        type: string
+      id:
+        type: string
+      language:
+        type: string
+      lessonsCount:
+        type: integer
+      level:
+        type: string
+      price:
+        type: number
+      rating:
+        type: number
+      shortDescription:
+        type: string
+      status:
+        type: string
+      studentsCount:
+        type: integer
+      thumbnail:
+        type: string
+      title:
+        type: string
+    type: object
+  thanawy-backend_internal_application_dto.TeachingCourseData:
+    properties:
+      course:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingCourseContract'
+    type: object
+  thanawy-backend_internal_application_dto.TeachingCourseDeleteData:
+    properties:
+      deleted:
+        type: boolean
+    type: object
+  thanawy-backend_internal_application_dto.TeachingCourseDeleteResponse:
+    properties:
+      data:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingCourseDeleteData'
+      success:
+        type: boolean
+    type: object
+  thanawy-backend_internal_application_dto.TeachingCourseMutationData:
+    properties:
+      course:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingCourseContract'
+      message:
+        type: string
+      warnings:
+        items:
+          type: string
+        type: array
+    type: object
+  thanawy-backend_internal_application_dto.TeachingCourseMutationResponse:
+    properties:
+      data:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingCourseMutationData'
+      success:
+        type: boolean
+    type: object
+  thanawy-backend_internal_application_dto.TeachingCourseResponse:
+    properties:
+      data:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingCourseData'
+      success:
+        type: boolean
+    type: object
+  thanawy-backend_internal_application_dto.TeachingCoursesListData:
+    properties:
+      courses:
+        items:
+          $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingCourseContract'
+        type: array
+      pagination:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingPaginationContract'
+    type: object
+  thanawy-backend_internal_application_dto.TeachingCoursesListResponse:
+    properties:
+      data:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingCoursesListData'
+      success:
+        type: boolean
+    type: object
+  thanawy-backend_internal_application_dto.TeachingLessonContract:
+    properties:
+      duration:
+        type: string
+      durationMinutes:
+        type: integer
+      id:
+        type: string
+      isPreview:
+        type: boolean
+      title:
+        type: string
+      type:
+        type: string
+    type: object
+  thanawy-backend_internal_application_dto.TeachingPaginationContract:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+      totalPages:
+        type: integer
+    type: object
+  thanawy-backend_internal_application_dto.UserDTO:
+    properties:
+      avatar:
+        type: string
+      email:
+        type: string
+      emailVerified:
+        type: boolean
+      id:
+        type: string
+      name:
+        type: string
+      permissions:
+        items:
+          type: string
+        type: array
+      phoneVerified:
+        type: boolean
+      role:
+        type: string
+      status:
+        type: string
+      username:
+        type: string
+    type: object
+  thanawy-backend_internal_application_dto.UserProfileEnvelope:
+    properties:
+      data:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.UserProfileResponse'
+      success:
+        type: boolean
+    type: object
+  thanawy-backend_internal_application_dto.UserProfileResponse:
+    properties:
+      alternativePhone:
+        type: string
+      avatar:
+        type: string
+      bio:
+        type: string
+      city:
+        type: string
+      country:
+        type: string
+      dateOfBirth:
+        type: string
+      educationType:
+        type: string
+      email:
+        type: string
+      emailVerified:
+        type: boolean
+      experienceYears:
+        type: string
+      gender:
+        type: string
+      gradeLevel:
+        type: string
+      id:
+        type: string
+      mfaEnabled:
+        type: boolean
+      name:
+        type: string
+      phone:
+        type: string
+      phoneVerified:
+        type: boolean
+      school:
+        type: string
+      section:
+        type: string
+      studyGoal:
+        type: string
+      subjectsTaught:
+        items:
+          type: string
+        type: array
+      username:
+        type: string
+    type: object
+  thanawy-backend_internal_application_dto.UserProfileUpdateEnvelope:
+    properties:
+      data:
+        $ref: '#/definitions/thanawy-backend_internal_application_dto.UserProfileUpdateResponse'
+      success:
+        type: boolean
+    type: object
+  thanawy-backend_internal_application_dto.UserProfileUpdateRequest:
+    properties:
+      alternativePhone:
+        type: string
+      avatar:
+        type: string
+      bio:
+        type: string
+      birthDate:
+        type: string
+      city:
+        type: string
+      country:
+        type: string
+      educationType:
+        type: string
+      experienceYears:
+        type: string
+      gender:
+        type: string
+      gradeLevel:
+        type: string
+      name:
+        type: string
+      phone:
+        type: string
+      school:
+        type: string
+      section:
+        type: string
+      studyGoal:
+        type: string
+      subjectsTaught:
+        items:
+          type: string
+        type: array
+      username:
+        type: string
+    type: object
+  thanawy-backend_internal_application_dto.UserProfileUpdateResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  thanawy-backend_internal_application_dto.VerifyMFARequest:
+    properties:
+      challengeId:
+        type: string
+      code:
+        type: string
+    required:
+    - challengeId
+    - code
+    type: object
+  thanawy-backend_internal_domain_common.CourseStatus:
+    enum:
+    - DRAFT
+    - UNDER_REVIEW
+    - PUBLISHED
+    - ARCHIVED
+    - REJECTED
+    type: string
+    x-enum-varnames:
+    - CourseStatusDraft
+    - CourseStatusUnderReview
+    - CourseStatusPublished
+    - CourseStatusArchived
+    - CourseStatusRejected
+  thanawy-backend_internal_domain_common.CourseTag:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+    type: object
+  thanawy-backend_internal_domain_common.Enrollment:
+    properties:
+      createdAt:
+        type: string
+      enrolledAt:
+        type: string
+      id:
+        type: string
+      progress:
+        type: number
+      subject:
+        allOf:
+        - $ref: '#/definitions/thanawy-backend_internal_domain_common.Subject'
+        description: Relations
+      subjectId:
+        type: string
+      updatedAt:
+        type: string
+      user:
+        $ref: '#/definitions/thanawy-backend_internal_domain_common.User'
+      userId:
+        type: string
+    type: object
+  thanawy-backend_internal_domain_common.EnrollmentType:
+    enum:
+    - OPEN
+    - LIMITED
+    - BY_APPROVAL
+    type: string
+    x-enum-varnames:
+    - EnrollmentTypeOpen
+    - EnrollmentTypeLimited
+    - EnrollmentTypeApproval
+  thanawy-backend_internal_domain_common.Exam:
+    properties:
+      createdAt:
+        type: string
+      description:
+        type: string
+      difficulty:
+        type: string
+      duration:
+        type: integer
+      id:
+        type: string
+      isActive:
+        type: boolean
+      maxScore:
+        type: number
+      questionCount:
+        description: Virtual fields
+        type: integer
+      questions:
+        items:
+          $ref: '#/definitions/thanawy-backend_internal_domain_common.Question'
+        type: array
+      subject:
+        allOf:
+        - $ref: '#/definitions/thanawy-backend_internal_domain_common.Subject'
+        description: Relations
+      subjectId:
+        type: string
+      title:
+        type: string
+      type:
+        $ref: '#/definitions/thanawy-backend_internal_domain_common.ExamType'
+      updatedAt:
+        type: string
+    type: object
+  thanawy-backend_internal_domain_common.ExamType:
+    enum:
+    - QUIZ
+    - MIDTERM
+    - FINAL
+    type: string
+    x-enum-varnames:
+    - ExamTypeQuiz
+    - ExamTypeMidterm
+    - ExamTypeFinal
+  thanawy-backend_internal_domain_common.LessonAttachment:
+    properties:
+      createdAt:
+        type: string
+      fileSize:
+        type: integer
+      fileType:
+        description: PDF, ZIP, etc.
+        type: string
+      fileUrl:
+        type: string
+      id:
+        type: string
+      subTopicId:
+        type: string
+      title:
+        type: string
+    type: object
+  thanawy-backend_internal_domain_common.LessonSubtitle:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: string
+      isDefault:
+        type: boolean
+      isForHearingImpaired:
+        type: boolean
+      language:
+        type: string
+      languageName:
+        type: string
+      subTopic:
+        allOf:
+        - $ref: '#/definitions/thanawy-backend_internal_domain_common.SubTopic'
+        description: Relations
+      subTopicId:
+        type: string
+      subtitleFormat:
+        $ref: '#/definitions/thanawy-backend_internal_domain_common.SubtitleFormat'
+      subtitleUrl:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  thanawy-backend_internal_domain_common.Level:
+    enum:
+    - BEGINNER
+    - INTERMEDIATE
+    - ADVANCED
+    type: string
+    x-enum-varnames:
+    - LevelBeginner
+    - LevelIntermediate
+    - LevelAdvanced
+  thanawy-backend_internal_domain_common.Question:
+    properties:
+      examId:
+        type: string
+      id:
+        type: string
+      options:
+        type: string
+      text:
+        type: string
+      type:
+        type: string
+    type: object
+  thanawy-backend_internal_domain_common.SubTopic:
+    properties:
+      attachments:
+        description: Relations
+        items:
+          $ref: '#/definitions/thanawy-backend_internal_domain_common.LessonAttachment'
+        type: array
+      audioDurationSeconds:
+        type: integer
+      audioUrl:
+        description: 'Phase 1: Advanced lesson fields (migration 0109)'
+        type: string
+      avgWatchTimeSeconds:
+        type: integer
+      chapters:
+        items:
+          $ref: '#/definitions/thanawy-backend_internal_domain_common.VideoChapter'
+        type: array
+      completionCount:
+        type: integer
+      content:
+        type: string
+      createdAt:
+        type: string
+      description:
+        type: string
+      dripReleaseDate:
+        type: string
+      durationMinutes:
+        type: integer
+      exam:
+        $ref: '#/definitions/thanawy-backend_internal_domain_common.Exam'
+      examId:
+        type: string
+      externalLinkTitle:
+        type: string
+      externalLinkUrl:
+        type: string
+      id:
+        type: string
+      isContentProtected:
+        type: boolean
+      isDripEnabled:
+        type: boolean
+      isFree:
+        type: boolean
+      order:
+        type: integer
+      subtitles:
+        description: Non-DB mapped fields
+        items:
+          $ref: '#/definitions/thanawy-backend_internal_domain_common.LessonSubtitle'
+        type: array
+      title:
+        type: string
+      topic:
+        allOf:
+        - $ref: '#/definitions/thanawy-backend_internal_domain_common.Topic'
+        description: Relations
+      topicId:
+        type: string
+      type:
+        $ref: '#/definitions/thanawy-backend_internal_domain_common.SubTopicType'
+      updatedAt:
+        type: string
+      videoUrl:
+        type: string
+      viewCount:
+        description: Denormalized stats
+        type: integer
+    type: object
+  thanawy-backend_internal_domain_common.SubTopicType:
+    enum:
+    - VIDEO
+    - QUIZ
+    - ARTICLE
+    - ASSIGNMENT
+    - AUDIO
+    - LINK
+    - LIVE
+    - DOCUMENT
+    type: string
+    x-enum-varnames:
+    - SubTopicVideo
+    - SubTopicQuiz
+    - SubTopicArticle
+    - SubTopicAssignment
+    - SubTopicAudio
+    - SubTopicLink
+    - SubTopicLive
+    - SubTopicDocument
+  thanawy-backend_internal_domain_common.Subject:
+    properties:
+      archivedAt:
+        type: string
+      archivedBy:
+        type: string
+      availableFrom:
+        type: string
+      availableUntil:
+        type: string
+      categoryId:
+        type: string
+      certificateIssueAfterCompletion:
+        type: boolean
+      certificateMinCompletionPct:
+        type: integer
+      certificateTemplate:
+        description: Certificate config (Phase 1)
+        type: string
+      code:
+        maxLength: 20
+        minLength: 2
+        type: string
+      color:
+        type: string
+      completionRate:
+        type: number
+      coursePrerequisites:
+        description: New fields to match DB and frontend
+        items:
+          type: string
+        type: array
+      createdAt:
+        type: string
+      description:
+        maxLength: 5000
+        type: string
+      durationHours:
+        type: integer
+      enrolledCount:
+        type: integer
+      enrollmentType:
+        allOf:
+        - $ref: '#/definitions/thanawy-backend_internal_domain_common.EnrollmentType'
+        description: Operational & enrollment (Phase 1)
+      hasCertificate:
+        type: boolean
+      icon:
+        type: string
+      id:
+        type: string
+      instructorId:
+        type: string
+      instructorName:
+        type: string
+      isActive:
+        type: boolean
+      isFeatured:
+        type: boolean
+      isNew:
+        type: boolean
+      isPublished:
+        type: boolean
+      isTrending:
+        type: boolean
+      language:
+        type: string
+      lastContentUpdate:
+        type: string
+      learningObjectives:
+        type: string
+      level:
+        $ref: '#/definitions/thanawy-backend_internal_domain_common.Level'
+      longDescription:
+        type: string
+      maxStudents:
+        type: integer
+      name:
+        maxLength: 200
+        minLength: 3
+        type: string
+      nameAr:
+        maxLength: 200
+        minLength: 3
+        type: string
+      newUntil:
+        type: string
+      price:
+        type: number
+      publishedAt:
+        type: string
+      rating:
+        maximum: 5
+        minimum: 0
+        type: number
+      rejectionReason:
+        type: string
+      requirements:
+        type: string
+      reviewedAt:
+        type: string
+      reviewedBy:
+        type: string
+      secondaryLanguages:
+        items:
+          type: string
+        type: array
+      seoDescription:
+        type: string
+      seoTitle:
+        type: string
+      shortDescription:
+        type: string
+      slug:
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/thanawy-backend_internal_domain_common.CourseStatus'
+        description: Lifecycle and enhanced fields (migration 0064 + 0109)
+      submittedForReviewAt:
+        description: 'Workflow metadata (Phase 1: 0109)'
+        type: string
+      tags:
+        items:
+          $ref: '#/definitions/thanawy-backend_internal_domain_common.CourseTag'
+        type: array
+      targetAudience:
+        items:
+          type: string
+        type: array
+      thumbnailUrl:
+        type: string
+      topics:
+        description: Relations
+        items:
+          $ref: '#/definitions/thanawy-backend_internal_domain_common.Topic'
+        type: array
+      trailerDurationMinutes:
+        type: integer
+      trailerUrl:
+        type: string
+      type:
+        type: string
+      updatedAt:
+        type: string
+      version:
+        type: string
+      videoCount:
+        type: integer
+      whatYouLearn:
+        items:
+          type: string
+        type: array
+    required:
+    - name
+    - price
+    - rating
+    type: object
+  thanawy-backend_internal_domain_common.SubtitleFormat:
+    enum:
+    - vtt
+    - srt
+    - json
+    type: string
+    x-enum-varnames:
+    - SubtitleVTT
+    - SubtitleSRT
+    - SubtitleJSON
+  thanawy-backend_internal_domain_common.Topic:
+    properties:
+      createdAt:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      order:
+        type: integer
+      subTopics:
+        description: Relations
+        items:
+          $ref: '#/definitions/thanawy-backend_internal_domain_common.SubTopic'
+        type: array
+      subjectId:
+        type: string
+      title:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  thanawy-backend_internal_domain_common.User:
+    properties:
+      activeSubscriptionId:
+        description: Subscriptions
+        type: string
+      additionalAiCredits:
+        type: integer
+      additionalExamCredits:
+        type: integer
+      aiCredits:
+        type: integer
+      alternativePhone:
+        type: string
+      avatar:
+        type: string
+      balance:
+        description: Billing & Credits
+        type: number
+      bio:
+        type: string
+      biometricEnabled:
+        type: boolean
+      challengeXP:
+        type: integer
+      city:
+        type: string
+      classesTaught:
+        items:
+          type: string
+        type: array
+      commissionRate:
+        type: number
+      country:
+        type: string
+      createdAt:
+        type: string
+      currentStreak:
+        description: Gamification (stats)
+        type: integer
+      dateOfBirth:
+        type: string
+      educationType:
+        type: string
+      email:
+        type: string
+      emailNotifications:
+        type: boolean
+      emailVerified:
+        type: boolean
+      examCredits:
+        type: integer
+      examXP:
+        type: integer
+      examsPassed:
+        type: integer
+      experienceYears:
+        type: string
+      focusStrategy:
+        type: string
+      gender:
+        type: string
+      githubId:
+        type: string
+      googleId:
+        type: string
+      gradeLevel:
+        type: string
+      id:
+        type: string
+      instructorLanguages:
+        items:
+          type: string
+        type: array
+      instructorSpecialties:
+        items:
+          type: string
+        type: array
+      instructorStatus:
+        type: string
+      interestedSubjects:
+        items:
+          type: string
+        type: array
+      lastLogin:
+        description: Security & Auth
+        type: string
+      level:
+        type: integer
+      longestStreak:
+        type: integer
+      name:
+        maxLength: 100
+        minLength: 2
+        type: string
+      permissions:
+        description: Access Control
+        items:
+          type: string
+        type: array
+      phone:
+        description: Profile fields
+        type: string
+      phoneVerified:
+        type: boolean
+      questXP:
+        type: integer
+      referralCode:
+        type: string
+      role:
+        allOf:
+        - $ref: '#/definitions/thanawy-backend_internal_domain_common.UserRole'
+        enum:
+        - STUDENT
+        - TEACHER
+        - MODERATOR
+        - ADMIN
+        - SUPER_ADMIN
+        - PARENT
+        - SUPPORT
+      school:
+        type: string
+      seasonXP:
+        type: integer
+      section:
+        type: string
+      sleepTime:
+        type: string
+      smsNotifications:
+        type: boolean
+      status:
+        allOf:
+        - $ref: '#/definitions/thanawy-backend_internal_domain_common.UserStatus'
+        enum:
+        - ACTIVE
+        - INACTIVE
+        - SUSPENDED
+        - BANNED
+      statusExpiresAt:
+        type: string
+      statusReason:
+        maxLength: 500
+        type: string
+      studyGoal:
+        type: string
+      studyXP:
+        description: Multi-layer XP
+        type: integer
+      subjectsTaught:
+        items:
+          type: string
+        type: array
+      subscriptionExpiresAt:
+        type: string
+      taskXP:
+        type: integer
+      tasksCompleted:
+        type: integer
+      totalStudyTime:
+        type: integer
+      totalXP:
+        description: Gamification (core)
+        type: integer
+      twoFactorEnabled:
+        type: boolean
+      updatedAt:
+        type: string
+      username:
+        maxLength: 30
+        minLength: 3
+        type: string
+      wakeUpTime:
+        description: Profile extended
+        type: string
+    required:
+    - email
+    - role
+    - status
+    type: object
+  thanawy-backend_internal_domain_common.UserRole:
+    enum:
+    - STUDENT
+    - TEACHER
+    - MODERATOR
+    - ADMIN
+    - SUPER_ADMIN
+    - PARENT
+    - SUPPORT
+    type: string
+    x-enum-varnames:
+    - RoleStudent
+    - RoleTeacher
+    - RoleModerator
+    - RoleAdmin
+    - RoleSuperAdmin
+    - RoleParent
+    - RoleSupport
+  thanawy-backend_internal_domain_common.UserStatus:
+    enum:
+    - ACTIVE
+    - INACTIVE
+    - SUSPENDED
+    - BANNED
+    type: string
+    x-enum-varnames:
+    - StatusActive
+    - StatusInactive
+    - StatusSuspended
+    - StatusBanned
+  thanawy-backend_internal_domain_common.VideoChapter:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: string
+      isActive:
+        type: boolean
+      sortOrder:
+        type: integer
+      subTopic:
+        allOf:
+        - $ref: '#/definitions/thanawy-backend_internal_domain_common.SubTopic'
+        description: Relations
+      subTopicId:
+        type: string
+      timeSeconds:
+        type: integer
+      title:
+        type: string
+      titleAr:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  thanawy-backend_internal_shared_utils.PaginatedResponse:
     properties:
       data: {}
       pagination:
@@ -525,7 +1628,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.ConversionEventRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.ConversionEventRequest'
       produces:
       - application/json
       responses:
@@ -550,7 +1653,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.UserJourneyRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.UserJourneyRequest'
       produces:
       - application/json
       responses:
@@ -683,7 +1786,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.CreateBackupRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.CreateBackupRequest'
       produces:
       - application/json
       responses:
@@ -781,7 +1884,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.RestoreBackupRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.RestoreBackupRequest'
       produces:
       - application/json
       responses:
@@ -829,7 +1932,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.ScheduleBackupRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.ScheduleBackupRequest'
       produces:
       - application/json
       responses:
@@ -919,14 +2022,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.NotificationRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.NotificationRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handlers.NotificationResponse'
+            $ref: '#/definitions/internal_infrastructure_api_handlers_protected.NotificationResponse'
       summary: Send broadcast notification
       tags:
       - admin
@@ -972,7 +2075,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handlers.NotificationResponse'
+            $ref: '#/definitions/internal_infrastructure_api_handlers_protected.NotificationResponse'
       summary: Retry failed notifications
       tags:
       - admin
@@ -1014,14 +2117,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.NotificationRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.NotificationRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handlers.NotificationResponse'
+            $ref: '#/definitions/internal_infrastructure_api_handlers_protected.NotificationResponse'
       summary: Schedule broadcast notification
       tags:
       - admin
@@ -1070,7 +2173,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.CustomReportRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.CustomReportRequest'
       produces:
       - application/json
       responses:
@@ -1144,7 +2247,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.CustomReportRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.CustomReportRequest'
       produces:
       - application/json
       responses:
@@ -1284,7 +2387,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.ScheduledItemRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.ScheduledItemRequest'
       produces:
       - application/json
       responses:
@@ -1453,7 +2556,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/pagination.PaginatedResponse'
+            $ref: '#/definitions/thanawy-backend_internal_shared_utils.PaginatedResponse'
       summary: Search educational content
       tags:
       - admin
@@ -1502,124 +2605,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/pagination.PaginatedResponse'
+            $ref: '#/definitions/thanawy-backend_internal_shared_utils.PaginatedResponse'
       summary: Search users with advanced filtering
       tags:
       - admin
       - search
-  /api/admin/security/2fa/backup-codes:
-    post:
-      consumes:
-      - application/json
-      description: Generate new backup codes for 2FA
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Regenerate backup codes
-      tags:
-      - admin
-      - security
-  /api/admin/security/2fa/disable:
-    post:
-      consumes:
-      - application/json
-      description: Disable two-factor authentication
-      parameters:
-      - description: Verification code
-        in: body
-        name: request
-        required: true
-        schema:
-          additionalProperties:
-            type: string
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Disable 2FA
-      tags:
-      - admin
-      - security
-  /api/admin/security/2fa/setup:
-    post:
-      consumes:
-      - application/json
-      description: Start setting up two-factor authentication
-      parameters:
-      - description: Setup method
-        in: body
-        name: request
-        required: true
-        schema:
-          additionalProperties:
-            type: string
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Initiate 2FA setup
-      tags:
-      - admin
-      - security
-  /api/admin/security/2fa/status:
-    get:
-      consumes:
-      - application/json
-      description: Get two-factor authentication status
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get 2FA status
-      tags:
-      - admin
-      - security
-  /api/admin/security/2fa/verify:
-    post:
-      consumes:
-      - application/json
-      description: Verify the 2FA code and activate two-factor authentication
-      parameters:
-      - description: Verification code
-        in: body
-        name: request
-        required: true
-        schema:
-          additionalProperties:
-            type: string
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Verify and activate 2FA
-      tags:
-      - admin
-      - security
   /api/admin/security/ip-whitelist:
     get:
       consumes:
@@ -1873,7 +2863,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.CreateTicketRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.CreateTicketRequest'
       produces:
       - application/json
       responses:
@@ -1981,7 +2971,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.SendMessageRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.SendMessageRequest'
       produces:
       - application/json
       responses:
@@ -2010,7 +3000,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.UpdateTicketPriorityRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.UpdateTicketPriorityRequest'
       produces:
       - application/json
       responses:
@@ -2040,7 +3030,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.UpdateTicketStatusRequest'
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.UpdateTicketStatusRequest'
       produces:
       - application/json
       responses:
@@ -2071,26 +3061,200 @@ paths:
       tags:
       - admin
       - support
-  /auth/login:
+  /api/ai/search/history:
+    get:
+      description: Get the authenticated user's recent search queries
+      parameters:
+      - description: Max results (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get user search history
+      tags:
+      - search
+      - analytics
+  /api/ai/search/track:
     post:
       consumes:
       - application/json
-      description: Authenticate user with email and password
+      description: Track user search queries for analytics and personalization
+      parameters:
+      - description: Search history data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.SearchHistoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+      summary: Track search history
+      tags:
+      - search
+      - analytics
+  /api/analytics/mega-menu:
+    post:
+      consumes:
+      - application/json
+      description: Track open/close interactions on the mega menu component
+      parameters:
+      - description: Mega menu event data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.MegaMenuTrackRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+      summary: Track mega menu event
+      tags:
+      - analytics
+      - mega-menu
+  /api/analytics/promo:
+    post:
+      consumes:
+      - application/json
+      description: Track user interactions with promotional content
+      parameters:
+      - description: Promo event data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_infrastructure_api_handlers_protected.PromoEventRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+      summary: Track promo event
+      tags:
+      - analytics
+      - promo
+  /api/search:
+    get:
+      consumes:
+      - application/json
+      description: Search courses, resources, teachers, and videos with server-side
+        filtering and relevance sorting
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: Max results (default 10, max 50)
+        in: query
+        name: limit
+        type: integer
+      - description: Filter by type (course,resource,teacher,video,all)
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_infrastructure_api_handlers_protected.UnifiedSearchResponse'
+      summary: Unified public search
+      tags:
+      - search
+  /api/users/profile:
+    get:
+      description: Get the detailed profile of the currently authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/thanawy-backend_internal_application_dto.UserProfileEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get user profile
+      tags:
+      - users
+    patch:
+      consumes:
+      - application/json
+      description: Update one or more fields in the currently authenticated user's
+        profile.
+      parameters:
+      - description: Profile fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/thanawy-backend_internal_application_dto.UserProfileUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/thanawy-backend_internal_application_dto.UserProfileUpdateEnvelope'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update user profile
+      tags:
+      - users
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate a user and establish a session.
       parameters:
       - description: Login credentials
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.LoginRequest'
+          $ref: '#/definitions/thanawy-backend_internal_application_dto.LoginRequest'
       produces:
       - application/json
       responses:
         "200":
-          description: Login successful
+          description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/thanawy-backend_internal_application_dto.LoginResponse'
         "401":
           description: Unauthorized
           schema:
@@ -2098,15 +3262,24 @@ paths:
             type: object
       summary: User login
       tags:
-      - Auth
-  /auth/me:
-    get:
-      description: Get detailed profile of the currently authenticated user
+      - auth
+  /api/v1/auth/mfa/verify:
+    post:
+      consumes:
+      - application/json
+      description: Verify a one-time MFA code and establish a session.
+      parameters:
+      - description: MFA verification
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/thanawy-backend_internal_application_dto.VerifyMFARequest'
       produces:
       - application/json
       responses:
         "200":
-          description: Profile details
+          description: OK
           schema:
             additionalProperties: true
             type: object
@@ -2115,11 +3288,338 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      security:
-      - BearerAuth: []
-      summary: Get user profile
+      summary: Verify MFA challenge
       tags:
-      - Auth
+      - auth
+  /api/v1/courses:
+    get:
+      parameters:
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: limit
+        type: integer
+      - description: Pagination offset
+        in: query
+        name: offset
+        type: integer
+      - description: Search term
+        in: query
+        name: search
+        type: string
+      - description: Course level
+        in: query
+        name: level
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/thanawy-backend_internal_application_dto.CourseListResponse'
+      summary: List courses
+      tags:
+      - courses
+  /api/v1/courses/{id}:
+    get:
+      parameters:
+      - description: Course ID or slug
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/thanawy-backend_internal_application_dto.CourseDetailResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get course
+      tags:
+      - courses
+  /api/v1/courses/{id}/curriculum:
+    get:
+      parameters:
+      - description: Course ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get course curriculum
+      tags:
+      - courses
+  /api/v1/courses/{id}/detail:
+    get:
+      description: Get the public/private course detail snapshot.
+      parameters:
+      - description: Course ID or slug
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get course detail
+      tags:
+      - courses
+  /api/v1/courses/{id}/enroll:
+    post:
+      parameters:
+      - description: Course ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Enroll in a course
+      tags:
+      - courses
+  /api/v1/courses/{id}/lessons:
+    get:
+      parameters:
+      - description: Course ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get course lessons
+      tags:
+      - courses
+  /api/v1/courses/{id}/questions:
+    get:
+      parameters:
+      - description: Course ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get course questions
+      tags:
+      - courses
+  /api/v1/courses/{id}/reviews:
+    get:
+      parameters:
+      - description: Course ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get course reviews
+      tags:
+      - courses
+  /api/v1/courses/lessons/{id}/progress:
+    get:
+      parameters:
+      - description: Lesson ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get lesson progress
+      tags:
+      - courses
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Lesson ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Progress payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update lesson progress
+      tags:
+      - courses
+  /api/v1/my-courses:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List enrolled courses
+      tags:
+      - courses
+  /api/v1/teaching/courses:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingCoursesListResponse'
+      summary: List instructor courses
+      tags:
+      - teaching
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Course payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingCourseMutationResponse'
+      summary: Create instructor course
+      tags:
+      - teaching
+  /api/v1/teaching/courses/{id}:
+    delete:
+      parameters:
+      - description: Course ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingCourseDeleteResponse'
+      summary: Delete instructor course
+      tags:
+      - teaching
+    get:
+      parameters:
+      - description: Course ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingCourseResponse'
+      summary: Get instructor course
+      tags:
+      - teaching
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Course ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Course payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/thanawy-backend_internal_application_dto.TeachingCourseMutationResponse'
+      summary: Update instructor course
+      tags:
+      - teaching
 securityDefinitions:
   BearerAuth:
     in: header

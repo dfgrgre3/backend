@@ -36,7 +36,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/analyticsdelivery.ConversionEventRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.ConversionEventRequest"
                         }
                     }
                 ],
@@ -74,7 +74,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/analyticsdelivery.UserJourneyRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.UserJourneyRequest"
                         }
                     }
                 ],
@@ -273,7 +273,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/systemdelivery.CreateBackupRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.CreateBackupRequest"
                         }
                     }
                 ],
@@ -309,7 +309,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/systemdelivery.ScheduleBackupRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.ScheduleBackupRequest"
                         }
                     }
                 ],
@@ -507,7 +507,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/systemdelivery.RestoreBackupRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.RestoreBackupRequest"
                         }
                     }
                 ],
@@ -624,7 +624,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/notificationdelivery.NotificationRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.NotificationRequest"
                         }
                     }
                 ],
@@ -632,7 +632,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/notificationdelivery.NotificationResponse"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.NotificationResponse"
                         }
                     }
                 }
@@ -701,7 +701,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/notificationdelivery.NotificationResponse"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.NotificationResponse"
                         }
                     }
                 }
@@ -767,7 +767,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/notificationdelivery.NotificationRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.NotificationRequest"
                         }
                     }
                 ],
@@ -775,7 +775,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/notificationdelivery.NotificationResponse"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.NotificationResponse"
                         }
                     }
                 }
@@ -850,7 +850,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.CustomReportRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.CustomReportRequest"
                         }
                     }
                 ],
@@ -959,7 +959,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.CustomReportRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.CustomReportRequest"
                         }
                     }
                 ],
@@ -1165,7 +1165,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.ScheduledItemRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.ScheduledItemRequest"
                         }
                     }
                 ],
@@ -1415,7 +1415,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/pagination.PaginatedResponse"
+                            "$ref": "#/definitions/thanawy-backend_internal_shared_utils.PaginatedResponse"
                         }
                     }
                 }
@@ -1489,176 +1489,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/pagination.PaginatedResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/security/2fa/backup-codes": {
-            "post": {
-                "description": "Generate new backup codes for 2FA",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "security"
-                ],
-                "summary": "Regenerate backup codes",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/security/2fa/disable": {
-            "post": {
-                "description": "Disable two-factor authentication",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "security"
-                ],
-                "summary": "Disable 2FA",
-                "parameters": [
-                    {
-                        "description": "Verification code",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/security/2fa/setup": {
-            "post": {
-                "description": "Start setting up two-factor authentication",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "security"
-                ],
-                "summary": "Initiate 2FA setup",
-                "parameters": [
-                    {
-                        "description": "Setup method",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/security/2fa/status": {
-            "get": {
-                "description": "Get two-factor authentication status",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "security"
-                ],
-                "summary": "Get 2FA status",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/admin/security/2fa/verify": {
-            "post": {
-                "description": "Verify the 2FA code and activate two-factor authentication",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "security"
-                ],
-                "summary": "Verify and activate 2FA",
-                "parameters": [
-                    {
-                        "description": "Verification code",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/thanawy-backend_internal_shared_utils.PaginatedResponse"
                         }
                     }
                 }
@@ -2043,7 +1874,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/systemdelivery.CreateTicketRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.CreateTicketRequest"
                         }
                     }
                 ],
@@ -2229,7 +2060,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/systemdelivery.SendMessageRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.SendMessageRequest"
                         }
                     }
                 ],
@@ -2272,7 +2103,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/systemdelivery.UpdateTicketPriorityRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.UpdateTicketPriorityRequest"
                         }
                     }
                 ],
@@ -2317,7 +2148,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/systemdelivery.UpdateTicketStatusRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.UpdateTicketStatusRequest"
                         }
                     }
                 ],
@@ -2334,9 +2165,39 @@ const docTemplate = `{
                 }
             }
         },
-        "/auth/login": {
+        "/api/ai/search/history": {
+            "get": {
+                "description": "Get the authenticated user's recent search queries",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "search",
+                    "analytics"
+                ],
+                "summary": "Get user search history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Max results (default 20, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/ai/search/track": {
             "post": {
-                "description": "Authenticate user with email and password",
+                "description": "Track user search queries for analytics and personalization",
                 "consumes": [
                     "application/json"
                 ],
@@ -2344,23 +2205,212 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Auth"
+                    "search",
+                    "analytics"
                 ],
-                "summary": "User login",
+                "summary": "Track search history",
                 "parameters": [
                     {
-                        "description": "Login credentials",
+                        "description": "Search history data",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/authdto.LoginRequest"
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.SearchHistoryRequest"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Login successful",
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/analytics/mega-menu": {
+            "post": {
+                "description": "Track open/close interactions on the mega menu component",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "analytics",
+                    "mega-menu"
+                ],
+                "summary": "Track mega menu event",
+                "parameters": [
+                    {
+                        "description": "Mega menu event data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.MegaMenuTrackRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/analytics/promo": {
+            "post": {
+                "description": "Track user interactions with promotional content",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "analytics",
+                    "promo"
+                ],
+                "summary": "Track promo event",
+                "parameters": [
+                    {
+                        "description": "Promo event data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.PromoEventRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/search": {
+            "get": {
+                "description": "Search courses, resources, teachers, and videos with server-side filtering and relevance sorting",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "search"
+                ],
+                "summary": "Unified public search",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search query",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max results (default 10, max 50)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by type (course,resource,teacher,video,all)",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.UnifiedSearchResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/users/profile": {
+            "get": {
+                "description": "Get the detailed profile of the currently authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Get user profile",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.UserProfileEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Update one or more fields in the currently authenticated user's profile.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Update user profile",
+                "parameters": [
+                    {
+                        "description": "Profile fields to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.UserProfileUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.UserProfileUpdateEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2376,24 +2426,74 @@ const docTemplate = `{
                 }
             }
         },
-        "/auth/me": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
+        "/api/v1/auth/login": {
+            "post": {
+                "description": "Authenticate a user and establish a session.",
+                "consumes": [
+                    "application/json"
                 ],
-                "description": "Get detailed profile of the currently authenticated user",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Auth"
+                    "auth"
                 ],
-                "summary": "Get user profile",
+                "summary": "User login",
+                "parameters": [
+                    {
+                        "description": "Login credentials",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.LoginRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "Profile details",
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.LoginResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/mfa/verify": {
+            "post": {
+                "description": "Verify a one-time MFA code and establish a session.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Verify MFA challenge",
+                "parameters": [
+                    {
+                        "description": "MFA verification",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.VerifyMFARequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2408,10 +2508,511 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/api/v1/courses": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "List courses",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Pagination offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search term",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Course level",
+                        "name": "level",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.CourseListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/courses/lessons/{id}/progress": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Get lesson progress",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Lesson ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Update lesson progress",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Lesson ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Progress payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/courses/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Get course",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Course ID or slug",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.CourseDetailResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/courses/{id}/curriculum": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Get course curriculum",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Course ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/courses/{id}/detail": {
+            "get": {
+                "description": "Get the public/private course detail snapshot.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Get course detail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Course ID or slug",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/courses/{id}/enroll": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Enroll in a course",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Course ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/courses/{id}/lessons": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Get course lessons",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Course ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/courses/{id}/questions": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Get course questions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Course ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/courses/{id}/reviews": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Get course reviews",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Course ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/my-courses": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "List enrolled courses",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/teaching/courses": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "summary": "List instructor courses",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingCoursesListResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "summary": "Create instructor course",
+                "parameters": [
+                    {
+                        "description": "Course payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingCourseMutationResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/teaching/courses/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "summary": "Get instructor course",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Course ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingCourseResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "summary": "Delete instructor course",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Course ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingCourseDeleteResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "summary": "Update instructor course",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Course ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Course payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingCourseMutationResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
-        "analyticsdelivery.ConversionEventRequest": {
+        "internal_infrastructure_api_handlers_protected.ConversionEventRequest": {
             "type": "object",
             "required": [
                 "goal",
@@ -2440,7 +3041,7 @@ const docTemplate = `{
                 }
             }
         },
-        "systemdelivery.CreateBackupRequest": {
+        "internal_infrastructure_api_handlers_protected.CreateBackupRequest": {
             "type": "object",
             "required": [
                 "name",
@@ -2479,7 +3080,7 @@ const docTemplate = `{
                 }
             }
         },
-        "systemdelivery.CreateTicketRequest": {
+        "internal_infrastructure_api_handlers_protected.CreateTicketRequest": {
             "type": "object",
             "required": [
                 "category",
@@ -2526,7 +3127,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.CustomReportRequest": {
+        "internal_infrastructure_api_handlers_protected.CustomReportRequest": {
             "type": "object",
             "required": [
                 "name",
@@ -2551,7 +3152,7 @@ const docTemplate = `{
                 "filters": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handlers.ReportFilter"
+                        "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.ReportFilter"
                     }
                 },
                 "isPublic": {
@@ -2589,31 +3190,41 @@ const docTemplate = `{
                     "type": "array",
                     "minItems": 1,
                     "items": {
-                        "$ref": "#/definitions/handlers.ReportWidget"
+                        "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.ReportWidget"
                     }
                 }
             }
         },
-        "authdto.LoginRequest": {
+        "internal_infrastructure_api_handlers_protected.MegaMenuTrackRequest": {
             "type": "object",
             "required": [
-                "email",
-                "password"
+                "type"
             ],
             "properties": {
-                "email": {
+                "component": {
+                    "description": "\"mega_menu\"",
                     "type": "string"
                 },
-                "password": {
-                    "type": "string",
-                    "minLength": 6
+                "label": {
+                    "description": "menu label",
+                    "type": "string"
                 },
-                "rememberMe": {
-                    "type": "boolean"
+                "metadata": {
+                    "description": "e.g. { trigger: \"toggle\" }",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "timestamp": {
+                    "description": "client epoch ms",
+                    "type": "integer"
+                },
+                "type": {
+                    "description": "\"open\" | \"close\"",
+                    "type": "string"
                 }
             }
         },
-        "notificationdelivery.NotificationRequest": {
+        "internal_infrastructure_api_handlers_protected.NotificationRequest": {
             "type": "object",
             "required": [
                 "channels",
@@ -2669,7 +3280,7 @@ const docTemplate = `{
                 }
             }
         },
-        "notificationdelivery.NotificationResponse": {
+        "internal_infrastructure_api_handlers_protected.NotificationResponse": {
             "type": "object",
             "properties": {
                 "broadcastId": {
@@ -2679,11 +3290,11 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "summary": {
-                    "$ref": "#/definitions/notificationdelivery.NotificationSummary"
+                    "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.NotificationSummary"
                 }
             }
         },
-        "notificationdelivery.NotificationSummary": {
+        "internal_infrastructure_api_handlers_protected.NotificationSummary": {
             "type": "object",
             "properties": {
                 "failure": {
@@ -2700,7 +3311,34 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.ReportDimension": {
+        "internal_infrastructure_api_handlers_protected.PromoEventRequest": {
+            "type": "object",
+            "properties": {
+                "component": {
+                    "type": "string"
+                },
+                "eventType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "promoId": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_infrastructure_api_handlers_protected.ReportDimension": {
             "type": "object",
             "required": [
                 "field",
@@ -2723,7 +3361,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.ReportFilter": {
+        "internal_infrastructure_api_handlers_protected.ReportFilter": {
             "type": "object",
             "required": [
                 "field",
@@ -2749,7 +3387,7 @@ const docTemplate = `{
                 "value": {}
             }
         },
-        "handlers.ReportMetric": {
+        "internal_infrastructure_api_handlers_protected.ReportMetric": {
             "type": "object",
             "required": [
                 "aggregation",
@@ -2785,7 +3423,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.ReportSort": {
+        "internal_infrastructure_api_handlers_protected.ReportSort": {
             "type": "object",
             "required": [
                 "direction",
@@ -2804,7 +3442,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.ReportWidget": {
+        "internal_infrastructure_api_handlers_protected.ReportWidget": {
             "type": "object",
             "required": [
                 "dataSource",
@@ -2820,13 +3458,13 @@ const docTemplate = `{
                 "dimensions": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handlers.ReportDimension"
+                        "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.ReportDimension"
                     }
                 },
                 "filters": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handlers.ReportFilter"
+                        "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.ReportFilter"
                     }
                 },
                 "id": {
@@ -2842,11 +3480,11 @@ const docTemplate = `{
                 "metrics": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handlers.ReportMetric"
+                        "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.ReportMetric"
                     }
                 },
                 "sort": {
-                    "$ref": "#/definitions/handlers.ReportSort"
+                    "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.ReportSort"
                 },
                 "title": {
                     "type": "string"
@@ -2864,7 +3502,7 @@ const docTemplate = `{
                 }
             }
         },
-        "systemdelivery.RestoreBackupRequest": {
+        "internal_infrastructure_api_handlers_protected.RestoreBackupRequest": {
             "type": "object",
             "properties": {
                 "dryRun": {
@@ -2881,7 +3519,7 @@ const docTemplate = `{
                 }
             }
         },
-        "systemdelivery.ScheduleBackupRequest": {
+        "internal_infrastructure_api_handlers_protected.ScheduleBackupRequest": {
             "type": "object",
             "required": [
                 "frequency",
@@ -2927,7 +3565,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.ScheduledItemRequest": {
+        "internal_infrastructure_api_handlers_protected.ScheduledItemRequest": {
             "type": "object",
             "required": [
                 "content",
@@ -2980,7 +3618,58 @@ const docTemplate = `{
                 }
             }
         },
-        "systemdelivery.SendMessageRequest": {
+        "internal_infrastructure_api_handlers_protected.SearchHistoryRequest": {
+            "type": "object",
+            "required": [
+                "query"
+            ],
+            "properties": {
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "query": {
+                    "type": "string"
+                },
+                "results": {
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "type": "integer"
+                },
+                "type": {
+                    "description": "course, resource, teacher, video, all",
+                    "type": "string"
+                }
+            }
+        },
+        "internal_infrastructure_api_handlers_protected.SearchResultItem": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "relevance": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_infrastructure_api_handlers_protected.SendMessageRequest": {
             "type": "object",
             "required": [
                 "message"
@@ -2995,7 +3684,21 @@ const docTemplate = `{
                 }
             }
         },
-        "systemdelivery.UpdateTicketPriorityRequest": {
+        "internal_infrastructure_api_handlers_protected.UnifiedSearchResponse": {
+            "type": "object",
+            "properties": {
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.SearchResultItem"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_infrastructure_api_handlers_protected.UpdateTicketPriorityRequest": {
             "type": "object",
             "required": [
                 "priority"
@@ -3012,7 +3715,7 @@ const docTemplate = `{
                 }
             }
         },
-        "systemdelivery.UpdateTicketStatusRequest": {
+        "internal_infrastructure_api_handlers_protected.UpdateTicketStatusRequest": {
             "type": "object",
             "required": [
                 "status"
@@ -3030,12 +3733,11 @@ const docTemplate = `{
                 }
             }
         },
-        "analyticsdelivery.UserJourneyRequest": {
+        "internal_infrastructure_api_handlers_protected.UserJourneyRequest": {
             "type": "object",
             "required": [
                 "sessionId",
                 "startedAt",
-                "steps",
                 "userId"
             ],
             "properties": {
@@ -3057,7 +3759,7 @@ const docTemplate = `{
                 "steps": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.UserJourneyStep"
+                        "$ref": "#/definitions/internal_infrastructure_api_handlers_protected.UserJourneyStep"
                     }
                 },
                 "totalDuration": {
@@ -3068,7 +3770,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.UserJourneyStep": {
+        "internal_infrastructure_api_handlers_protected.UserJourneyStep": {
             "type": "object",
             "properties": {
                 "action": {
@@ -3098,7 +3800,1544 @@ const docTemplate = `{
                 }
             }
         },
-        "pagination.PaginatedResponse": {
+        "thanawy-backend_internal_application_dto.CourseDetailData": {
+            "type": "object",
+            "properties": {
+                "course": {
+                    "$ref": "#/definitions/thanawy-backend_internal_domain_common.Subject"
+                },
+                "subject": {
+                    "$ref": "#/definitions/thanawy-backend_internal_domain_common.Subject"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.CourseDetailResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.CourseDetailData"
+                },
+                "enrollment": {
+                    "$ref": "#/definitions/thanawy-backend_internal_domain_common.Enrollment"
+                },
+                "subject": {
+                    "$ref": "#/definitions/thanawy-backend_internal_domain_common.Subject"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.CourseListData": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/thanawy-backend_internal_domain_common.Subject"
+                    }
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "pagination": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.Pagination"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.CourseListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.CourseListData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.LoginRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "password"
+            ],
+            "properties": {
+                "deviceName": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "fingerprint": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string",
+                    "minLength": 8
+                },
+                "rememberMe": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.LoginResponse": {
+            "type": "object",
+            "properties": {
+                "accessToken": {
+                    "type": "string"
+                },
+                "refreshToken": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.UserDTO"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.Pagination": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.TeachingChapterContract": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "lessons": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingLessonContract"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.TeachingCourseContract": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "categoryId": {
+                    "type": "string"
+                },
+                "chapters": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingChapterContract"
+                    }
+                },
+                "createdDate": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "duration": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "language": {
+                    "type": "string"
+                },
+                "lessonsCount": {
+                    "type": "integer"
+                },
+                "level": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "number"
+                },
+                "rating": {
+                    "type": "number"
+                },
+                "shortDescription": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "studentsCount": {
+                    "type": "integer"
+                },
+                "thumbnail": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.TeachingCourseData": {
+            "type": "object",
+            "properties": {
+                "course": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingCourseContract"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.TeachingCourseDeleteData": {
+            "type": "object",
+            "properties": {
+                "deleted": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.TeachingCourseDeleteResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingCourseDeleteData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.TeachingCourseMutationData": {
+            "type": "object",
+            "properties": {
+                "course": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingCourseContract"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.TeachingCourseMutationResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingCourseMutationData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.TeachingCourseResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingCourseData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.TeachingCoursesListData": {
+            "type": "object",
+            "properties": {
+                "courses": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingCourseContract"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingPaginationContract"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.TeachingCoursesListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.TeachingCoursesListData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.TeachingLessonContract": {
+            "type": "object",
+            "properties": {
+                "duration": {
+                    "type": "string"
+                },
+                "durationMinutes": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "isPreview": {
+                    "type": "boolean"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.TeachingPaginationContract": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.UserDTO": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "emailVerified": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "permissions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "phoneVerified": {
+                    "type": "boolean"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.UserProfileEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.UserProfileResponse"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.UserProfileResponse": {
+            "type": "object",
+            "properties": {
+                "alternativePhone": {
+                    "type": "string"
+                },
+                "avatar": {
+                    "type": "string"
+                },
+                "bio": {
+                    "type": "string"
+                },
+                "city": {
+                    "type": "string"
+                },
+                "country": {
+                    "type": "string"
+                },
+                "dateOfBirth": {
+                    "type": "string"
+                },
+                "educationType": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "emailVerified": {
+                    "type": "boolean"
+                },
+                "experienceYears": {
+                    "type": "string"
+                },
+                "gender": {
+                    "type": "string"
+                },
+                "gradeLevel": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "mfaEnabled": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "phoneVerified": {
+                    "type": "boolean"
+                },
+                "school": {
+                    "type": "string"
+                },
+                "section": {
+                    "type": "string"
+                },
+                "studyGoal": {
+                    "type": "string"
+                },
+                "subjectsTaught": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.UserProfileUpdateEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/thanawy-backend_internal_application_dto.UserProfileUpdateResponse"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.UserProfileUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "alternativePhone": {
+                    "type": "string"
+                },
+                "avatar": {
+                    "type": "string"
+                },
+                "bio": {
+                    "type": "string"
+                },
+                "birthDate": {
+                    "type": "string"
+                },
+                "city": {
+                    "type": "string"
+                },
+                "country": {
+                    "type": "string"
+                },
+                "educationType": {
+                    "type": "string"
+                },
+                "experienceYears": {
+                    "type": "string"
+                },
+                "gender": {
+                    "type": "string"
+                },
+                "gradeLevel": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "school": {
+                    "type": "string"
+                },
+                "section": {
+                    "type": "string"
+                },
+                "studyGoal": {
+                    "type": "string"
+                },
+                "subjectsTaught": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.UserProfileUpdateResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_application_dto.VerifyMFARequest": {
+            "type": "object",
+            "required": [
+                "challengeId",
+                "code"
+            ],
+            "properties": {
+                "challengeId": {
+                    "type": "string"
+                },
+                "code": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_domain_common.CourseStatus": {
+            "type": "string",
+            "enum": [
+                "DRAFT",
+                "UNDER_REVIEW",
+                "PUBLISHED",
+                "ARCHIVED",
+                "REJECTED"
+            ],
+            "x-enum-varnames": [
+                "CourseStatusDraft",
+                "CourseStatusUnderReview",
+                "CourseStatusPublished",
+                "CourseStatusArchived",
+                "CourseStatusRejected"
+            ]
+        },
+        "thanawy-backend_internal_domain_common.CourseTag": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_domain_common.Enrollment": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "enrolledAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "progress": {
+                    "type": "number"
+                },
+                "subject": {
+                    "description": "Relations",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/thanawy-backend_internal_domain_common.Subject"
+                        }
+                    ]
+                },
+                "subjectId": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/thanawy-backend_internal_domain_common.User"
+                },
+                "userId": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_domain_common.EnrollmentType": {
+            "type": "string",
+            "enum": [
+                "OPEN",
+                "LIMITED",
+                "BY_APPROVAL"
+            ],
+            "x-enum-varnames": [
+                "EnrollmentTypeOpen",
+                "EnrollmentTypeLimited",
+                "EnrollmentTypeApproval"
+            ]
+        },
+        "thanawy-backend_internal_domain_common.Exam": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "difficulty": {
+                    "type": "string"
+                },
+                "duration": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "isActive": {
+                    "type": "boolean"
+                },
+                "maxScore": {
+                    "type": "number"
+                },
+                "questionCount": {
+                    "description": "Virtual fields",
+                    "type": "integer"
+                },
+                "questions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/thanawy-backend_internal_domain_common.Question"
+                    }
+                },
+                "subject": {
+                    "description": "Relations",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/thanawy-backend_internal_domain_common.Subject"
+                        }
+                    ]
+                },
+                "subjectId": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/thanawy-backend_internal_domain_common.ExamType"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_domain_common.ExamType": {
+            "type": "string",
+            "enum": [
+                "QUIZ",
+                "MIDTERM",
+                "FINAL"
+            ],
+            "x-enum-varnames": [
+                "ExamTypeQuiz",
+                "ExamTypeMidterm",
+                "ExamTypeFinal"
+            ]
+        },
+        "thanawy-backend_internal_domain_common.LessonAttachment": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "fileSize": {
+                    "type": "integer"
+                },
+                "fileType": {
+                    "description": "PDF, ZIP, etc.",
+                    "type": "string"
+                },
+                "fileUrl": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "subTopicId": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_domain_common.LessonSubtitle": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "isDefault": {
+                    "type": "boolean"
+                },
+                "isForHearingImpaired": {
+                    "type": "boolean"
+                },
+                "language": {
+                    "type": "string"
+                },
+                "languageName": {
+                    "type": "string"
+                },
+                "subTopic": {
+                    "description": "Relations",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/thanawy-backend_internal_domain_common.SubTopic"
+                        }
+                    ]
+                },
+                "subTopicId": {
+                    "type": "string"
+                },
+                "subtitleFormat": {
+                    "$ref": "#/definitions/thanawy-backend_internal_domain_common.SubtitleFormat"
+                },
+                "subtitleUrl": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_domain_common.Level": {
+            "type": "string",
+            "enum": [
+                "BEGINNER",
+                "INTERMEDIATE",
+                "ADVANCED"
+            ],
+            "x-enum-varnames": [
+                "LevelBeginner",
+                "LevelIntermediate",
+                "LevelAdvanced"
+            ]
+        },
+        "thanawy-backend_internal_domain_common.Question": {
+            "type": "object",
+            "properties": {
+                "examId": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "options": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_domain_common.SubTopic": {
+            "type": "object",
+            "properties": {
+                "attachments": {
+                    "description": "Relations",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/thanawy-backend_internal_domain_common.LessonAttachment"
+                    }
+                },
+                "audioDurationSeconds": {
+                    "type": "integer"
+                },
+                "audioUrl": {
+                    "description": "Phase 1: Advanced lesson fields (migration 0109)",
+                    "type": "string"
+                },
+                "avgWatchTimeSeconds": {
+                    "type": "integer"
+                },
+                "chapters": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/thanawy-backend_internal_domain_common.VideoChapter"
+                    }
+                },
+                "completionCount": {
+                    "type": "integer"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "dripReleaseDate": {
+                    "type": "string"
+                },
+                "durationMinutes": {
+                    "type": "integer"
+                },
+                "exam": {
+                    "$ref": "#/definitions/thanawy-backend_internal_domain_common.Exam"
+                },
+                "examId": {
+                    "type": "string"
+                },
+                "externalLinkTitle": {
+                    "type": "string"
+                },
+                "externalLinkUrl": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "isContentProtected": {
+                    "type": "boolean"
+                },
+                "isDripEnabled": {
+                    "type": "boolean"
+                },
+                "isFree": {
+                    "type": "boolean"
+                },
+                "order": {
+                    "type": "integer"
+                },
+                "subtitles": {
+                    "description": "Non-DB mapped fields",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/thanawy-backend_internal_domain_common.LessonSubtitle"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                },
+                "topic": {
+                    "description": "Relations",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/thanawy-backend_internal_domain_common.Topic"
+                        }
+                    ]
+                },
+                "topicId": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/thanawy-backend_internal_domain_common.SubTopicType"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "videoUrl": {
+                    "type": "string"
+                },
+                "viewCount": {
+                    "description": "Denormalized stats",
+                    "type": "integer"
+                }
+            }
+        },
+        "thanawy-backend_internal_domain_common.SubTopicType": {
+            "type": "string",
+            "enum": [
+                "VIDEO",
+                "QUIZ",
+                "ARTICLE",
+                "ASSIGNMENT",
+                "AUDIO",
+                "LINK",
+                "LIVE",
+                "DOCUMENT"
+            ],
+            "x-enum-varnames": [
+                "SubTopicVideo",
+                "SubTopicQuiz",
+                "SubTopicArticle",
+                "SubTopicAssignment",
+                "SubTopicAudio",
+                "SubTopicLink",
+                "SubTopicLive",
+                "SubTopicDocument"
+            ]
+        },
+        "thanawy-backend_internal_domain_common.Subject": {
+            "type": "object",
+            "required": [
+                "name",
+                "price",
+                "rating"
+            ],
+            "properties": {
+                "archivedAt": {
+                    "type": "string"
+                },
+                "archivedBy": {
+                    "type": "string"
+                },
+                "availableFrom": {
+                    "type": "string"
+                },
+                "availableUntil": {
+                    "type": "string"
+                },
+                "categoryId": {
+                    "type": "string"
+                },
+                "certificateIssueAfterCompletion": {
+                    "type": "boolean"
+                },
+                "certificateMinCompletionPct": {
+                    "type": "integer"
+                },
+                "certificateTemplate": {
+                    "description": "Certificate config (Phase 1)",
+                    "type": "string"
+                },
+                "code": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "minLength": 2
+                },
+                "color": {
+                    "type": "string"
+                },
+                "completionRate": {
+                    "type": "number"
+                },
+                "coursePrerequisites": {
+                    "description": "New fields to match DB and frontend",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 5000
+                },
+                "durationHours": {
+                    "type": "integer"
+                },
+                "enrolledCount": {
+                    "type": "integer"
+                },
+                "enrollmentType": {
+                    "description": "Operational \u0026 enrollment (Phase 1)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/thanawy-backend_internal_domain_common.EnrollmentType"
+                        }
+                    ]
+                },
+                "hasCertificate": {
+                    "type": "boolean"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "instructorId": {
+                    "type": "string"
+                },
+                "instructorName": {
+                    "type": "string"
+                },
+                "isActive": {
+                    "type": "boolean"
+                },
+                "isFeatured": {
+                    "type": "boolean"
+                },
+                "isNew": {
+                    "type": "boolean"
+                },
+                "isPublished": {
+                    "type": "boolean"
+                },
+                "isTrending": {
+                    "type": "boolean"
+                },
+                "language": {
+                    "type": "string"
+                },
+                "lastContentUpdate": {
+                    "type": "string"
+                },
+                "learningObjectives": {
+                    "type": "string"
+                },
+                "level": {
+                    "$ref": "#/definitions/thanawy-backend_internal_domain_common.Level"
+                },
+                "longDescription": {
+                    "type": "string"
+                },
+                "maxStudents": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 3
+                },
+                "nameAr": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 3
+                },
+                "newUntil": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "number"
+                },
+                "publishedAt": {
+                    "type": "string"
+                },
+                "rating": {
+                    "type": "number",
+                    "maximum": 5,
+                    "minimum": 0
+                },
+                "rejectionReason": {
+                    "type": "string"
+                },
+                "requirements": {
+                    "type": "string"
+                },
+                "reviewedAt": {
+                    "type": "string"
+                },
+                "reviewedBy": {
+                    "type": "string"
+                },
+                "secondaryLanguages": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "seoDescription": {
+                    "type": "string"
+                },
+                "seoTitle": {
+                    "type": "string"
+                },
+                "shortDescription": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Lifecycle and enhanced fields (migration 0064 + 0109)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/thanawy-backend_internal_domain_common.CourseStatus"
+                        }
+                    ]
+                },
+                "submittedForReviewAt": {
+                    "description": "Workflow metadata (Phase 1: 0109)",
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/thanawy-backend_internal_domain_common.CourseTag"
+                    }
+                },
+                "targetAudience": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "thumbnailUrl": {
+                    "type": "string"
+                },
+                "topics": {
+                    "description": "Relations",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/thanawy-backend_internal_domain_common.Topic"
+                    }
+                },
+                "trailerDurationMinutes": {
+                    "type": "integer"
+                },
+                "trailerUrl": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                },
+                "videoCount": {
+                    "type": "integer"
+                },
+                "whatYouLearn": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "thanawy-backend_internal_domain_common.SubtitleFormat": {
+            "type": "string",
+            "enum": [
+                "vtt",
+                "srt",
+                "json"
+            ],
+            "x-enum-varnames": [
+                "SubtitleVTT",
+                "SubtitleSRT",
+                "SubtitleJSON"
+            ]
+        },
+        "thanawy-backend_internal_domain_common.Topic": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "order": {
+                    "type": "integer"
+                },
+                "subTopics": {
+                    "description": "Relations",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/thanawy-backend_internal_domain_common.SubTopic"
+                    }
+                },
+                "subjectId": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_domain_common.User": {
+            "type": "object",
+            "required": [
+                "email",
+                "role",
+                "status"
+            ],
+            "properties": {
+                "activeSubscriptionId": {
+                    "description": "Subscriptions",
+                    "type": "string"
+                },
+                "additionalAiCredits": {
+                    "type": "integer"
+                },
+                "additionalExamCredits": {
+                    "type": "integer"
+                },
+                "aiCredits": {
+                    "type": "integer"
+                },
+                "alternativePhone": {
+                    "type": "string"
+                },
+                "avatar": {
+                    "type": "string"
+                },
+                "balance": {
+                    "description": "Billing \u0026 Credits",
+                    "type": "number"
+                },
+                "bio": {
+                    "type": "string"
+                },
+                "biometricEnabled": {
+                    "type": "boolean"
+                },
+                "challengeXP": {
+                    "type": "integer"
+                },
+                "city": {
+                    "type": "string"
+                },
+                "classesTaught": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "commissionRate": {
+                    "type": "number"
+                },
+                "country": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "currentStreak": {
+                    "description": "Gamification (stats)",
+                    "type": "integer"
+                },
+                "dateOfBirth": {
+                    "type": "string"
+                },
+                "educationType": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "emailNotifications": {
+                    "type": "boolean"
+                },
+                "emailVerified": {
+                    "type": "boolean"
+                },
+                "examCredits": {
+                    "type": "integer"
+                },
+                "examXP": {
+                    "type": "integer"
+                },
+                "examsPassed": {
+                    "type": "integer"
+                },
+                "experienceYears": {
+                    "type": "string"
+                },
+                "focusStrategy": {
+                    "type": "string"
+                },
+                "gender": {
+                    "type": "string"
+                },
+                "githubId": {
+                    "type": "string"
+                },
+                "googleId": {
+                    "type": "string"
+                },
+                "gradeLevel": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "instructorLanguages": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "instructorSpecialties": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "instructorStatus": {
+                    "type": "string"
+                },
+                "interestedSubjects": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "lastLogin": {
+                    "description": "Security \u0026 Auth",
+                    "type": "string"
+                },
+                "level": {
+                    "type": "integer"
+                },
+                "longestStreak": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 2
+                },
+                "permissions": {
+                    "description": "Access Control",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "phone": {
+                    "description": "Profile fields",
+                    "type": "string"
+                },
+                "phoneVerified": {
+                    "type": "boolean"
+                },
+                "questXP": {
+                    "type": "integer"
+                },
+                "referralCode": {
+                    "type": "string"
+                },
+                "role": {
+                    "enum": [
+                        "STUDENT",
+                        "TEACHER",
+                        "MODERATOR",
+                        "ADMIN",
+                        "SUPER_ADMIN",
+                        "PARENT",
+                        "SUPPORT"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/thanawy-backend_internal_domain_common.UserRole"
+                        }
+                    ]
+                },
+                "school": {
+                    "type": "string"
+                },
+                "seasonXP": {
+                    "type": "integer"
+                },
+                "section": {
+                    "type": "string"
+                },
+                "sleepTime": {
+                    "type": "string"
+                },
+                "smsNotifications": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "enum": [
+                        "ACTIVE",
+                        "INACTIVE",
+                        "SUSPENDED",
+                        "BANNED"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/thanawy-backend_internal_domain_common.UserStatus"
+                        }
+                    ]
+                },
+                "statusExpiresAt": {
+                    "type": "string"
+                },
+                "statusReason": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "studyGoal": {
+                    "type": "string"
+                },
+                "studyXP": {
+                    "description": "Multi-layer XP",
+                    "type": "integer"
+                },
+                "subjectsTaught": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "subscriptionExpiresAt": {
+                    "type": "string"
+                },
+                "taskXP": {
+                    "type": "integer"
+                },
+                "tasksCompleted": {
+                    "type": "integer"
+                },
+                "totalStudyTime": {
+                    "type": "integer"
+                },
+                "totalXP": {
+                    "description": "Gamification (core)",
+                    "type": "integer"
+                },
+                "twoFactorEnabled": {
+                    "type": "boolean"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 30,
+                    "minLength": 3
+                },
+                "wakeUpTime": {
+                    "description": "Profile extended",
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_domain_common.UserRole": {
+            "type": "string",
+            "enum": [
+                "STUDENT",
+                "TEACHER",
+                "MODERATOR",
+                "ADMIN",
+                "SUPER_ADMIN",
+                "PARENT",
+                "SUPPORT"
+            ],
+            "x-enum-varnames": [
+                "RoleStudent",
+                "RoleTeacher",
+                "RoleModerator",
+                "RoleAdmin",
+                "RoleSuperAdmin",
+                "RoleParent",
+                "RoleSupport"
+            ]
+        },
+        "thanawy-backend_internal_domain_common.UserStatus": {
+            "type": "string",
+            "enum": [
+                "ACTIVE",
+                "INACTIVE",
+                "SUSPENDED",
+                "BANNED"
+            ],
+            "x-enum-varnames": [
+                "StatusActive",
+                "StatusInactive",
+                "StatusSuspended",
+                "StatusBanned"
+            ]
+        },
+        "thanawy-backend_internal_domain_common.VideoChapter": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "isActive": {
+                    "type": "boolean"
+                },
+                "sortOrder": {
+                    "type": "integer"
+                },
+                "subTopic": {
+                    "description": "Relations",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/thanawy-backend_internal_domain_common.SubTopic"
+                        }
+                    ]
+                },
+                "subTopicId": {
+                    "type": "string"
+                },
+                "timeSeconds": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "titleAr": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "thanawy-backend_internal_shared_utils.PaginatedResponse": {
             "type": "object",
             "properties": {
                 "data": {},
