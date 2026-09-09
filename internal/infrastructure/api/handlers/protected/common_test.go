@@ -4,11 +4,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/gorm"
 )
 
 func TestIsDuplicateKeyError(t *testing.T) {
@@ -151,6 +154,14 @@ func TestConstants(t *testing.T) {
 	assert.Equal(t, "2006-01-02", dateFormat)
 	assert.Equal(t, "User not found", errUserNotFound)
 	assert.Equal(t, "Authentication required", authRequired)
+}
+
+func TestApplyIDOrSlugQueryDoesNotCompareInvalidSlugToUUIDColumn(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	assert.NoError(t, err)
+
+	statement := applyIDOrSlugQuery(database.Session(&gorm.Session{DryRun: true}), "not-a-real-course").First(&struct{}{})
+	assert.NotContains(t, strings.ToLower(statement.Statement.SQL.String()), " or id = ")
 }
 
 func TestIsDuplicateKeyError_RealWorldCases(t *testing.T) {

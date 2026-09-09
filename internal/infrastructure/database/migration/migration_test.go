@@ -40,6 +40,25 @@ COMMIT;`
 	}
 }
 
+func TestLmsPricingDiscountColumnsExistInCoreSchema(t *testing.T) {
+	contents, err := migrationFiles.ReadFile("migrations/0112_lms_core_tables.sql")
+	if err != nil {
+		t.Fatalf("failed to read base LMS schema migration: %v", err)
+	}
+
+	sql := string(contents)
+	for _, column := range []string{
+		"discount_price",
+		"discount_start_at",
+		"discount_end_at",
+		"subscription_plan_id",
+	} {
+		if !contains(sql, column) {
+			t.Fatalf("LmsPricing schema is missing %s column in 0112_lms_core_tables.sql", column)
+		}
+	}
+}
+
 func TestAllEmbeddedMigrationFilesAreValidAndParsable(t *testing.T) {
 	names, err := getMigrationNames()
 	if err != nil {
@@ -65,5 +84,18 @@ func TestAllEmbeddedMigrationFilesAreValidAndParsable(t *testing.T) {
 			t.Errorf("migration %s has non-empty file but 0 parsed statements", name)
 		}
 	}
+}
+
+func contains(s, substr string) bool {
+	return len(substr) == 0 || indexOf(s, substr) >= 0
+}
+
+func indexOf(s, substr string) int {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 }
 

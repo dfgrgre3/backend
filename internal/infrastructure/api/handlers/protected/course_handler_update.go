@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	models "thanawy-backend/internal/domain/common"
 	courseservice "thanawy-backend/internal/domain/course/service"
 	api_response "thanawy-backend/internal/infrastructure/api/response"
 
@@ -100,6 +101,10 @@ func (h *CourseRESTHandler) UpdateCourse(c *gin.Context) {
 
 	courseEntity, err := h.updateCourseHandler.Handle(c.Request.Context(), cmd)
 	if err != nil {
+		if errors.Is(err, models.ErrDirectPublication) {
+			api_response.Error(c, http.StatusConflict, "Course status changes must use the review workflow")
+			return
+		}
 		if errors.Is(err, courseservice.ErrCertificateTemplateNotFound) {
 			api_response.Error(c, http.StatusBadRequest, "Certificate template not found")
 			return

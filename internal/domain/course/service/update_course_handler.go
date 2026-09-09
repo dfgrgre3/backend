@@ -105,11 +105,7 @@ func (h *UpdateCourseHandler) Handle(ctx context.Context, cmd UpdateCourseComman
 		course.IsTrending = *cmd.IsTrending
 	}
 	if cmd.IsPublished != nil {
-		if *cmd.IsPublished {
-			course.Status = models.CourseStatusPublished
-		} else {
-			course.Status = models.CourseStatusDraft
-		}
+		return nil, models.ErrDirectPublication
 	}
 	if cmd.IsNew != nil {
 		course.IsNew = *cmd.IsNew

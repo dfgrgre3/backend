@@ -26,6 +26,14 @@ type courseWindowAgg struct {
 	Revenue     float64 `gorm:"column:revenue"`
 }
 
+type courseStatsAgg struct {
+	TotalCourses     int64 `gorm:"column:total_courses"`
+	PublishedCourses int64 `gorm:"column:published_courses"`
+	DraftCourses     int64 `gorm:"column:draft_courses"`
+	ArchivedCourses  int64 `gorm:"column:archived_courses"`
+	PaidCourses      int64 `gorm:"column:paid_courses"`
+}
+
 // GetCourseStats returns real aggregated course statistics. It honours exactly
 // the same query parameters as GetSubjects / ExportSubjectsCSV, so the numbers
 // always describe the filter combination the admin currently sees.
@@ -41,12 +49,20 @@ func GetCourseStats(c *gin.Context) {
 		return buildSubjectFilters(readDB.Model(&models.Subject{}), c)
 	}
 
-	var totalCourses, publishedCourses, draftCourses, archivedCourses, paidCourses int64
-	filtered().Count(&totalCourses)
-	filtered().Where("is_published = ?", true).Count(&publishedCourses)
-	filtered().Where("status = ?", models.CourseStatusArchived).Count(&archivedCourses)
-	filtered().Where("is_published = ? AND status <> ?", false, models.CourseStatusArchived).Count(&draftCourses)
-	filtered().Where("price > 0").Count(&paidCourses)
+	// Compute all course counters in one scan. The old implementation issued
+	// five COUNT queries before doing the enrollment aggregates, which made the
+	// stats endpoint especially slow on the admin page.
+	var courseStats courseStatsAgg
+	if err := filtered().Select(`
+		COUNT(*) AS total_courses,
+		COUNT(*) FILTER (WHERE is_published = TRUE) AS published_courses,
+		COUNT(*) FILTER (WHERE is_published = FALSE AND status <> ?) AS draft_courses,
+		COUNT(*) FILTER (WHERE status = ?) AS archived_courses,
+		COUNT(*) FILTER (WHERE price > 0) AS paid_courses`,
+		models.CourseStatusArchived, models.CourseStatusArchived).Scan(&courseStats).Error; err != nil {
+		api_response.ErrorDetail(c, 500, "Failed to calculate course statistics", err)
+		return
+	}
 
 	var agg courseEnrollmentAgg
 	courseEnrollmentQuery(readDB, filtered()).
@@ -62,12 +78,12 @@ func GetCourseStats(c *gin.Context) {
 
 	api_response.Success(c, gin.H{
 		"stats": gin.H{
-			"totalCourses":     totalCourses,
-			"publishedCourses": publishedCourses,
-			"draftCourses":     draftCourses,
-			"archivedCourses":  archivedCourses,
-			"paidCourses":      paidCourses,
-			"freeCourses":      totalCourses - paidCourses,
+			"totalCourses":     courseStats.TotalCourses,
+			"publishedCourses": courseStats.PublishedCourses,
+			"draftCourses":     courseStats.DraftCourses,
+			"archivedCourses":  courseStats.ArchivedCourses,
+			"paidCourses":      courseStats.PaidCourses,
+			"freeCourses":      courseStats.TotalCourses - courseStats.PaidCourses,
 			"totalEnrollments": agg.TotalEnrollments,
 			"activeStudents":   agg.ActiveStudents,
 			"avgCompletion":    roundTo(agg.AvgCompletion, 1),

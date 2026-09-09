@@ -12,31 +12,31 @@ import (
 )
 
 type UserSession struct {
-	ID                string         `gorm:"primaryKey;type:uuid;column:id" json:"id"`
-	UserID            string         `gorm:"not null;type:uuid;index;column:user_id" json:"userId"`
-	RefreshToken      string         `gorm:"column:refresh_token;default:''" json:"-"`
-	RefreshTokenHash  string         `gorm:"uniqueIndex:idx_user_session_refresh_hash;not null;column:refresh_token_hash" json:"-"`
-	UserAgent         string         `gorm:"type:text;column:user_agent" json:"userAgent"`
-	IP                string         `gorm:"not null;column:ip" json:"ip"`
-	IPAddress         string         `gorm:"-" json:"ipAddress"`
-	Location          *string        `gorm:"column:location" json:"location"`
-	Browser           string         `gorm:"column:browser" json:"browser"`
-	OS                string         `gorm:"column:os" json:"os"`
-	Country           string         `gorm:"column:country" json:"country"`
-	Device            *string        `gorm:"-" json:"device"`
-	DeviceType        string         `gorm:"column:device_type" json:"deviceType"`
-	FingerprintHash   string         `gorm:"column:fingerprint_hash;type:varchar(64)" json:"-"`
-	RememberMe        bool           `gorm:"column:remember_me;default:false" json:"rememberMe"`
-	Status            string         `gorm:"default:'active';column:status" json:"status"` // active, expired, revoked
-	IsActive          bool           `gorm:"default:true;index;column:is_active" json:"isActive"`
-	LastActivity      time.Time      `gorm:"-" json:"lastActivity"`
-	LastAccessed      time.Time      `gorm:"column:last_accessed" json:"lastActive"`
-	ExpiresAt         time.Time      `gorm:"index;column:expires_at" json:"expiresAt"`
-	AbsoluteExpiresAt time.Time      `gorm:"column:absolute_expires_at" json:"absoluteExpiresAt"`
-	RevokedAt         *time.Time     `gorm:"column:revoked_at" json:"revokedAt,omitempty"`
-	RevokedBy         *string        `gorm:"type:uuid;column:revoked_by" json:"revokedBy,omitempty"`
-	CreatedAt         time.Time      `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt         time.Time      `gorm:"column:updated_at" json:"updatedAt"`
+	ID                string     `gorm:"primaryKey;type:uuid;column:id" json:"id"`
+	UserID            string     `gorm:"not null;type:uuid;index;column:user_id" json:"userId"`
+	RefreshToken      string     `gorm:"column:refresh_token;default:''" json:"-"`
+	RefreshTokenHash  string     `gorm:"uniqueIndex:idx_user_session_refresh_hash;not null;column:refresh_token_hash" json:"-"`
+	UserAgent         string     `gorm:"type:text;column:user_agent" json:"userAgent"`
+	IP                string     `gorm:"not null;column:ip" json:"ip"`
+	IPAddress         string     `gorm:"-" json:"ipAddress"`
+	Location          *string    `gorm:"column:location" json:"location"`
+	Browser           string     `gorm:"column:browser" json:"browser"`
+	OS                string     `gorm:"column:os" json:"os"`
+	Country           string     `gorm:"column:country" json:"country"`
+	Device            *string    `gorm:"-" json:"device"`
+	DeviceType        string     `gorm:"column:device_type" json:"deviceType"`
+	FingerprintHash   string     `gorm:"column:fingerprint_hash;type:varchar(64)" json:"-"`
+	RememberMe        bool       `gorm:"column:remember_me;default:false" json:"rememberMe"`
+	Status            string     `gorm:"default:'active';column:status" json:"status"` // active, expired, revoked
+	IsActive          bool       `gorm:"default:true;index;column:is_active" json:"isActive"`
+	LastActivity      time.Time  `gorm:"-" json:"lastActivity"`
+	LastAccessed      time.Time  `gorm:"column:last_accessed" json:"lastActive"`
+	ExpiresAt         time.Time  `gorm:"index;column:expires_at" json:"expiresAt"`
+	AbsoluteExpiresAt time.Time  `gorm:"column:absolute_expires_at" json:"absoluteExpiresAt"`
+	RevokedAt         *time.Time `gorm:"column:revoked_at" json:"revokedAt,omitempty"`
+	RevokedBy         *string    `gorm:"type:uuid;column:revoked_by" json:"revokedBy,omitempty"`
+	CreatedAt         time.Time  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt         time.Time  `gorm:"column:updated_at" json:"updatedAt"`
 	// Note: deleted_at column was intentionally removed in migration 0176
 	// (soft-delete → hard-delete + audit trail phase A). UserSession
 	// uses is_active/status/revoked_at/expires_at for lifecycle instead.
@@ -66,8 +66,9 @@ func (s *UserSession) BeforeCreate(tx *gorm.DB) (err error) {
 	// Prefer a single ordered scan over the user-specific active-session index instead of
 	// issuing a full COUNT(*) before the delete, which causes unnecessary table work on every login.
 	var oldestSessions []UserSession
-	if err := tx.Where("user_id = ? AND is_active = ?", s.UserID, true).
+	if err := tx.Select("id").Where("user_id = ? AND is_active = ?", s.UserID, true).
 		Order("last_accessed ASC").
+		Limit(6).
 		Find(&oldestSessions).Error; err == nil && len(oldestSessions) > 4 {
 		toRevokeCount := len(oldestSessions) - 4
 		for _, os := range oldestSessions[:toRevokeCount] {

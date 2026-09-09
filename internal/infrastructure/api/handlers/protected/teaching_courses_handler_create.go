@@ -72,11 +72,12 @@ func TeachingCreateCourse(c *gin.Context) {
 	if input.Language == "" {
 		input.Language = "ar"
 	}
+	if requestedStatus := strings.ToUpper(strings.TrimSpace(input.Status)); requestedStatus != "" && requestedStatus != string(models.CourseStatusDraft) {
+		api_response.Error(c, http.StatusConflict, "New courses must be submitted for review before publication")
+		return
+	}
 
 	status := models.CourseStatusDraft
-	if input.Status == "published" || input.Status == "PUBLISHED" {
-		status = models.CourseStatusPublished
-	}
 
 	thumbnail := strings.TrimSpace(input.Thumbnail)
 	description := strings.TrimSpace(input.Description)

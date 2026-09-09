@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // DeleteCourse deletes a course
@@ -39,7 +40,24 @@ func (h *CourseRESTHandler) DeleteCourse(c *gin.Context) {
 		return
 	}
 	if result.RowsAffected == 0 {
-		api_response.Error(c, http.StatusNotFound, "Course not found")
+		// The admin catalog still contains legacy Subject records in some
+		// installations. Keep the compatibility DELETE endpoint useful while
+		// those records are being migrated.
+		var legacy models.Subject
+		legacyResult := h.db.WithContext(c.Request.Context()).First(&legacy, "id = ?", id)
+		if legacyResult.Error == nil {
+			DeleteSubject(c)
+			return
+		}
+
+		// DELETE is intentionally idempotent: a slow UI can retry after the
+		// first request already committed. Treat an already-absent course as a
+		// successful delete instead of surfacing a misleading 404.
+		if legacyResult.Error == gorm.ErrRecordNotFound {
+			api_response.Success(c, gin.H{"message": "Course already deleted", "success": true})
+			return
+		}
+		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to verify course", legacyResult.Error)
 		return
 	}
 

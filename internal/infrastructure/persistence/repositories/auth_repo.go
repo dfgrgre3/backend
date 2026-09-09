@@ -3,8 +3,8 @@ package repositories
 import (
 	"context"
 	"errors"
-	"time"
 	models "thanawy-backend/internal/domain/common"
+	"time"
 
 	db "thanawy-backend/internal/infrastructure/database"
 
@@ -165,6 +165,7 @@ func (r *authRepository) GetUserSessions(ctx context.Context, userID string) ([]
 	}
 	return result, nil
 }
+
 // ── User & Credential ──────────────────────────────────────────────────
 
 func (r *authRepository) FindUserByEmail(ctx context.Context, email string) (*models.User, error) {
@@ -305,9 +306,9 @@ func (r *authRepository) FindVerificationCodeByCodeAndType(ctx context.Context, 
 func (r *authRepository) GetSessionByHashOrdered(ctx context.Context, hash string) (*models.UserSession, error) {
 	var session models.UserSession
 	if err := db.DB.WithContext(ctx).
+		Select("id", "user_id", "refresh_token", "refresh_token_hash", "status", "is_active", "expires_at", "revoked_at", "created_at", "updated_at").
 		Where("refresh_token_hash = ?", hash).
-		Order("updated_at DESC").
-		First(&session).Error; err != nil {
+		Take(&session).Error; err != nil {
 		return nil, err
 	}
 	return &session, nil

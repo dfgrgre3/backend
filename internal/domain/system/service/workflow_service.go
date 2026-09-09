@@ -34,7 +34,6 @@ func (s *WorkflowService) ValidateTransition(currentStatus, targetStatus models.
 		models.CourseStatusDraft: {
 			models.CourseStatusUnderReview,
 			models.CourseStatusArchived,
-			models.CourseStatusPublished, // Admin direct publish
 		},
 		models.CourseStatusUnderReview: {
 			models.CourseStatusPublished,
@@ -92,9 +91,9 @@ func (s *WorkflowService) UnarchiveCourse(subjectID, userID string) (*Transition
 	return s.transition(subjectID, userID, models.CourseStatusDraft, "UNARCHIVE")
 }
 
-// PublishCourse directly publishes (for admin override)
+// PublishCourse is retained for API compatibility but direct publication is disabled.
 func (s *WorkflowService) PublishCourse(subjectID, userID string) (*TransitionResult, error) {
-	return s.transition(subjectID, userID, models.CourseStatusPublished, "DIRECT_PUBLISH")
+	return nil, errors.New("direct publication is disabled; submit the course for review first")
 }
 
 // DraftCourse returns a course to draft status (unpublish)

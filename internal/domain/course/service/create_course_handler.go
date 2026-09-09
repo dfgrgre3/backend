@@ -53,6 +53,10 @@ func (h *CreateCourseHandler) ensureUniqueSlug(ctx context.Context, slug string)
 
 // Handle handles the create course command
 func (h *CreateCourseHandler) Handle(ctx context.Context, cmd CreateCourseCommand) (interface{}, error) {
+	if cmd.IsPublished {
+		return nil, models.ErrDirectPublication
+	}
+
 	slug := strings.TrimSpace(cmd.Slug)
 	if slug == "" {
 		slug = slugify(cmd.Title)
@@ -92,9 +96,6 @@ func (h *CreateCourseHandler) Handle(ctx context.Context, cmd CreateCourseComman
 	}
 
 	status := models.CourseStatusDraft
-	if cmd.IsPublished {
-		status = models.CourseStatusPublished
-	}
 
 	course := &models.LmsCourse{
 		ID:                    uuid.New(),

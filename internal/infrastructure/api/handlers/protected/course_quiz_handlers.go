@@ -54,6 +54,33 @@ func quizCourseAccess(c *gin.Context, courseID, userID string) bool {
 	return db.DB.Where("user_id = ? AND subject_id = ?", userID, courseID).First(&enrollment).Error == nil
 }
 
+func quizViewerCanSeeUnpublished(c *gin.Context, courseID, userID string) bool {
+	role, _ := c.Get("role")
+	roleName, _ := role.(string)
+	if roleName == string(models.RoleAdmin) || roleName == string(models.RoleSuperAdmin) {
+		return true
+	}
+
+	var subject models.Subject
+	return db.DB.Where("id = ? AND instructor_id = ?", courseID, userID).First(&subject).Error == nil
+}
+
+func courseQuizQueryForViewer(c *gin.Context, courseID, userID string) *gorm.DB {
+	query := db.ReadDB().Where("course_id = ?", courseID)
+	if !quizViewerCanSeeUnpublished(c, courseID, userID) {
+		query = query.Where("status = ?", "published")
+	}
+	return query
+}
+
+func findCourseQuizForViewer(c *gin.Context, courseID, quizID, userID string) (models.CourseQuiz, error) {
+	var quiz models.CourseQuiz
+	err := courseQuizQueryForViewer(c, courseID, userID).
+		Where("id = ?", quizID).
+		First(&quiz).Error
+	return quiz, err
+}
+
 func publicQuestion(question map[string]interface{}) map[string]interface{} {
 	for _, key := range []string{
 		"isCorrect", "referenceAnswer", "graderNotes", "gradingMethod",
@@ -96,15 +123,7 @@ func GetCourseQuizzes(c *gin.Context) {
 		return
 	}
 	var quizzes []models.CourseQuiz
-	query := db.ReadDB().Where("course_id = ?", courseID)
-	var subject models.Subject
-	role, _ := c.Get("role")
-	roleName, _ := role.(string)
-	isManager := roleName == string(models.RoleAdmin) || roleName == string(models.RoleSuperAdmin)
-	isInstructor := db.DB.Where("id = ?", courseID).First(&subject).Error == nil && subject.InstructorId != nil && *subject.InstructorId == userID
-	if !isManager && !isInstructor {
-		query = query.Where("status = ?", "published")
-	}
+	query := courseQuizQueryForViewer(c, courseID, userID)
 	if err := query.Order("created_at ASC").Find(&quizzes).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch quizzes")
 		return
@@ -128,15 +147,7 @@ func GetLessonCourseQuizzes(c *gin.Context) {
 		return
 	}
 	var quizzes []models.CourseQuiz
-	query := db.ReadDB().Where("course_id = ? AND lesson_id = ?", courseID, lessonID)
-	role, _ := c.Get("role")
-	roleName, _ := role.(string)
-	isManager := roleName == string(models.RoleAdmin) || roleName == string(models.RoleSuperAdmin)
-	var subject models.Subject
-	isInstructor := db.DB.Where("id = ?", courseID).First(&subject).Error == nil && subject.InstructorId != nil && *subject.InstructorId == userID
-	if !isManager && !isInstructor {
-		query = query.Where("status = ?", "published")
-	}
+	query := courseQuizQueryForViewer(c, courseID, userID).Where("lesson_id = ?", lessonID)
 	if err := query.Order("created_at ASC").Find(&quizzes).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to fetch lesson quizzes")
 		return
@@ -157,8 +168,8 @@ func GetCourseQuiz(c *gin.Context) {
 		api_response.Error(c, http.StatusForbidden, "You must be enrolled in this course")
 		return
 	}
-	var quiz models.CourseQuiz
-	if err := db.ReadDB().Where("id = ? AND course_id = ?", quizID, courseID).First(&quiz).Error; err != nil {
+	quiz, err := findCourseQuizForViewer(c, courseID, quizID, userID)
+	if err != nil {
 		api_response.Error(c, http.StatusNotFound, "Quiz not found")
 		return
 	}
@@ -282,8 +293,8 @@ func StartCourseQuiz(c *gin.Context) {
 		api_response.Error(c, http.StatusForbidden, "You must be enrolled in this course")
 		return
 	}
-	var quiz models.CourseQuiz
-	if err := db.ReadDB().Where("id = ? AND course_id = ?", quizID, courseID).First(&quiz).Error; err != nil {
+	quiz, err := findCourseQuizForViewer(c, courseID, quizID, userID)
+	if err != nil {
 		api_response.Error(c, http.StatusNotFound, "Quiz not found")
 		return
 	}
@@ -331,8 +342,8 @@ func SubmitCourseQuiz(c *gin.Context) {
 		api_response.Error(c, http.StatusForbidden, "You must be enrolled in this course")
 		return
 	}
-	var quiz models.CourseQuiz
-	if err := db.ReadDB().Where("id = ? AND course_id = ?", quizID, courseID).First(&quiz).Error; err != nil {
+	quiz, err := findCourseQuizForViewer(c, courseID, quizID, userID)
+	if err != nil {
 		api_response.Error(c, http.StatusNotFound, "Quiz not found")
 		return
 	}
@@ -458,6 +469,10 @@ func GetCourseQuizResults(c *gin.Context) {
 	}
 	if !quizCourseAccess(c, c.Param("id"), userID) {
 		api_response.Error(c, http.StatusForbidden, "You must be enrolled in this course")
+		return
+	}
+	if _, err := findCourseQuizForViewer(c, c.Param("id"), c.Param("quizId"), userID); err != nil {
+		api_response.Error(c, http.StatusNotFound, "Quiz not found")
 		return
 	}
 	var attempts []models.CourseQuizAttempt

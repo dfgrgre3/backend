@@ -1,6 +1,7 @@
 package protected
 
 import (
+	"errors"
 	"net/http"
 	models "thanawy-backend/internal/domain/common"
 	courseservice "thanawy-backend/internal/domain/course/service"
@@ -65,7 +66,11 @@ func (h *CourseRESTHandler) CreateCourse(c *gin.Context) {
 
 	courseEntity, err := h.createCourseHandler.Handle(c.Request.Context(), cmd)
 	if err != nil {
-		api_response.ErrorDetail(c, http.StatusInternalServerError, "Failed to create course", err)
+		status := http.StatusInternalServerError
+		if errors.Is(err, models.ErrDirectPublication) {
+			status = http.StatusConflict
+		}
+		api_response.ErrorDetail(c, status, "Failed to create course", err)
 		return
 	}
 

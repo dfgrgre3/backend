@@ -18,6 +18,7 @@ var (
 	ErrLessonNotFound      = errors.New("lesson not found")
 	ErrEnrollmentNotFound  = errors.New("enrollment not found")
 	ErrInvalidStatus       = errors.New("invalid status transition")
+	ErrDirectPublication   = errors.New("course publication requires review approval")
 	ErrDuplicateEnrollment = errors.New("user already enrolled")
 )
 

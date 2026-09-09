@@ -274,10 +274,10 @@ func applyIDOrSlugQuery(query *gorm.DB, id string) *gorm.DB {
 	if id == "" || strings.EqualFold(id, "undefined") || strings.EqualFold(id, "null") {
 		return query.Where("1 = 0")
 	}
-	if len(id) == 36 && strings.Contains(id, "-") {
+	if _, err := uuid.Parse(id); err == nil {
 		return query.Where(idQuery, id)
 	}
-	return query.Where("slug = ? OR id = ?", id, id)
+	return query.Where("slug = ?", id)
 }
 
 func handleSubjectError(c *gin.Context, id string, err error, contextMsg string) {
