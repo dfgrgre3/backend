@@ -1,3 +1,15 @@
+-- P007 audit note: this filename shares the numeric prefix "0115" with
+-- 0115_create_credentials_tables.sql. This is NOT a real id collision: the
+-- migrator (migration_apply.go) keys schema_migrations by the FULL filename
+-- minus ".sql", not by the numeric prefix, and applies migrations in
+-- sort.Strings() order over that full name — so both files get distinct,
+-- deterministic ids ("create_..." sorts before "make_..."). This migration
+-- is already applied in existing environments; renaming it would change its
+-- tracked id and cause the migrator to treat it as a new pending migration
+-- (re-apply risk), so per migrations/README.md it is intentionally left
+-- in place rather than renumbered. See migrations/README.md "Known
+-- duplicate number prefixes".
+--
 -- Make refresh_token nullable and remove unique index to be compatible with hashed-token model
 
 DO $$

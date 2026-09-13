@@ -28,9 +28,14 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Generate swagger docs placeholder if not present
+# Generate swagger docs placeholder only if a real generated docs.go is not
+# already present (P008: this used to unconditionally overwrite a real
+# generated docs/docs.go with a placeholder, even though the comment said
+# "if not present").
 RUN mkdir -p docs && \
-    printf 'package docs\n\n// Placeholder Swagger docs package generated at build time.\n' > docs/docs.go
+    if [ ! -f docs/docs.go ]; then \
+        printf 'package docs\n\n// Placeholder Swagger docs package generated at build time.\n' > docs/docs.go; \
+    fi
 
 # Compile all binaries with security flags:
 # -trimpath: Removes local file system paths from the compiled binary (prevents info leakage)

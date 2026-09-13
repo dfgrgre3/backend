@@ -110,11 +110,13 @@ func runScheduledBackup() error {
 	backupID := fmt.Sprintf("auto-%s", time.Now().UTC().Format("20060102-150405"))
 	log.Printf("[BackupCron] Running pg_dump for backup %s", backupID)
 
+	// P014: a pg_dump failure must abort the backup with a real error, not
+	// silently substitute a fake stub file that looks like a successful
+	// backup to anything checking backup status/history.
 	backupSvc := GetBackupService()
 	rawSQL, err := backupSvc.runPgDump()
 	if err != nil {
-		log.Printf("[BackupCron] pg_dump warning: %v – will upload fallback stub", err)
-		rawSQL = backupSvc.generateFallbackData(backupID, err)
+		return fmt.Errorf("pg_dump failed for backup %s: %w", backupID, err)
 	}
 
 	// ── 2. gzip compress ────────────────────────────────────────────────────────
@@ -134,9 +136,12 @@ func runScheduledBackup() error {
 	defer os.Remove(localPath) // always clean up
 
 	// ── 4. Upload to S3 / Supabase Storage ─────────────────────────────────────
+	// P014: an upload failure must be propagated so the scheduler (and any
+	// caller relying on this function's return value) correctly marks the
+	// backup as FAILED, instead of being silently logged as a soft warning
+	// while the run as a whole reports success.
 	if err := uploadBackupToS3(backupID, compressedBuf.Bytes()); err != nil {
-		// Log but don't fail – the local copy is still useful for debugging.
-		log.Printf("[BackupCron] S3 upload failed for %s: %v", backupID, err)
+		return fmt.Errorf("S3 upload failed for backup %s: %w", backupID, err)
 	}
 
 	return nil
