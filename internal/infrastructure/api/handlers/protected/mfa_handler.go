@@ -3,6 +3,7 @@ package protected
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -23,6 +24,36 @@ type MFAHandler struct {
 	mfaService authservice.MFAService
 	tokenSvc   authservice.AuthTokenService
 	authRepo   authservice.AuthService // using to create sessions
+}
+
+// backup_codes is JSONB in the database. Keep the wire format as a JSON array
+// and accept the old comma-separated representation so existing credentials
+// remain usable after the storage fix.
+func encodeBackupCodes(codes []string) string {
+	encoded, err := json.Marshal(codes)
+	if err != nil {
+		return "[]"
+	}
+	return string(encoded)
+}
+
+func decodeBackupCodes(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return []string{}
+	}
+	var codes []string
+	if json.Unmarshal([]byte(raw), &codes) == nil {
+		return codes
+	}
+	// Backward compatibility for rows written by the previous implementation.
+	legacy := strings.Split(raw, ",")
+	filtered := make([]string, 0, len(legacy))
+	for _, code := range legacy {
+		if strings.TrimSpace(code) != "" {
+			filtered = append(filtered, code)
+		}
+	}
+	return filtered
 }
 
 func NewMFAHandler(mfaService authservice.MFAService, tokenSvc authservice.AuthTokenService, authService authservice.AuthService) *MFAHandler {
@@ -64,8 +95,9 @@ func (h *MFAHandler) SetupMFA(c *gin.Context) {
 
 	// Store secret in TwoFactorCredential table
 	twoFactorCredential := models.TwoFactorCredential{
-		UserID: userID,
-		Secret: secret,
+		UserID:      userID,
+		Secret:      secret,
+		BackupCodes: "[]",
 	}
 	if err := db.DB.WithContext(c.Request.Context()).Save(&twoFactorCredential).Error; err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to update security settings")
@@ -113,7 +145,7 @@ func (h *MFAHandler) EnableMFA(c *gin.Context) {
 	}
 
 	twoFactorCredential.Enabled = true
-	twoFactorCredential.BackupCodes = strings.Join(hashedBackupCodes, ",")
+	twoFactorCredential.BackupCodes = encodeBackupCodes(hashedBackupCodes)
 
 	if err := db.DB.WithContext(c.Request.Context()).Save(&twoFactorCredential).Error; err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to enable MFA")
@@ -160,13 +192,13 @@ func (h *MFAHandler) DisableMFA(c *gin.Context) {
 		// Check backup codes
 		hash := sha256.Sum256([]byte(req.Code))
 		hashedCode := hex.EncodeToString(hash[:])
-		codes := strings.Split(twoFactorCredential.BackupCodes, ",")
+		codes := decodeBackupCodes(twoFactorCredential.BackupCodes)
 		for i, c := range codes {
 			if c == hashedCode {
 				valid = true
 				// Remove used backup code
 				codes = append(codes[:i], codes[i+1:]...)
-				twoFactorCredential.BackupCodes = strings.Join(codes, ",")
+				twoFactorCredential.BackupCodes = encodeBackupCodes(codes)
 				break
 			}
 		}
@@ -179,7 +211,7 @@ func (h *MFAHandler) DisableMFA(c *gin.Context) {
 
 	twoFactorCredential.Enabled = false
 	twoFactorCredential.Secret = ""
-	twoFactorCredential.BackupCodes = ""
+	twoFactorCredential.BackupCodes = "[]"
 
 	if err := db.DB.WithContext(c.Request.Context()).Save(&twoFactorCredential).Error; err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to disable MFA")
@@ -236,13 +268,13 @@ func (h *MFAHandler) VerifyMFA(c *gin.Context) {
 		// Check backup codes
 		hash := sha256.Sum256([]byte(req.Code))
 		hashedCode := hex.EncodeToString(hash[:])
-		codes := strings.Split(twoFactorCredential.BackupCodes, ",")
+		codes := decodeBackupCodes(twoFactorCredential.BackupCodes)
 		for i, codeVal := range codes {
 			if codeVal == hashedCode {
 				valid = true
 				// Remove used backup code
 				codes = append(codes[:i], codes[i+1:]...)
-				twoFactorCredential.BackupCodes = strings.Join(codes, ",")
+				twoFactorCredential.BackupCodes = encodeBackupCodes(codes)
 				db.DB.WithContext(ctx).Save(&twoFactorCredential)
 				break
 			}
@@ -301,10 +333,16 @@ func (h *MFAHandler) VerifyMFA(c *gin.Context) {
 		DeviceType:   "web",
 		Status:       "active",
 		IsActive:     true,
+		RememberMe:   req.RememberMe,
 		LastAccessed: time.Now(),
-		ExpiresAt:    time.Now().Add(30 * 24 * time.Hour),
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		ExpiresAt: time.Now().Add(func() time.Duration {
+			if req.RememberMe {
+				return 90 * 24 * time.Hour
+			}
+			return 30 * 24 * time.Hour
+		}()),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 	if err := db.DB.WithContext(ctx).Create(userSession).Error; err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to create session")
@@ -315,7 +353,11 @@ func (h *MFAHandler) VerifyMFA(c *gin.Context) {
 	cfg := config.Load()
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("access_token", tokenPair.AccessToken, 15*60, "/", cfg.CookieDomain, secureCookie(c), true)
-	c.SetCookie("refresh_token", tokenPair.RefreshToken, 30*24*60*60, "/", cfg.CookieDomain, secureCookie(c), true)
+	refreshMaxAge := 30 * 24 * 60 * 60
+	if req.RememberMe {
+		refreshMaxAge = 90 * 24 * 60 * 60
+	}
+	c.SetCookie("refresh_token", tokenPair.RefreshToken, refreshMaxAge, "/", cfg.CookieDomain, secureCookie(c), true)
 
 	// SECURITY: refresh token stays cookie-only (HttpOnly) — not echoed in
 	// the body. See the SECURITY note in auth_handler.go Login for why.

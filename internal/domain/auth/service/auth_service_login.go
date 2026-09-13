@@ -86,6 +86,10 @@ func (s *authService) Login(ctx context.Context, req *authdto.LoginRequest, user
 	os, browser := parseUserAgent(userAgent)
 
 	// Save session
+	sessionDuration := 30 * 24 * time.Hour
+	if req.RememberMe {
+		sessionDuration = 90 * 24 * time.Hour
+	}
 	session := &models.UserSession{
 		ID:           tokenPair.JTI,
 		UserID:       user.ID,
@@ -97,8 +101,9 @@ func (s *authService) Login(ctx context.Context, req *authdto.LoginRequest, user
 		DeviceType:   detectDeviceType(userAgent),
 		Status:       "active",
 		IsActive:     true,
+		RememberMe:   req.RememberMe,
 		LastAccessed: time.Now().UTC(),
-		ExpiresAt:    time.Now().UTC().Add(30 * 24 * time.Hour),
+		ExpiresAt:    time.Now().UTC().Add(sessionDuration),
 	}
 
 	if err := s.authRepo.CreateSession(ctx, session); err != nil {
@@ -167,6 +172,7 @@ func (s *authService) doRefreshToken(ctx context.Context, oldHash, userAgent, ip
 						return &authdto.RefreshTokenResponse{
 							AccessToken:  accessToken,
 							RefreshToken: replacementSession.RefreshToken,
+							RememberMe:   replacementSession.RememberMe,
 						}, nil
 					}
 				}
@@ -196,6 +202,10 @@ func (s *authService) doRefreshToken(ctx context.Context, oldHash, userAgent, ip
 
 	// Build the new session
 	os, browser := parseUserAgent(userAgent)
+	sessionDuration := 30 * 24 * time.Hour
+	if session.RememberMe {
+		sessionDuration = 90 * 24 * time.Hour
+	}
 	newSession := &models.UserSession{
 		ID:           tokenPair.JTI,
 		UserID:       user.ID,
@@ -207,8 +217,9 @@ func (s *authService) doRefreshToken(ctx context.Context, oldHash, userAgent, ip
 		DeviceType:   detectDeviceType(userAgent),
 		Status:       "active",
 		IsActive:     true,
+		RememberMe:   session.RememberMe,
 		LastAccessed: time.Now().UTC(),
-		ExpiresAt:    time.Now().UTC().Add(30 * 24 * time.Hour),
+		ExpiresAt:    time.Now().UTC().Add(sessionDuration),
 	}
 
 	// Rotate refresh token atomically via repository
@@ -226,5 +237,6 @@ func (s *authService) doRefreshToken(ctx context.Context, oldHash, userAgent, ip
 	return &authdto.RefreshTokenResponse{
 		AccessToken:  tokenPair.AccessToken,
 		RefreshToken: tokenPair.RefreshToken,
+		RememberMe:   session.RememberMe,
 	}, nil
 }

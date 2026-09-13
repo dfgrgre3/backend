@@ -117,7 +117,7 @@ func (r *LmsRepository) RestoreVersion(courseID string, versionNumber int, userI
 		return nil, err
 	}
 
-	_, err = r.GetVersion(courseUUID, versionNumber)
+	version, err := r.GetVersion(courseUUID, versionNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -128,25 +128,45 @@ func (r *LmsRepository) RestoreVersion(courseID string, versionNumber int, userI
 		return nil, err
 	}
 
-	// Update course from snapshot
-	course.Version = versionNumber + 1
-	course.UpdatedAt = time.Now()
-
-	if err := r.db.Save(course).Error; err != nil {
+	var restored models.LmsCourse
+	if err := json.Unmarshal(version.Snapshot, &restored); err != nil {
+		return nil, fmt.Errorf("decode course version %d: %w", versionNumber, err)
+	}
+	// Keep identity and immutable timestamps from the live row. Associations
+	// are intentionally not saved here; their snapshots are informational until
+	// a dedicated curriculum restore operation is requested.
+	restored.ID = course.ID
+	restored.CreatedAt = course.CreatedAt
+	restored.UpdatedAt = time.Now()
+	restored.Version = course.Version + 1
+	restored.DeletedAt = course.DeletedAt
+	if err := r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.LmsCourse{}).Where("id = ?", courseUUID).Updates(map[string]interface{}{
+			"title": restored.Title, "slug": restored.Slug, "short_description": restored.ShortDescription,
+			"long_description": restored.LongDescription, "cover_image_url": restored.CoverImageURL,
+			"promo_video_url": restored.PromoVideoURL, "status": restored.Status, "level": restored.Level,
+			"language": restored.Language, "estimated_duration_mins": restored.EstimatedDurationMins,
+			"has_certificate": restored.HasCertificate, "certificate_template": restored.CertificateTemplate,
+			"max_students": restored.MaxStudents, "version": restored.Version, "is_featured": restored.IsFeatured,
+			"is_trending": restored.IsTrending, "is_new": restored.IsNew, "new_from": restored.NewFrom,
+			"new_until": restored.NewUntil, "seo_title": restored.SEOTitle, "seo_description": restored.SEODescription,
+			"seo_keywords": restored.SEOKeywords, "prerequisites_text": restored.PrerequisitesText,
+			"target_audience": restored.TargetAudience, "learning_outcomes": restored.LearningOutcomes,
+			"primary_instructor_id": restored.PrimaryInstructorID, "available_from": restored.AvailableFrom,
+			"available_until": restored.AvailableUntil, "updated_at": restored.UpdatedAt,
+		}).Error; err != nil {
+			return err
+		}
+		userUUID, parseErr := uuid.Parse(userID)
+		if parseErr != nil {
+			return parseErr
+		}
+		message := fmt.Sprintf("Restored to version %d", versionNumber)
+		return tx.Create(&models.LmsCourseChangelog{CourseID: courseUUID, UserID: userUUID, Field: "version_restore", NewValue: &message}).Error
+	}); err != nil {
 		return nil, err
 	}
-
-	// Add changelog entry
-	userUUID, _ := uuid.Parse(userID)
-	changelog := &models.LmsCourseChangelog{
-		CourseID: courseUUID,
-		UserID:   userUUID,
-		Field:    "version_restore",
-		NewValue: &[]string{fmt.Sprintf("Restored to version %d", versionNumber)}[0],
-	}
-	r.db.Create(changelog)
-
-	return course, nil
+	return r.GetCourseByID(courseUUID)
 }
 
 // GetChangelogByCourseID returns the changelog for a course (string ID version)

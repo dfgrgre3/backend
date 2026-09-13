@@ -31,7 +31,11 @@ func NewOAuthService(cfg OAuthConfig) (OAuthService, error) {
 		googleConfig = &oauth2.Config{
 			ClientID:     cfg.GoogleClientID,
 			ClientSecret: cfg.GoogleClientSecret,
-			RedirectURL:  cfg.RedirectURL + "/auth/oauth/google/callback",
+			// Keep this in sync with the public route registered in
+			// infrastructure/api/public_routes.go. Google requires the redirect
+			// URI to match byte-for-byte during both authorization and token
+			// exchange.
+			RedirectURL: cfg.RedirectURL + "/api/v1/auth/callback/google",
 			Scopes: []string{
 				"https://www.googleapis.com/auth/userinfo.email",
 				"https://www.googleapis.com/auth/userinfo.profile",
@@ -44,7 +48,7 @@ func NewOAuthService(cfg OAuthConfig) (OAuthService, error) {
 		appleConfig = &oauth2.Config{
 			ClientID:     cfg.AppleClientID,
 			ClientSecret: cfg.AppleClientSecret,
-			RedirectURL:  cfg.RedirectURL + "/auth/oauth/apple/callback",
+			RedirectURL:  cfg.RedirectURL + "/api/v1/auth/callback/apple",
 			Scopes: []string{
 				"email",
 				"name",

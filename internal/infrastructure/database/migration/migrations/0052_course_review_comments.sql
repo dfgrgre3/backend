@@ -3,7 +3,10 @@
 
 CREATE TABLE IF NOT EXISTS public."StudentCourseReviewComment" (
     "id" uuid PRIMARY KEY,
-    "review_id" uuid NOT NULL REFERENCES public."CourseReview"("id") ON DELETE CASCADE,
+    -- CourseReview.id is text in the legacy-compatible schema. Review IDs are
+    -- UUID-shaped strings at the application boundary, but the FK must use
+    -- the actual persisted type to remain enforceable on existing databases.
+    "review_id" text NOT NULL REFERENCES public."CourseReview"("id") ON DELETE CASCADE,
     "user_id" uuid NOT NULL REFERENCES public."User"("id") ON DELETE CASCADE,
     "comment" text NOT NULL,
     "created_at" timestamptz NOT NULL DEFAULT now(),

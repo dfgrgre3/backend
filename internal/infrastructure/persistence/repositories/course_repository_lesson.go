@@ -2,6 +2,9 @@ package repositories
 
 import (
 	"context"
+	"fmt"
+	"gorm.io/gorm"
+	models "thanawy-backend/internal/domain/common"
 )
 
 // Lesson operations
@@ -51,6 +54,24 @@ func (r *GormRepository) ListLessons(ctx context.Context, sectionID string) ([]*
 }
 
 func (r *GormRepository) ReorderLessons(ctx context.Context, sectionID string, lessonIDs []string) error {
-	// Implementation would update order_index for each lesson
-	return nil
+	sectionUUID, err := parseUUID(sectionID)
+	if err != nil {
+		return err
+	}
+	return r.repo.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for i, id := range lessonIDs {
+			lessonUUID, parseErr := parseUUID(id)
+			if parseErr != nil {
+				return parseErr
+			}
+			result := tx.Model(&models.LmsLesson{}).Where("id = ? AND section_id = ? AND deleted_at IS NULL", lessonUUID, sectionUUID).Update("order_index", i)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return fmt.Errorf("lesson %s does not belong to section %s", id, sectionID)
+			}
+		}
+		return nil
+	})
 }

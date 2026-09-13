@@ -80,6 +80,43 @@ func GetAIService() *AIService {
 	return aiServiceInstance
 }
 
+// DefaultModel returns the configured model for the active provider. Provider
+// model names are not interchangeable, so callers should not hard-code a model
+// from another provider (for example, a Google model when using OpenRouter).
+func (s *AIService) DefaultModel(multimodal bool) string {
+	switch s.provider {
+	case "openrouter":
+		if multimodal {
+			if model := os.Getenv("OPENROUTER_VISION_MODEL"); model != "" {
+				return model
+			}
+		}
+		if model := os.Getenv("OPENROUTER_MODEL"); model != "" {
+			return model
+		}
+		return "openrouter/free"
+	case "openai":
+		if model := os.Getenv("OPENAI_MODEL"); model != "" {
+			return model
+		}
+		return "gpt-4o-mini"
+	case "gemini":
+		return "gemini-2.0-flash"
+	default:
+		return ""
+	}
+}
+
+func (s *AIService) resolveModel(model string) string {
+	if s.provider == "openrouter" {
+		return s.DefaultModel(strings.Contains(model, "vision"))
+	}
+	if model == "" {
+		return s.DefaultModel(false)
+	}
+	return model
+}
+
 // ValidateInput validates and sanitizes user input for AI requests
 func ValidateAIInput(message string, maxLength int) (string, error) {
 	if message == "" {

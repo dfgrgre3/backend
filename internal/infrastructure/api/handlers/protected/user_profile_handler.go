@@ -1,7 +1,10 @@
 package protected
 
 import (
+	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	authdto "thanawy-backend/internal/application/dto"
@@ -31,14 +34,14 @@ func GetUserProfile(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := db.DB.First(&user, idQuery, userId).Error; err != nil {
+	if err := db.DB.WithContext(c.Request.Context()).First(&user, idQuery, userId).Error; err != nil {
 		api_response.Error(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 
 	var settings models.TwoFactorSettings
 	mfaEnabled := false
-	if err := db.DB.First(&settings, userIDQuery, userId).Error; err == nil {
+	if err := db.DB.WithContext(c.Request.Context()).First(&settings, userIDQuery, userId).Error; err == nil {
 		mfaEnabled = settings.IsEnabled
 	}
 
@@ -90,6 +93,11 @@ func UpdateProfile(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		api_response.Error(c, http.StatusBadRequest, "Invalid request payload: "+err.Error())
+		return
+	}
+
+	if err := validateProfileUpdate(req); err != nil {
+		api_response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -160,10 +168,81 @@ func UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	if err := db.DB.Model(&models.User{}).Where(idQuery, userID).Updates(updates).Error; err != nil {
+	database := db.DB.WithContext(c.Request.Context())
+	if req.Username != nil {
+		var count int64
+		if err := database.Model(&models.User{}).
+			Where("username = ? AND id <> ?", *req.Username, userID).
+			Count(&count).Error; err != nil {
+			api_response.Error(c, http.StatusInternalServerError, "Failed to validate username")
+			return
+		}
+		if count > 0 {
+			api_response.Error(c, http.StatusConflict, "Username is already taken")
+			return
+		}
+	}
+
+	if err := database.Model(&models.User{}).Where(idQuery, userID).Updates(updates).Error; err != nil {
 		api_response.Error(c, http.StatusInternalServerError, "Failed to update profile")
 		return
 	}
 
-	api_response.Success(c, gin.H{"message": "Profile updated successfully"})
+	// Return the canonical profile after the write. This keeps API consumers
+	// synchronized even when a database trigger normalizes a value.
+	var updated models.User
+	if err := database.First(&updated, idQuery, userID).Error; err != nil {
+		api_response.Error(c, http.StatusInternalServerError, "Profile updated but could not be reloaded")
+		return
+	}
+	var twoFactorSettings models.TwoFactorSettings
+	mfaEnabled := database.First(&twoFactorSettings, userIDQuery, userID).Error == nil && twoFactorSettings.IsEnabled
+	api_response.Success(c, gin.H{
+		"message": "Profile updated successfully",
+		"profile": profileResponse(updated, mfaEnabled),
+	})
+}
+
+var profileUsernamePattern = regexp.MustCompile(`^[A-Za-z0-9_.]{3,30}$`)
+var profilePhonePattern = regexp.MustCompile(`^\+?[0-9\s-]{7,20}$`)
+
+func validateProfileUpdate(req authdto.UserProfileUpdateRequest) error {
+	if req.Name != nil && (len([]rune(strings.TrimSpace(*req.Name))) < 2 || len([]rune(*req.Name)) > 80) {
+		return fmt.Errorf("name must be between 2 and 80 characters")
+	}
+	if req.Username != nil && *req.Username != "" && !profileUsernamePattern.MatchString(*req.Username) {
+		return fmt.Errorf("username must contain only English letters, numbers, underscores, or dots")
+	}
+	if req.Bio != nil && len([]rune(*req.Bio)) > 300 {
+		return fmt.Errorf("bio must not exceed 300 characters")
+	}
+	if req.City != nil && len([]rune(*req.City)) > 60 {
+		return fmt.Errorf("city must not exceed 60 characters")
+	}
+	if req.School != nil && len([]rune(*req.School)) > 120 {
+		return fmt.Errorf("school must not exceed 120 characters")
+	}
+	if req.StudyGoal != nil && len([]rune(*req.StudyGoal)) > 200 {
+		return fmt.Errorf("study goal must not exceed 200 characters")
+	}
+	if req.Phone != nil && *req.Phone != "" && !profilePhonePattern.MatchString(*req.Phone) {
+		return fmt.Errorf("invalid phone number")
+	}
+	if req.AlternativePhone != nil && *req.AlternativePhone != "" && !profilePhonePattern.MatchString(*req.AlternativePhone) {
+		return fmt.Errorf("invalid alternative phone number")
+	}
+	return nil
+}
+
+func profileResponse(user models.User, mfaEnabled bool) gin.H {
+	return gin.H{
+		"id": user.ID, "email": user.Email, "username": user.Username, "name": user.Name,
+		"avatar": user.Avatar, "phone": user.Phone, "phoneVerified": user.PhoneVerified,
+		"emailVerified": user.EmailVerified, "gradeLevel": user.GradeLevel,
+		"educationType": user.EducationType, "section": user.Section, "bio": user.Bio,
+		"country": user.Country, "city": user.City, "gender": user.Gender, "school": user.School,
+		"alternativePhone": user.AlternativePhone, "dateOfBirth": user.DateOfBirth,
+		"studyGoal": user.StudyGoal, "subjectsTaught": user.SubjectsTaught,
+		"experienceYears": user.ExperienceYears, "mfaEnabled": mfaEnabled,
+	}
 }

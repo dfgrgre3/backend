@@ -54,7 +54,7 @@ func (s *GamificationQueryService) GetUserProgress(userID string) (*UserProgress
 	}
 
 	if err := loadUser(rdb); err != nil {
-		if err == gorm.ErrRecordNotFound && rdb != db.DB && db.DB != nil {
+		if rdb != db.DB && db.DB != nil {
 			err = loadUser(db.DB)
 		}
 		if err != nil {
@@ -110,7 +110,15 @@ func (s *GamificationQueryService) GetUserAchievements(userID string) ([]UserAch
 
 	var userAchievements []models.UserAchievement
 	if err := rdb.Preload("Achievement").Where("user_id = ?", userID).Find(&userAchievements).Error; err != nil {
-		return nil, err
+		// A read replica can be temporarily unavailable or behind during local
+		// development. The profile must still be able to show an empty/updated
+		// achievements list from the write connection.
+		if rdb == db.DB || db.DB == nil {
+			return nil, err
+		}
+		if fallbackErr := db.DB.Preload("Achievement").Where("user_id = ?", userID).Find(&userAchievements).Error; fallbackErr != nil {
+			return nil, fallbackErr
+		}
 	}
 
 	achievements := buildUserAchievementEntries(userAchievements)

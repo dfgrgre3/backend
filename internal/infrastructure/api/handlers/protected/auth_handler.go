@@ -202,8 +202,8 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// Set unified cookies
-	h.setAuthTokenCookies(c, res.AccessToken, res.RefreshToken, false)
+	// Preserve the original session lifetime when rotating the refresh token.
+	h.setAuthTokenCookies(c, res.AccessToken, res.RefreshToken, res.RememberMe)
 
 	// See the SECURITY note in Login above — refresh token stays cookie-only.
 	response.Success(c, gin.H{
@@ -237,7 +237,7 @@ func (h *AuthHandler) RefreshSession(c *gin.Context) {
 		return
 	}
 
-	h.setAuthTokenCookies(c, res.AccessToken, res.RefreshToken, false)
+	h.setAuthTokenCookies(c, res.AccessToken, res.RefreshToken, res.RememberMe)
 
 	// Get user data cleanly
 	userID := c.GetString("userId")

@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
+	models "thanawy-backend/internal/domain/common"
+	db "thanawy-backend/internal/infrastructure/database"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 )
 
@@ -44,16 +48,27 @@ func (h *NotificationHandler) ProcessTask(ctx context.Context, t *asynq.Task) er
 	}
 
 	log.Printf("Processing notification for user %s: %s", p.UserID, p.Title)
+	if _, err := uuid.Parse(p.UserID); err != nil {
+		return fmt.Errorf("invalid notification user id: %w: %w", err, asynq.SkipRetry)
+	}
+	if strings.TrimSpace(p.Title) == "" || strings.TrimSpace(p.Message) == "" {
+		return fmt.Errorf("notification title and message are required: %w", asynq.SkipRetry)
+	}
+	if len(p.Channels) == 0 {
+		return fmt.Errorf("notification must specify at least one channel: %w", asynq.SkipRetry)
+	}
 
-	// Implement the logic that was in Next.js
+	var firstErr error
 	for _, channel := range p.Channels {
 		if err := h.sendViaChannel(ctx, channel, p); err != nil {
 			log.Printf("Failed to send via %s: %v", channel, err)
-			// Continue with other channels
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
 
-	return nil
+	return firstErr
 }
 
 func (h *NotificationHandler) sendViaChannel(ctx context.Context, channel string, p NotificationPayload) error {
@@ -94,24 +109,54 @@ func (h *NotificationHandler) sendViaChannel(ctx context.Context, channel string
 //     currently it only logs.
 // ─────────────────────────────────────────────────────────────────────────
 
-func (h *NotificationHandler) sendEmail(_ context.Context, p NotificationPayload) error {
-	log.Printf("[Worker] STUB (not implemented): would send email to %s: %s", p.UserID, p.Title)
-	return nil
+func (h *NotificationHandler) sendEmail(_ context.Context, _ NotificationPayload) error {
+	return fmt.Errorf("email notification provider is not configured: %w", asynq.SkipRetry)
 }
 
-func (h *NotificationHandler) sendSMS(_ context.Context, p NotificationPayload) error {
-	log.Printf("[Worker] STUB (not implemented): would send SMS to %s", p.UserID)
-	return nil
+func (h *NotificationHandler) sendSMS(_ context.Context, _ NotificationPayload) error {
+	return fmt.Errorf("sms notification provider is not configured: %w", asynq.SkipRetry)
 }
 
-func (h *NotificationHandler) sendPush(_ context.Context, p NotificationPayload) error {
-	log.Printf("[Worker] STUB (not implemented): would send push to %s: %s", p.UserID, p.Title)
-	return nil
+func (h *NotificationHandler) sendPush(_ context.Context, _ NotificationPayload) error {
+	return fmt.Errorf("push notification provider is not configured: %w", asynq.SkipRetry)
 }
 
-func (h *NotificationHandler) sendInApp(_ context.Context, p NotificationPayload) error {
-	// STUB (not implemented): should create a models.Notification row so it
-	// shows up via GetNotifications, but currently only logs.
-	log.Printf("[Worker] STUB (not implemented): storing in-app notification for %s", p.UserID)
-	return nil
+func (h *NotificationHandler) sendInApp(ctx context.Context, p NotificationPayload) error {
+	if db.DB == nil {
+		return fmt.Errorf("database is not initialized")
+	}
+	notification := models.Notification{
+		UserID: p.UserID, Title: p.Title, Message: p.Message,
+		Type: normalizeNotificationType(p.Type), Category: "GENERAL",
+		Priority: normalizePriority(p.Priority), Status: "delivered",
+		Channels: models.StringArray{"in-app"}, IsRead: false,
+	}
+	if actionURL, ok := p.Metadata["actionUrl"].(string); ok && actionURL != "" {
+		notification.Link = &actionURL
+	}
+	return db.DB.WithContext(ctx).Create(&notification).Error
+}
+
+func normalizeNotificationType(value string) models.NotificationType {
+	switch strings.ToUpper(strings.TrimSpace(value)) {
+	case "SUCCESS":
+		return models.NotificationSuccess
+	case "WARNING":
+		return models.NotificationWarning
+	case "ERROR":
+		return models.NotificationError
+	default:
+		return models.NotificationInfo
+	}
+}
+
+func normalizePriority(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "high":
+		return "HIGH"
+	case "low":
+		return "LOW"
+	default:
+		return "MEDIUM"
+	}
 }

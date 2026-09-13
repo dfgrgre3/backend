@@ -44,13 +44,22 @@ func ValidateMaterializedViewIndexes() error {
 	}
 
 	for _, v := range views {
-		// Check if the materialized view has at least one unique index
+		// REFRESH MATERIALIZED VIEW CONCURRENTLY requires a valid, immediate
+		// unique index on the materialized view. Check pg_index directly instead
+		// of matching index names; index names are not required to contain any
+		// particular suffix.
 		var indexCount int64
 		err := wdb.Raw(`
-			SELECT COUNT(*) FROM pg_indexes 
-			WHERE schemaname = 'public' 
-			AND tablename = ? 
-			AND indexname LIKE '%_unique_%' OR indexname LIKE '%_pk'
+			SELECT COUNT(*)
+			FROM pg_class AS matview
+			JOIN pg_namespace AS ns ON ns.oid = matview.relnamespace
+			JOIN pg_index AS idx ON idx.indrelid = matview.oid
+			WHERE ns.nspname = 'public'
+			  AND matview.relname = ?
+			  AND matview.relkind = 'm'
+			  AND idx.indisunique
+			  AND idx.indisvalid
+			  AND idx.indimmediate
 		`, v.name).Scan(&indexCount).Error
 
 		if err != nil {

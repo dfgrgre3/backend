@@ -52,6 +52,7 @@ type RefreshTokenRequest struct {
 type RefreshTokenResponse struct {
 	AccessToken  string `json:"accessToken"`
 	RefreshToken string `json:"refreshToken"`
+	RememberMe   bool   `json:"rememberMe"`
 }
 
 type ChangePasswordRequest struct {
@@ -218,6 +219,7 @@ type SetupMFAResponse struct {
 type VerifyMFARequest struct {
 	ChallengeID string `json:"challengeId" binding:"required"`
 	Code        string `json:"code" binding:"required"`
+	RememberMe  bool   `json:"rememberMe"`
 }
 
 type EnableMFARequest struct {

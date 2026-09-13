@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"sync"
 	models "thanawy-backend/internal/domain/common"
 	"time"
 
@@ -13,6 +14,33 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
+
+const megaMenuEventQueueSize = 256
+
+var (
+	megaMenuQueueOnce sync.Once
+	megaMenuEvents    chan models.AnalyticsEvent
+)
+
+// startMegaMenuEventWriter serializes best-effort telemetry writes. A
+// goroutine per click can exhaust the write pool while the endpoint itself is
+// intentionally returning immediately.
+func startMegaMenuEventWriter() {
+	megaMenuQueueOnce.Do(func() {
+		megaMenuEvents = make(chan models.AnalyticsEvent, megaMenuEventQueueSize)
+		go func() {
+			for event := range megaMenuEvents {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				if writer := db.RawWriteDB(ctx); writer != nil {
+					if err := writer.Create(&event).Error; err != nil {
+						log.Printf("Failed to track mega menu event: %v", err)
+					}
+				}
+				cancel()
+			}
+		}()
+	})
+}
 
 // MegaMenuTrackRequest represents the payload sent by the MegaMenu component
 // via navigator.sendBeacon or fetch keepalive.
@@ -98,13 +126,14 @@ func TrackMegaMenuEvent(c *gin.Context) {
 	// never block the caller (navigator.sendBeacon/fetch keepalive) on DB latency.
 	api_response.Success(c, gin.H{"success": true})
 
-	// Perform the actual insert off the request path, on its own bounded
-	// context (the gin request context is canceled the moment we respond).
-	go func(evt models.AnalyticsEvent) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := db.RawWriteDB(ctx).Create(&evt).Error; err != nil {
-			log.Printf("Failed to track mega menu event: %v", err)
-		}
-	}(event)
+	// Telemetry is best effort. Queue it after responding so a slow database
+	// never delays navigation and a burst of clicks cannot create one writer
+	// goroutine per request.
+	startMegaMenuEventWriter()
+	select {
+	case megaMenuEvents <- event:
+	default:
+		// Dropping telemetry is preferable to allowing analytics to affect the
+		// application's database capacity.
+	}
 }

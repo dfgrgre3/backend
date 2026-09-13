@@ -19,9 +19,7 @@ func (s *AIService) GenerateContentWithMessages(ctx context.Context, messages []
 		return "", errors.New(errAINotEnabled)
 	}
 
-	if model == "" {
-		model = "deepseek/deepseek-v4-flash:free"
-	}
+	model = s.resolveModel(model)
 
 	// Use circuit breaker to prevent cascading failures
 	service := services.GetCircuitBreakerService()
@@ -69,7 +67,7 @@ func (s *AIService) callOpenAICompatible(ctx context.Context, systemPrompt, user
 	var apiResult string
 	err := service.CallExternalAPI("openai-openrouter", func() error {
 		payload := map[string]interface{}{
-			"model": "deepseek/deepseek-v4-flash:free", // Default for OpenRouter
+			"model": s.DefaultModel(false),
 			"messages": []map[string]string{
 				{"role": "system", "content": systemPrompt},
 				{"role": "user", "content": userMessage},

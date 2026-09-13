@@ -170,6 +170,11 @@ func (s *ProgressQueryService) GetSummary(userID string) (*ProgressSummaryReadMo
 	var mv UserProgressSummaryReadModel
 	if err = rdb.Where(whereUserID, userID).Take(&mv).Error; err != nil {
 		summary, err = s.getSummaryFallback(userID)
+		if err != nil && rdb != db.DB && db.DB != nil {
+			// Retry the aggregate fallback on the write connection when the
+			// configured read replica is unavailable or stale.
+			summary, err = s.getSummaryFallbackFromDB(userID, db.DB)
+		}
 	} else {
 		summary = &ProgressSummaryReadModel{
 			TotalMinutes:   mv.WeeklyStudyMinutes,
@@ -286,6 +291,10 @@ func (s *ProgressQueryService) warmCache(m *sync.Map, userID, cacheKey string, d
 
 func (s *ProgressQueryService) getSummaryFallback(userID string) (*ProgressSummaryReadModel, error) {
 	rdb := s.readDBOrFallback()
+	return s.getSummaryFallbackFromDB(userID, rdb)
+}
+
+func (s *ProgressQueryService) getSummaryFallbackFromDB(userID string, rdb *gorm.DB) (*ProgressSummaryReadModel, error) {
 	if rdb == nil {
 		return &ProgressSummaryReadModel{}, errors.New("database connection is not initialized")
 	}

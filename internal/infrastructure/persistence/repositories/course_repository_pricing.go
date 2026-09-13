@@ -2,11 +2,12 @@ package repositories
 
 import (
 	"context"
+	models "thanawy-backend/internal/domain/common"
 )
 
 // Pricing operations
 func (r *GormRepository) CreatePricing(ctx context.Context, pricing *Pricing) error {
-	return r.repo.CreatePricing(r.toModelPricing(pricing))
+	return r.repo.db.WithContext(ctx).Create(r.toModelPricing(pricing)).Error
 }
 
 func (r *GormRepository) GetPricing(ctx context.Context, courseID string) (*Pricing, error) {
@@ -14,7 +15,8 @@ func (r *GormRepository) GetPricing(ctx context.Context, courseID string) (*Pric
 	if err != nil {
 		return nil, err
 	}
-	modelPricings, err := r.repo.ListPricingsByCourseID(courseUUID)
+	var modelPricings []models.LmsPricing
+	err = r.repo.db.WithContext(ctx).Where("course_id = ? AND deleted_at IS NULL", courseUUID).Order("created_at DESC").Find(&modelPricings).Error
 	if err != nil || len(modelPricings) == 0 {
 		return nil, err
 	}
@@ -22,9 +24,13 @@ func (r *GormRepository) GetPricing(ctx context.Context, courseID string) (*Pric
 }
 
 func (r *GormRepository) UpdatePricing(ctx context.Context, pricing *Pricing) error {
-	return r.repo.UpdatePricing(r.toModelPricing(pricing))
+	return r.repo.db.WithContext(ctx).Save(r.toModelPricing(pricing)).Error
 }
 
 func (r *GormRepository) DeletePricing(ctx context.Context, courseID string) error {
-	return nil
+	courseUUID, err := parseUUID(courseID)
+	if err != nil {
+		return err
+	}
+	return r.repo.db.WithContext(ctx).Where("course_id = ?", courseUUID).Delete(&models.LmsPricing{}).Error
 }
